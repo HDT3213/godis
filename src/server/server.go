@@ -1,5 +1,9 @@
 package server
 
+/**
+ * A tcp server
+ */
+
 import (
     "net"
     "fmt"

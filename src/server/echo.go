@@ -1,5 +1,9 @@
 package server
 
+/**
+ * A echo server to test whether the server is functioning normally
+ */
+
 import (
     "net"
     "context"

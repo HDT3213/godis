@@ -10,8 +10,10 @@
 
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
+target/
 
+logs
+
+# jetbrains
 .idea/
 *.iml
-logs/
-target
