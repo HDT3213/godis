@@ -15,5 +15,5 @@ target/
 logs
 
 # jetbrains
-.idea/
+.idea
 *.iml
