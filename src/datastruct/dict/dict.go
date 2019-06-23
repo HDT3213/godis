@@ -114,6 +114,23 @@ func (d *Dict)PutIfAbsent(key string, val interface{})int {
     if existed {
         return 0
     } else {
+        // insert
+        shard.table[key] = val
+        return 1
+    }
+}
+
+// return the number of updated key-value
+func (d *Dict)PutIfExists(key string, val interface{})int {
+    shard := d.shards[d.spread(key)]
+    shard.mutex.Lock()
+    defer shard.mutex.Unlock()
+
+    _, existed := shard.table[key]
+
+    if !existed {
+        return 0
+    } else {
         // update
         shard.table[key] = val
         return 1

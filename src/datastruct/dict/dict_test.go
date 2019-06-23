@@ -73,6 +73,28 @@ func TestPutIfAbsent(t *testing.T) {
     }
 }
 
+func TestPutIfExists(t *testing.T) {
+    d := Make(0)
+
+    // insert
+    ret := d.PutIfExists("a", 1)
+    if ret != 0 { // insert
+        t.Error("put test failed: expected result 0, actual: " + strconv.Itoa(ret))
+    }
+
+    d.Put("a", 1)
+    ret = d.PutIfExists("a", 2)
+    val, ok := d.Get("a")
+    if ok {
+        intVal, _ := val.(int)
+        if intVal != 2 {
+            t.Error("put test failed: expected 2, actual: " + strconv.Itoa(intVal))
+        }
+    } else {
+        t.Error("put test failed: expected true, actual: false")
+    }
+}
+
 func TestRemove(t *testing.T) {
     d := Make(0)
 
