@@ -1,13 +1,14 @@
 package db
 
 import (
-    "strings"
-    "github.com/HDT3213/godis/src/redis/reply"
     "fmt"
-    "runtime/debug"
-    "github.com/HDT3213/godis/src/lib/logger"
-    "github.com/HDT3213/godis/src/interface/redis"
     "github.com/HDT3213/godis/src/datastruct/dict"
+    "github.com/HDT3213/godis/src/interface/redis"
+    "github.com/HDT3213/godis/src/lib/logger"
+    "github.com/HDT3213/godis/src/redis/reply"
+    "runtime/debug"
+    "strings"
+    "sync"
 )
 
 const (
@@ -22,6 +23,7 @@ type DataEntity struct {
     Code uint8
     TTL int64 // ttl in seconds, 0 for unlimited ttl
     Data interface{}
+    sync.RWMutex
 }
 
 // args don't include cmd line
@@ -43,6 +45,19 @@ func MakeCmdMap()map[string]CmdFunc {
     cmdMap["psetex"] = PSetEX
 
     cmdMap["get"] = Get
+
+    cmdMap["lpush"] = LPush
+    cmdMap["lpushx"] = LPushX
+    cmdMap["rpush"] = RPush
+    cmdMap["rpushx"] = RPushX
+    cmdMap["lpop"] = LPop
+    cmdMap["rpop"] = RPop
+    cmdMap["rpoplpush"] = RPopLPush
+    cmdMap["lrem"] = LRem
+    cmdMap["llen"] = LLen
+    cmdMap["lindex"] = LIndex
+    cmdMap["lset"] = LSet
+    cmdMap["lrange"] = LRange
 
     return cmdMap
 }

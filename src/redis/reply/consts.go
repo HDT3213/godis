@@ -10,10 +10,10 @@ func (r *PongReply)ToBytes()[]byte {
 
 type OkReply struct {}
 
-var OkBytes = []byte("+OK\r\n")
+var okBytes = []byte("+OK\r\n")
 
 func (r *OkReply)ToBytes()[]byte {
-    return OkBytes
+    return okBytes
 }
 
 var nullBulkBytes = []byte("$-1\r\n")
@@ -22,4 +22,12 @@ type NullBulkReply struct {}
 
 func (r *NullBulkReply)ToBytes()[]byte {
     return nullBulkBytes
+}
+
+var emptyMultiBulkBytes = []byte("*0\r\n")
+
+type EmptyMultiBulkReply struct {}
+
+func (r *EmptyMultiBulkReply)ToBytes()[]byte {
+    return emptyMultiBulkBytes
 }

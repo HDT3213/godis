@@ -1,5 +1,7 @@
 package list
 
+import "github.com/HDT3213/godis/src/datastruct/utils"
+
 type LinkedList struct {
     first *node
     last *node
@@ -31,7 +33,7 @@ func (list *LinkedList)Add(val interface{}) {
     list.size++
 }
 
-func (list *LinkedList)find(index int)(val *node) {
+func (list *LinkedList)find(index int)(n *node) {
     if index < list.size / 2 {
         n := list.first
         for i := 0; i < index; i++ {
@@ -57,16 +59,28 @@ func (list *LinkedList)Get(index int)(val interface{}) {
     return list.find(index).val
 }
 
+func (list *LinkedList)Set(index int, val interface{}) {
+    if list == nil {
+        panic("list is nil")
+    }
+    if index < 0 || index > list.size {
+        panic("index out of bound")
+    }
+    n := list.find(index)
+    n.val = val
+}
+
 func (list *LinkedList)Insert(index int, val interface{}) {
     if list == nil {
         panic("list is nil")
     }
-    if index < 0 || index >= list.size {
+    if index < 0 || index > list.size {
         panic("index out of bound")
     }
 
     if index == list.size {
         list.Add(val)
+        return
     } else {
         // list is not empty
         pivot := list.find(index)
@@ -81,19 +95,11 @@ func (list *LinkedList)Insert(index int, val interface{}) {
             pivot.prev.next = n
         }
         pivot.prev = n
+        list.size++
     }
-    list.size++
 }
 
-func (list *LinkedList)Remove(index int) {
-    if list == nil {
-        panic("list is nil")
-    }
-    if index < 0 || index >= list.size {
-        panic("index out of bound")
-    }
-
-    n := list.find(index)
+func (list *LinkedList)removeNode(n *node) {
     if n.prev == nil {
         list.first = n.next
     } else {
@@ -108,9 +114,130 @@ func (list *LinkedList)Remove(index int) {
     // for gc
     n.prev = nil
     n.next = nil
-    n.val = nil
 
     list.size--
+}
+
+func (list *LinkedList)Remove(index int)(val interface{}) {
+    if list == nil {
+        panic("list is nil")
+    }
+    if index < 0 || index >= list.size {
+        panic("index out of bound")
+    }
+
+    n := list.find(index)
+    list.removeNode(n)
+    return n.val
+}
+
+func (list *LinkedList)RemoveLast()(val interface{}) {
+    if list == nil {
+        panic("list is nil")
+    }
+    if list.last == nil {
+        // empty list
+        return nil
+    }
+    n := list.last
+    list.removeNode(n)
+    return n.val
+}
+
+func (list *LinkedList)RemoveAllByVal(val interface{})int {
+    if list == nil {
+        panic("list is nil")
+    }
+    n := list.first
+    removed := 0
+    for n != nil {
+        var toRemoveNode *node
+        if utils.Equals(n.val, val) {
+            toRemoveNode = n
+        }
+        if n.next == nil {
+            if toRemoveNode != nil {
+                removed++
+                list.removeNode(toRemoveNode)
+            }
+            break
+        } else {
+            n = n.next
+        }
+        if toRemoveNode != nil {
+            removed++
+            list.removeNode(toRemoveNode)
+        }
+    }
+    return removed
+}
+
+/**
+ * remove at most `count` values of the specified value in this list
+ * scan from left to right
+ */
+func (list *LinkedList) RemoveByVal(val interface{}, count int)int {
+    if list == nil {
+        panic("list is nil")
+    }
+    n := list.first
+    removed := 0
+    for n != nil {
+        var toRemoveNode *node
+        if utils.Equals(n.val, val) {
+            toRemoveNode = n
+        }
+        if n.next == nil {
+            if toRemoveNode != nil {
+                removed++
+                list.removeNode(toRemoveNode)
+            }
+            break
+        } else {
+            n = n.next
+        }
+
+        if toRemoveNode != nil {
+            removed++
+            list.removeNode(toRemoveNode)
+        }
+        if removed == count {
+            break
+        }
+    }
+    return removed
+}
+
+func (list *LinkedList) ReverseRemoveByVal(val interface{}, count int)int {
+    if list == nil {
+        panic("list is nil")
+    }
+    n := list.last
+    removed := 0
+    for n != nil {
+        var toRemoveNode *node
+        if utils.Equals(n.val, val) {
+            toRemoveNode = n
+        }
+        if n.prev == nil {
+            if toRemoveNode != nil {
+                removed++
+                list.removeNode(toRemoveNode)
+            }
+            break
+        } else {
+            n = n.prev
+        }
+
+        if toRemoveNode != nil {
+            removed++
+            list.removeNode(toRemoveNode)
+        }
+        if removed == count {
+            break
+        }
+    }
+    return removed
 }
 
 func (list *LinkedList)Len()int {
@@ -137,7 +264,48 @@ func (list *LinkedList)ForEach(consumer func(int, interface{})bool) {
     }
 }
 
-func Make(vals ...interface{})(*LinkedList) {
+func (list *LinkedList)Range(start int, stop int)[]interface{} {
+    if list == nil {
+        panic("list is nil")
+    }
+    if start < 0 || start >= list.size {
+        panic("`start` out of range")
+    }
+    if stop < start || stop > list.size {
+        panic("`stop` out of range")
+    }
+
+    sliceSize := stop - start
+    slice := make([]interface{}, sliceSize)
+    n := list.first
+    i := 0
+    sliceIndex := 0
+    for n != nil {
+        if i >= start && i < stop {
+            slice[sliceIndex] = n.val
+            sliceIndex++
+        } else if i >= stop {
+             break
+        }
+        if n.next == nil {
+            break
+        } else {
+            i++
+            n = n.next
+        }
+    }
+    return slice
+}
+
+func Make(vals ...interface{}) *LinkedList {
+    list := LinkedList{}
+    for _, v := range vals {
+        list.Add(v)
+    }
+    return &list
+}
+
+func MakeBytesList(vals ...[]byte) *LinkedList {
     list := LinkedList{}
     for _, v := range vals {
         list.Add(v)

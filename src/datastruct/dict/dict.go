@@ -14,6 +14,11 @@ type Dict struct {
     rehashIndex int32
 }
 
+type Shard struct {
+    head  *Node
+    mutex sync.RWMutex
+}
+
 type Node struct {
     key      string
     val      interface{}
@@ -21,10 +26,6 @@ type Node struct {
     hashCode uint32
 }
 
-type Shard struct {
-    head  *Node
-    mutex sync.RWMutex
-}
 
 const (
     maxCapacity      = 1 << 15

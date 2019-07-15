@@ -64,6 +64,69 @@ func TestRemove(t *testing.T) {
     }
 }
 
+func TestRemoveVal(t *testing.T) {
+    list := Make()
+    for i := 0; i < 10; i++ {
+        list.Add(i)
+        list.Add(i)
+    }
+    for index := 0; index < list.Len(); index++ {
+        list.RemoveAllByVal(index)
+        list.ForEach(func(i int, v interface{}) bool {
+            intVal, _ := v.(int)
+            if intVal == index {
+                t.Error("remove test fail: found  " + strconv.Itoa(index) + " at index: " + strconv.Itoa(i))
+            }
+            return true
+        })
+    }
+
+    list = Make()
+    for i := 0; i < 10; i++ {
+        list.Add(i)
+        list.Add(i)
+    }
+    for i := 0; i < 10; i++ {
+        list.RemoveByVal(i, 1)
+    }
+    list.ForEach(func(i int, v interface{}) bool {
+        intVal, _ := v.(int)
+        if intVal != i {
+            t.Error("test fail: expected " + strconv.Itoa(i) + ", actual: " + strconv.Itoa(intVal))
+        }
+        return true
+    })
+    for i := 0; i < 10; i++ {
+        list.RemoveByVal(i, 1)
+    }
+    if list.Len() != 0 {
+        t.Error("test fail: expected 0, actual: " + strconv.Itoa(list.Len()))
+    }
+
+    list = Make()
+    for i := 0; i < 10; i++ {
+        list.Add(i)
+        list.Add(i)
+    }
+    for i := 0; i < 10; i++ {
+        list.ReverseRemoveByVal(i, 1)
+    }
+    list.ForEach(func(i int, v interface{}) bool {
+        intVal, _ := v.(int)
+        if intVal != i {
+            t.Error("test fail: expected " + strconv.Itoa(i) + ", actual: " + strconv.Itoa(intVal))
+        }
+        return true
+    })
+    for i := 0; i < 10; i++ {
+        list.ReverseRemoveByVal(i, 1)
+    }
+    if list.Len() != 0 {
+        t.Error("test fail: expected 0, actual: " + strconv.Itoa(list.Len()))
+    }
+
+}
+
 func TestInsert(t *testing.T) {
     list := Make()
     for i := 0; i < 10; i++ {
@@ -107,5 +170,46 @@ func TestInsert(t *testing.T) {
             }
         }
 
+    }
+}
+
+func TestRemoveLast(t *testing.T) {
+    list := Make()
+    for i := 0; i < 10; i++ {
+        list.Add(i)
+    }
+    for i := 9; i >= 0; i-- {
+        val := list.RemoveLast()
+        intVal, _ := val.(int)
+        if intVal != i {
+            t.Error("add test fail: expected " + strconv.Itoa(i) + ", actual: " + strconv.Itoa(intVal))
+        }
+    }
+}
+
+func TestRange(t *testing.T) {
+    list := Make()
+    size := 10
+    for i := 0; i < size; i++ {
+        list.Add(i)
+    }
+    for start := 0; start < size; start++ {
+        for stop := start; stop < size; stop++ {
+            slice := list.Range(start, stop)
+            if len(slice) != stop - start {
+                t.Error("expected " + strconv.Itoa(stop - start) + ", get: " + strconv.Itoa(len(slice)) +
+                    ", range: [" + strconv.Itoa(start) + "," + strconv.Itoa(stop) + "]")
+            }
+            sliceIndex := 0
+            for i := start; i < stop; i++ {
+                val := slice[sliceIndex]
+                intVal, _ := val.(int)
+                if intVal != i {
+                    t.Error("expected " + strconv.Itoa(i) + ", get: " + strconv.Itoa(intVal) +
+                        ", range: [" + strconv.Itoa(start) + "," + strconv.Itoa(stop) + "]")
+                }
+                sliceIndex++
+            }
+        }
     }
 }
