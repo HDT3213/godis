@@ -40,7 +40,11 @@ func (r *MultiBulkReply) ToBytes() []byte {
     argLen := len(r.Args)
     res := "*" + strconv.Itoa(argLen) + CRLF
     for _, arg := range r.Args {
-        res += "$" + strconv.Itoa(len(arg)) + CRLF + string(arg) + CRLF
+        if arg == nil {
+            res += "$-1" + CRLF
+        } else {
+            res += "$" + strconv.Itoa(len(arg)) + CRLF + string(arg) + CRLF
+        }
     }
     return []byte(res)
 }
