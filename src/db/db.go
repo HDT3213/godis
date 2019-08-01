@@ -3,12 +3,12 @@ package db
 import (
     "fmt"
     "github.com/HDT3213/godis/src/datastruct/dict"
+    "github.com/HDT3213/godis/src/datastruct/lock"
     "github.com/HDT3213/godis/src/interface/redis"
     "github.com/HDT3213/godis/src/lib/logger"
     "github.com/HDT3213/godis/src/redis/reply"
     "runtime/debug"
     "strings"
-    "sync"
 )
 
 const (
@@ -23,10 +23,6 @@ type DataEntity struct {
     Code uint8
     TTL int64 // ttl in seconds, 0 for unlimited ttl
     Data interface{}
-
-    // dict will ensure thread safety (by using mutex) of its method
-    // use this mutex for complicated command only, eg. rpush, incr ...
-    sync.RWMutex
 }
 
 type DataEntityWithKey struct {
@@ -38,7 +34,12 @@ type DataEntityWithKey struct {
 type CmdFunc func(db *DB, args [][]byte)redis.Reply
 
 type DB struct {
-    Data *dict.Dict // key -> DataEntity
+    // key -> DataEntity
+    Data *dict.Dict
+
+    // dict will ensure thread safety of its method
+    // use this mutex for complicated command only, eg. rpush, incr ...
+    Locks *lock.LockMap
 }
 
 var cmdMap = MakeCmdMap()
@@ -53,6 +54,7 @@ func MakeCmdMap()map[string]CmdFunc {
     cmdMap["psetex"] = PSetEX
     cmdMap["mset"] = MSet
     cmdMap["mget"] = MGet
+    cmdMap["msetnx"] = MSetNX
     cmdMap["get"] = Get
     cmdMap["del"] = Del
 
@@ -75,6 +77,7 @@ func MakeCmdMap()map[string]CmdFunc {
 func MakeDB() *DB {
     return &DB{
         Data: dict.Make(1024),
+        Locks: &lock.LockMap{},
     }
 }
 
@@ -97,4 +100,26 @@ func (db *DB)Exec(args [][]byte)(result redis.Reply) {
         result = cmdFunc(db, [][]byte{})
     }
     return
+}
+
+func (db *DB)Remove(key string) {
+    db.Data.Remove(key)
+    db.Locks.Clean(key)
+}
+
+func (db *DB)Removes(keys ...string)(deleted int) {
+    db.Locks.Locks(keys...)
+    defer func() {
+        db.Locks.UnLocks(keys...)
+        db.Locks.Cleans(keys...)
+    }()
+    deleted = 0
+    for _, key := range keys {
+        _, exists := db.Data.Get(key)
+        if exists {
+            db.Data.Remove(key)
+            deleted++
+        }
+    }
+    return deleted
 }

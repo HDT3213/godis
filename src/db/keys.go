@@ -14,14 +14,6 @@ func Del(db *DB, args [][]byte)redis.Reply {
         keys[i] = string(v)
     }
 
-    deleted := 0
-    for _, key := range keys {
-        _, exists := db.Data.Get(key)
-        if exists {
-            db.Data.Remove(key)
-            deleted++
-        }
-    }
-
+    deleted := db.Removes(keys...)
     return reply.MakeIntReply(int64(deleted))
 }

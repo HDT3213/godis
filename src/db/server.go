@@ -1,8 +1,8 @@
 package db
 
 import (
-    "github.com/HDT3213/godis/src/redis/reply"
     "github.com/HDT3213/godis/src/interface/redis"
+    "github.com/HDT3213/godis/src/redis/reply"
 )
 
 func Ping(db *DB, args [][]byte)redis.Reply {
