@@ -1,6 +1,19 @@
 {
 	"comment": "",
 	"ignore": "test",
-	"package": [],
+	"package": [
+		{
+			"checksumSHA1": "sJEy84inEYAnqqhWw+8MWBly/Ho=",
+			"path": "github.com/go-gin-demo/lib/files",
+			"revision": "0ded926c6a8de35dd15d13d11ab6d04369e1a53f",
+			"revisionTime": "2019-06-01T08:24:31Z"
+		},
+		{
+			"checksumSHA1": "dhcoAs6YFyvXiG55mx5WDxg+/4g=",
+			"path": "github.com/shopspring/decimal",
+			"revision": "cd690d0c9e2447b1ef2a129a6b7b49077da89b8e",
+			"revisionTime": "2018-07-09T20:31:17Z"
+		}
+	],
 	"rootPath": "github.com/HDT3213/godis"
 }
