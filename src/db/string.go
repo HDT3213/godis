@@ -3,6 +3,7 @@ package db
 import (
     "github.com/HDT3213/godis/src/interface/redis"
     "github.com/HDT3213/godis/src/redis/reply"
+    "github.com/shopspring/decimal"
     "strconv"
     "strings"
 )
@@ -271,4 +272,214 @@ func MSetNX(db *DB, args [][]byte)redis.Reply {
     }
 
     return reply.MakeIntReply(1)
+}
+
+func GetSet(db *DB, args [][]byte)redis.Reply {
+    if len(args) != 2 {
+        return reply.MakeErrReply("ERR wrong number of arguments for 'getset' command")
+    }
+    key := string(args[0])
+    value := args[1]
+
+    rawEntity, exists := db.Data.Get(key)
+    var old []byte = nil
+    var entity *DataEntity
+    if exists {
+        entity, _ = rawEntity.(*DataEntity)
+        if entity.Code != StringCode {
+            return &reply.WrongTypeErrReply{}
+        }
+        old, _ = entity.Data.([]byte)
+    }
+
+    entity = &DataEntity{
+        Code: StringCode,
+        Data: value,
+    }
+    db.Data.Put(key, entity)
+
+    return reply.MakeBulkReply(old)
+}
+
+func Incr(db *DB, args [][]byte)redis.Reply {
+    if len(args) != 1 {
+        return reply.MakeErrReply("ERR wrong number of arguments for 'incr' command")
+    }
+    key := string(args[0])
+
+    db.Locks.Lock(key)
+    defer db.Locks.UnLock(key)
+
+    rawEntity, exists := db.Data.Get(key)
+    var entity *DataEntity
+    if exists {
+        entity, _ = rawEntity.(*DataEntity)
+        if entity.Code != StringCode {
+            return &reply.WrongTypeErrReply{}
+        }
+        bytes, _ := entity.Data.([]byte)
+        val, err := strconv.ParseInt(string(bytes), 10, 64)
+        if err != nil {
+            return reply.MakeErrReply("ERR value is not an integer or out of range")
+        }
+        entity.Data = []byte(strconv.FormatInt(val + 1, 10))
+        return reply.MakeIntReply(val + 1)
+    } else {
+        entity := &DataEntity{
+            Code: StringCode,
+            Data: []byte("1"),
+        }
+        db.Data.Put(key, entity)
+        return reply.MakeIntReply(1)
+    }
+}
+
+func IncrBy(db *DB, args [][]byte)redis.Reply {
+    if len(args) != 2 {
+        return reply.MakeErrReply("ERR wrong number of arguments for 'incrby' command")
+    }
+    key := string(args[0])
+    rawDelta := string(args[1])
+    delta, err := strconv.ParseInt(rawDelta, 10, 64)
+    if err != nil {
+        return reply.MakeErrReply("ERR value is not an integer or out of range")
+    }
+
+    db.Locks.Lock(key)
+    defer db.Locks.UnLock(key)
+
+    rawEntity, exists := db.Data.Get(key)
+    var entity *DataEntity
+    if exists {
+        entity, _ = rawEntity.(*DataEntity)
+        if entity.Code != StringCode {
+            return &reply.WrongTypeErrReply{}
+        }
+        bytes, _ := entity.Data.([]byte)
+        val, err := strconv.ParseInt(string(bytes), 10, 64)
+        if err != nil {
+            return reply.MakeErrReply("ERR value is not an integer or out of range")
+        }
+        entity.Data = []byte(strconv.FormatInt(val + delta, 10))
+        return reply.MakeIntReply(val + delta)
+    } else {
+        entity := &DataEntity{
+            Code: StringCode,
+            Data: args[1],
+        }
+        db.Data.Put(key, entity)
+        return reply.MakeIntReply(delta)
+    }
+}
+
+func IncrByFloat(db *DB, args [][]byte)redis.Reply {
+    if len(args) != 2 {
+        return reply.MakeErrReply("ERR wrong number of arguments for 'incrbyfloat' command")
+    }
+    key := string(args[0])
+    rawDelta := string(args[1])
+    delta, err := decimal.NewFromString(rawDelta)
+    if err != nil {
+        return reply.MakeErrReply("ERR value is not a valid float")
+    }
+
+    db.Locks.Lock(key)
+    defer db.Locks.UnLock(key)
+
+    rawEntity, exists := db.Data.Get(key)
+    var entity *DataEntity
+    if exists {
+        entity, _ = rawEntity.(*DataEntity)
+        if entity.Code != StringCode {
+            return &reply.WrongTypeErrReply{}
+        }
+        bytes, _ := entity.Data.([]byte)
+        val, err := decimal.NewFromString(string(bytes))
+        if err != nil {
+            return reply.MakeErrReply("ERR value is not a valid float")
+        }
+        result := val.Add(delta)
+        resultBytes:= []byte(result.String())
+        entity.Data = resultBytes
+        return reply.MakeBulkReply(resultBytes)
+    } else {
+        entity := &DataEntity{
+            Code: StringCode,
+            Data: args[1],
+        }
+        db.Data.Put(key, entity)
+        return reply.MakeBulkReply(args[1])
+    }
+}
+
+func Decr(db *DB, args [][]byte)redis.Reply {
+    if len(args) != 1 {
+        return reply.MakeErrReply("ERR wrong number of arguments for 'decr' command")
+    }
+    key := string(args[0])
+
+    db.Locks.Lock(key)
+    defer db.Locks.UnLock(key)
+
+    rawEntity, exists := db.Data.Get(key)
+    var entity *DataEntity
+    if exists {
+        entity, _ = rawEntity.(*DataEntity)
+        if entity.Code != StringCode {
+            return &reply.WrongTypeErrReply{}
+        }
+        bytes, _ := entity.Data.([]byte)
+        val, err := strconv.ParseInt(string(bytes), 10, 64)
+        if err != nil {
+            return reply.MakeErrReply("ERR value is not an integer or out of range")
+        }
+        entity.Data = []byte(strconv.FormatInt(val - 1, 10))
+        return reply.MakeIntReply(val - 1)
+    } else {
+        entity := &DataEntity{
+            Code: StringCode,
+            Data: []byte("-1"),
+        }
+        db.Data.Put(key, entity)
+        return reply.MakeIntReply(-1)
+    }
+}
+
+func DecrBy(db *DB, args [][]byte)redis.Reply {
+    if len(args) != 2 {
+        return reply.MakeErrReply("ERR wrong number of arguments for 'decrby' command")
+    }
+    key := string(args[0])
+    rawDelta := string(args[1])
+    delta, err := strconv.ParseInt(rawDelta, 10, 64)
+    if err != nil {
+        return reply.MakeErrReply("ERR value is not an integer or out of range")
+    }
+
+    db.Locks.Lock(key)
+    defer db.Locks.UnLock(key)
+
+    rawEntity, exists := db.Data.Get(key)
+    var entity *DataEntity
+    if exists {
+        entity, _ = rawEntity.(*DataEntity)
+        if entity.Code != StringCode {
+            return &reply.WrongTypeErrReply{}
+        }
+        bytes, _ := entity.Data.([]byte)
+        val, err := strconv.ParseInt(string(bytes), 10, 64)
+        if err != nil {
+            return reply.MakeErrReply("ERR value is not an integer or out of range")
+        }
+        entity.Data = []byte(strconv.FormatInt(val - delta, 10))
+        return reply.MakeIntReply(val - delta)
+    } else {
+        valueStr := strconv.FormatInt(-delta, 10)
+        entity := &DataEntity{
+            Code: StringCode,
+            Data: []byte(valueStr),
+        }
+        db.Data.Put(key, entity)
+        return reply.MakeIntReply(-delta)
+    }
 }

@@ -57,6 +57,12 @@ func MakeCmdMap()map[string]CmdFunc {
     cmdMap["msetnx"] = MSetNX
     cmdMap["get"] = Get
     cmdMap["del"] = Del
+    cmdMap["getset"] = GetSet
+    cmdMap["incr"] = Incr
+    cmdMap["incrby"] = IncrBy
+    cmdMap["incrbyfloat"] = IncrByFloat
+    cmdMap["decr"] = Decr
+    cmdMap["decrby"] = DecrBy
 
     cmdMap["lpush"] = LPush
     cmdMap["lpushx"] = LPushX
