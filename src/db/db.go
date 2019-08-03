@@ -108,6 +108,15 @@ func (db *DB)Exec(args [][]byte)(result redis.Reply) {
     return
 }
 
+func (db *DB)Get(key string)(*DataEntity, bool) {
+    raw, ok := db.Data.Get(key)
+    if !ok {
+        return nil, false
+    }
+    entity, _ := raw.(*DataEntity)
+    return entity, true
+}
+
 func (db *DB)Remove(key string) {
     db.Data.Remove(key)
     db.Locks.Clean(key)

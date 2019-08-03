@@ -13,11 +13,10 @@ func Get(db *DB, args [][]byte)redis.Reply {
         return reply.MakeErrReply("ERR wrong number of arguments for 'get' command")
     }
     key := string(args[0])
-    val, ok := db.Data.Get(key)
+    entity, ok := db.Get(key)
     if !ok {
         return &reply.NullBulkReply{}
     }
-    entity, _ := val.(*DataEntity)
     if entity.Code == StringCode {
         bytes, ok := entity.Data.([]byte)
         if !ok {
@@ -217,12 +216,11 @@ func MGet(db *DB, args [][]byte)redis.Reply {
 
     result := make([][]byte, len(args))
     for i, key := range keys {
-        val, exists := db.Data.Get(key)
+        entity, exists := db.Get(key)
         if !exists {
             result[i] = nil
             continue
         }
-        entity, _ := val.(*DataEntity)
         if entity.Code != StringCode {
             result[i] = nil
             continue
@@ -261,7 +259,7 @@ func MSetNX(db *DB, args [][]byte)redis.Reply {
     defer db.Locks.UnLocks(keys...)
 
     for _, key := range keys {
-        _, exists := db.Data.Get(key)
+        _, exists := db.Get(key)
         if exists {
             return reply.MakeIntReply(0)
         }
@@ -281,11 +279,9 @@ func GetSet(db *DB, args [][]byte)redis.Reply {
     key := string(args[0])
     value := args[1]
 
-    rawEntity, exists := db.Data.Get(key)
+    entity, exists := db.Get(key)
     var old []byte = nil
-    var entity *DataEntity
     if exists {
-        entity, _ = rawEntity.(*DataEntity)
         if entity.Code != StringCode {
             return &reply.WrongTypeErrReply{}
         }
@@ -310,10 +306,8 @@ func Incr(db *DB, args [][]byte)redis.Reply {
     db.Locks.Lock(key)
     defer db.Locks.UnLock(key)
 
-    rawEntity, exists := db.Data.Get(key)
-    var entity *DataEntity
+    entity, exists := db.Get(key)
     if exists {
-        entity, _ = rawEntity.(*DataEntity)
         if entity.Code != StringCode {
             return &reply.WrongTypeErrReply{}
         }
@@ -348,10 +342,8 @@ func IncrBy(db *DB, args [][]byte)redis.Reply {
     db.Locks.Lock(key)
     defer db.Locks.UnLock(key)
 
-    rawEntity, exists := db.Data.Get(key)
-    var entity *DataEntity
+    entity, exists := db.Get(key)
     if exists {
-        entity, _ = rawEntity.(*DataEntity)
         if entity.Code != StringCode {
             return &reply.WrongTypeErrReply{}
         }
@@ -386,10 +378,8 @@ func IncrByFloat(db *DB, args [][]byte)redis.Reply {
     db.Locks.Lock(key)
     defer db.Locks.UnLock(key)
 
-    rawEntity, exists := db.Data.Get(key)
-    var entity *DataEntity
+    entity, exists := db.Get(key)
     if exists {
-        entity, _ = rawEntity.(*DataEntity)
         if entity.Code != StringCode {
             return &reply.WrongTypeErrReply{}
         }
@@ -421,10 +411,8 @@ func Decr(db *DB, args [][]byte)redis.Reply {
     db.Locks.Lock(key)
     defer db.Locks.UnLock(key)
 
-    rawEntity, exists := db.Data.Get(key)
-    var entity *DataEntity
+    entity, exists := db.Get(key)
     if exists {
-        entity, _ = rawEntity.(*DataEntity)
         if entity.Code != StringCode {
             return &reply.WrongTypeErrReply{}
         }
@@ -459,10 +447,8 @@ func DecrBy(db *DB, args [][]byte)redis.Reply {
     db.Locks.Lock(key)
     defer db.Locks.UnLock(key)
 
-    rawEntity, exists := db.Data.Get(key)
-    var entity *DataEntity
+    entity, exists := db.Get(key)
     if exists {
-        entity, _ = rawEntity.(*DataEntity)
         if entity.Code != StringCode {
             return &reply.WrongTypeErrReply{}
         }

@@ -20,12 +20,9 @@ func LIndex(db *DB, args [][]byte)redis.Reply {
     index := int(index64)
 
     // get entity
-    rawEntity, exists := db.Data.Get(key)
-    var entity *DataEntity
+    entity, exists := db.Get(key)
     if !exists {
         return &reply.NullBulkReply{}
-    } else {
-        entity, _ = rawEntity.(*DataEntity)
     }
 
     // check type
@@ -54,12 +51,9 @@ func LLen(db *DB, args [][]byte)redis.Reply {
     }
     key := string(args[0])
 
-    rawEntity, exists := db.Data.Get(key)
-    var entity *DataEntity
+    entity, exists := db.Get(key)
     if !exists {
         return reply.MakeIntReply(0)
-    } else {
-        entity, _ = rawEntity.(*DataEntity)
     }
 
     // check type
@@ -84,12 +78,9 @@ func LPop(db *DB, args [][]byte)redis.Reply {
     defer db.Locks.UnLock(key)
 
     // get data
-    rawEntity, exists := db.Data.Get(key)
-    var entity *DataEntity
+    entity, exists := db.Get(key)
     if !exists {
         return &reply.NullBulkReply{}
-    } else {
-        entity, _ = rawEntity.(*DataEntity)
     }
 
     // check type
@@ -118,15 +109,12 @@ func LPush(db *DB, args [][]byte)redis.Reply {
     defer db.Locks.UnLock(key)
 
     // get or init entity
-    rawEntity, exists := db.Data.Get(key)
-    var entity *DataEntity
+    entity, exists := db.Get(key)
     if !exists {
         entity = &DataEntity{
             Code: ListCode,
             Data: &List.LinkedList{},
         }
-    } else {
-        entity, _ = rawEntity.(*DataEntity)
     }
 
     // check type
@@ -156,12 +144,9 @@ func LPushX(db *DB, args [][]byte)redis.Reply {
     defer db.Locks.UnLock(key)
 
     // get or init entity
-    rawEntity, exists := db.Data.Get(key)
-    var entity *DataEntity
+    entity, exists := db.Get(key)
     if !exists {
         return reply.MakeIntReply(0)
-    } else {
-        entity, _ = rawEntity.(*DataEntity)
     }
     if entity.Code != ListCode {
         return &reply.WrongTypeErrReply{}
@@ -195,12 +180,9 @@ func LRange(db *DB, args [][]byte)redis.Reply {
     stop := int(stop64)
 
     // get data
-    rawEntity, exists := db.Data.Get(key)
-    var entity *DataEntity
+    entity, exists := db.Get(key)
     if !exists {
         return &reply.EmptyMultiBulkReply{}
-    } else {
-        entity, _ = rawEntity.(*DataEntity)
     }
     if entity.Code != ListCode {
         return &reply.WrongTypeErrReply{}
@@ -257,12 +239,9 @@ func LRem(db *DB, args [][]byte)redis.Reply {
     defer db.Locks.UnLock(key)
 
     // get data entity
-    rawEntity, exists := db.Data.Get(key)
-    var entity *DataEntity
+    entity, exists := db.Get(key)
     if !exists {
         return reply.MakeIntReply(0)
-    } else {
-        entity, _ = rawEntity.(*DataEntity)
     }
     if entity.Code != ListCode {
         return &reply.WrongTypeErrReply{}
@@ -303,12 +282,9 @@ func LSet(db *DB, args [][]byte)redis.Reply {
     defer db.Locks.UnLock(key)
 
     // get data
-    rawEntity, exists := db.Data.Get(key)
-    var entity *DataEntity
+    entity, exists := db.Get(key)
     if !exists {
         return reply.MakeErrReply("ERR no such key")
-    } else {
-        entity, _ = rawEntity.(*DataEntity)
     }
     if entity.Code != ListCode {
         return &reply.WrongTypeErrReply{}
@@ -340,12 +316,9 @@ func RPop(db *DB, args [][]byte)redis.Reply {
     defer db.Locks.UnLock(key)
 
     // get data
-    rawEntity, exists := db.Data.Get(key)
-    var entity *DataEntity
+    entity, exists := db.Get(key)
     if !exists {
         return &reply.NullBulkReply{}
-    } else {
-        entity, _ = rawEntity.(*DataEntity)
     }
     if entity.Code != ListCode {
         return &reply.WrongTypeErrReply{}
@@ -371,26 +344,20 @@ func RPopLPush(db *DB, args [][]byte)redis.Reply {
     defer db.Locks.UnLocks(sourceKey, destKey)
 
     // get source entity
-    rawEntity, exists := db.Data.Get(sourceKey)
-    var sourceEntity *DataEntity
+    sourceEntity, exists := db.Get(sourceKey)
     if !exists {
         return &reply.NullBulkReply{}
-    } else {
-        sourceEntity, _ = rawEntity.(*DataEntity)
     }
     sourceList, _ := sourceEntity.Data.(*List.LinkedList)
 
     // get dest entity
-    rawEntity, exists = db.Data.Get(destKey)
-    var destEntity *DataEntity
+    destEntity, exists := db.Get(destKey)
     if !exists {
         destEntity = &DataEntity{
             Code: ListCode,
             Data: &List.LinkedList{},
         }
         db.Data.Put(destKey, destEntity)
-    } else {
-        destEntity, _ = rawEntity.(*DataEntity)
     }
     destList, _ := destEntity.Data.(*List.LinkedList)
 
@@ -418,15 +385,12 @@ func RPush(db *DB, args [][]byte)redis.Reply {
     defer db.Locks.UnLock(key)
 
     // get or init entity
-    rawEntity, exists := db.Data.Get(key)
-    var entity *DataEntity
+    entity, exists := db.Get(key)
     if !exists {
         entity = &DataEntity{
             Code: ListCode,
             Data: &List.LinkedList{},
         }
-    } else {
-        entity, _ = rawEntity.(*DataEntity)
     }
     if entity.Code != ListCode {
         return &reply.WrongTypeErrReply{}
@@ -454,12 +418,9 @@ func RPushX(db *DB, args [][]byte)redis.Reply {
     defer db.Locks.UnLock(key)
 
     // get or init entity
-    rawEntity, exists := db.Data.Get(key)
-    var entity *DataEntity
+    entity, exists := db.Get(key)
     if !exists {
         return reply.MakeIntReply(0)
-    } else {
-        entity, _ = rawEntity.(*DataEntity)
     }
     if entity.Code != ListCode {
         return &reply.WrongTypeErrReply{}
