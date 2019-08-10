@@ -6,6 +6,7 @@ import (
     "github.com/shopspring/decimal"
     "strconv"
     "strings"
+    "time"
 )
 
 func Get(db *DB, args [][]byte)redis.Reply {
@@ -62,6 +63,7 @@ func Set(db *DB, args [][]byte)redis.Reply {
                 policy = updatePolicy
             } else if arg == "EX" { // ttl in seconds
                 if ttl != unlimitedTTL {
+                    // ttl has been set
                     return &reply.SyntaxErrReply{}
                 }
                 if i + 1 >= len(args) {
@@ -101,7 +103,6 @@ func Set(db *DB, args [][]byte)redis.Reply {
 
     entity := &DataEntity{
         Code: StringCode,
-        TTL: ttl,
         Data: value,
     }
 
@@ -113,6 +114,13 @@ func Set(db *DB, args [][]byte)redis.Reply {
     case updatePolicy:
         db.Data.PutIfExists(key, entity)
     }
+    if ttl != unlimitedTTL {
+        expireTime := time.Now().Add(time.Duration(ttl) * time.Millisecond)
+        db.Expire(key, expireTime)
+    } else {
+        db.TTLMap.Remove(key) // override ttl
+    }
+
     return &reply.OkReply{}
 }
 
@@ -148,10 +156,12 @@ func SetEX(db *DB, args [][]byte)redis.Reply {
 
     entity := &DataEntity{
         Code: StringCode,
-        TTL: ttl,
         Data: value,
     }
-    db.Data.PutIfExists(key, entity)
+    if db.Data.PutIfExists(key, entity) > 0 && ttl != unlimitedTTL{
+        expireTime := time.Now().Add(time.Duration(ttl) * time.Millisecond)
+        db.Expire(key, expireTime)
+    }
     return &reply.OkReply{}
 }
 
@@ -172,10 +182,12 @@ func PSetEX(db *DB, args [][]byte)redis.Reply {
 
     entity := &DataEntity{
         Code: StringCode,
-        TTL: ttl,
         Data: value,
     }
-    db.Data.PutIfExists(key, entity)
+    if db.Data.PutIfExists(key, entity) > 0 && ttl != unlimitedTTL{
+        expireTime := time.Now().Add(time.Duration(ttl) * time.Millisecond)
+        db.Expire(key, expireTime)
+    }
     return &reply.OkReply{}
 }
 
@@ -293,6 +305,7 @@ func GetSet(db *DB, args [][]byte)redis.Reply {
         Data: value,
     }
     db.Data.Put(key, entity)
+    db.TTLMap.Remove(key) // override ttl
 
     return reply.MakeBulkReply(old)
 }

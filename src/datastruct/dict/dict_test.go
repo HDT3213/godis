@@ -13,103 +13,99 @@ func TestPut(t *testing.T) {
     var wg sync.WaitGroup
     wg.Add(count)
     for i := 0; i < count; i++ {
-        // insert
-        key := "k" + strconv.Itoa(i)
-        ret := d.Put(key, i)
-        if ret != 1 { // insert 1
-            t.Error("put test failed: expected result 1, actual: " + strconv.Itoa(ret) + ", key: " + key)
-        }
-        val, ok := d.Get(key)
-        if ok {
-            intVal, _ := val.(int)
-            if intVal != i {
-                t.Error("put test failed: expected " + strconv.Itoa(i) + ", actual: " + strconv.Itoa(intVal) + ", key: " + key)
+        go func(i int) {
+            // insert
+            key := "k" + strconv.Itoa(i)
+            ret := d.Put(key, i)
+            if ret != 1 { // insert 1
+                t.Error("put test failed: expected result 1, actual: " + strconv.Itoa(ret) + ", key: " + key)
             }
-        } else {
-            time.Sleep(2 * time.Second)
-            val2, ok2 := d.Get(key)
-            intVal2, _ := val2.(int)
-            t.Error("put test failed: expected true, actual: false, key: " + key +
-                ", retry: " + strconv.FormatBool(ok2) + ", val: " + strconv.Itoa(intVal2))
-        }
-
-        // update
-        ret = d.Put(key, i*10)
-        if ret != 0 { // no insert
-            t.Error("put test failed: expected result 0, actual: " + strconv.Itoa(ret) + ", key: " + key)
-        }
-        val, ok = d.Get(key)
-        if ok {
-            intVal, _ := val.(int)
-            if intVal != i*10 {
-                t.Error("put test failed: expected " + strconv.Itoa(i*10) + ", actual: " + strconv.Itoa(intVal) + ", key: " + key)
+            val, ok := d.Get(key)
+            if ok {
+                intVal, _ := val.(int)
+                if intVal != i {
+                    t.Error("put test failed: expected " + strconv.Itoa(i) + ", actual: " + strconv.Itoa(intVal) + ", key: " + key)
+                }
+            } else {
+                time.Sleep(2 * time.Second)
+                val2, ok2 := d.Get(key)
+                intVal2, _ := val2.(int)
+                t.Error("put test failed: expected true, actual: false, key: " + key +
+                    ", retry: " + strconv.FormatBool(ok2) + ", val: " + strconv.Itoa(intVal2))
             }
-        } else {
-            t.Error("put test failed: expected true, actual: false, key: " + key)
-        }
+        }(i)
     }
 }
 
 func TestPutIfAbsent(t *testing.T) {
     d := Make(0)
-
-    for i := 0; i < 100; i++ {
-        // insert
-        key := "k" + strconv.Itoa(i)
-        ret := d.PutIfAbsent(key, i)
-        if ret != 1 { // insert 1
-            t.Error("put test failed: expected result 1, actual: " + strconv.Itoa(ret))
-        }
-        val, ok := d.Get(key)
-        if ok {
-            intVal, _ := val.(int)
-            if intVal != i {
-                t.Error("put test failed: expected " + strconv.Itoa(i) + ", actual: " + strconv.Itoa(intVal))
+    count := 100
+    var wg sync.WaitGroup
+    wg.Add(count)
+    for i := 0; i < count; i++ {
+        go func(i int) {
+            // insert
+            key := "k" + strconv.Itoa(i)
+            ret := d.PutIfAbsent(key, i)
+            if ret != 1 { // insert 1
+                t.Error("put test failed: expected result 1, actual: " + strconv.Itoa(ret) + ", key: " + key)
             }
-        } else {
-            t.Error("put test failed: expected true, actual: false")
-        }
-
-        // update
-        ret = d.PutIfAbsent(key, i * 10)
-        if ret != 0 { // no update
-            t.Error("put test failed: expected result 0, actual: " + strconv.Itoa(ret))
-        }
-        val, ok = d.Get(key)
-        if ok {
-            intVal, _ := val.(int)
-            if intVal != i {
-                t.Error("put test failed: expected " + strconv.Itoa(i) + ", actual: " + strconv.Itoa(intVal))
+            val, ok := d.Get(key)
+            if ok {
+                intVal, _ := val.(int)
+                if intVal != i {
+                    t.Error("put test failed: expected " + strconv.Itoa(i) + ", actual: " + strconv.Itoa(intVal) +
+                        ", key: " + key)
+                }
+            } else {
+                t.Error("put test failed: expected true, actual: false, key: " + key)
             }
-        } else {
-            t.Error("put test failed: expected true, actual: false")
-        }
+
+            // update
+            ret = d.PutIfAbsent(key, i * 10)
+            if ret != 0 { // no update
+                t.Error("put test failed: expected result 0, actual: " + strconv.Itoa(ret))
+            }
+            val, ok = d.Get(key)
+            if ok {
+                intVal, _ := val.(int)
+                if intVal != i {
+                    t.Error("put test failed: expected " + strconv.Itoa(i) + ", actual: " + strconv.Itoa(intVal) + ", key: " + key)
+                }
+            } else {
+                t.Error("put test failed: expected true, actual: false, key: " + key)
+            }
+        }(i)
     }
 }
 
 func TestPutIfExists(t *testing.T) {
     d := Make(0)
-
-    for i := 0; i < 100; i++ {
-        // insert
-        key := "k" + strconv.Itoa(i)
-        // insert
-        ret := d.PutIfExists(key, i)
-        if ret != 0 { // insert
-            t.Error("put test failed: expected result 0, actual: " + strconv.Itoa(ret))
-        }
-
-        d.Put(key, i)
-        ret = d.PutIfExists(key, 10 * i)
-        val, ok := d.Get(key)
-        if ok {
-            intVal, _ := val.(int)
-            if intVal != 10 * i {
-                t.Error("put test failed: expected " + strconv.Itoa(10 * i) + ", actual: " + strconv.Itoa(intVal))
+    count := 100
+    var wg sync.WaitGroup
+    wg.Add(count)
+    for i := 0; i < count; i++ {
+        go func(i int) {
+            // insert
+            key := "k" + strconv.Itoa(i)
+            // insert
+            ret := d.PutIfExists(key, i)
+            if ret != 0 { // insert
+                t.Error("put test failed: expected result 0, actual: " + strconv.Itoa(ret))
             }
-        } else {
-            t.Error("put test failed: expected true, actual: false")
-        }
+
+            d.Put(key, i)
+            ret = d.PutIfExists(key, 10 * i)
+            val, ok := d.Get(key)
+            if ok {
+                intVal, _ := val.(int)
+                if intVal != 10 * i {
+                    t.Error("put test failed: expected " + strconv.Itoa(10 * i) + ", actual: " + strconv.Itoa(intVal))
+                }
+            } else {
+                t.Error("put test failed: expected true, actual: false")
+            }
+        }(i)
     }
 }
 
@@ -217,5 +213,28 @@ func TestRemove(t *testing.T) {
         if ret != 0 {
             t.Error("remove test failed: expected result 0 actual: " + strconv.Itoa(ret))
         }
+    }
+}
+
+func TestForEach(t *testing.T) {
+    d := Make(0)
+    size := 100
+    for i := 0; i < size; i++ {
+        // insert
+        key := "k" + strconv.Itoa(i)
+        d.Put(key, i)
+    }
+    i := 0
+    d.ForEach(func(key string, value interface{})bool {
+        intVal, _ := value.(int)
+        expectedKey := "k" + strconv.Itoa(intVal)
+        if key != expectedKey {
+            t.Error("remove test failed: expected " + expectedKey + ", actual: " + key)
+        }
+        i++
+        return true
+    })
+    if i != size {
+        t.Error("remove test failed: expected " + strconv.Itoa(size) + ", actual: " + strconv.Itoa(i))
     }
 }
