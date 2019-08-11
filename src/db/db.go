@@ -90,6 +90,20 @@ func MakeCmdMap()map[string]CmdFunc {
     cmdMap["lset"] = LSet
     cmdMap["lrange"] = LRange
 
+    cmdMap["hset"] = HSet
+    cmdMap["hsetnx"] = HSetNX
+    cmdMap["hget"] = HGet
+    cmdMap["hexists"] = HExists
+    cmdMap["hdel"] = HDel
+    cmdMap["hlen"] = HLen
+    cmdMap["hmget"] = HMGet
+    cmdMap["hmset"] = HMSet
+    cmdMap["hkeys"] = HKeys
+    cmdMap["hvals"] = HVals
+    cmdMap["hgetall"] = HGetAll
+    cmdMap["hincrby"] = HIncrBy
+    cmdMap["hincrbyfloat"] = HIncrByFloat
+
     return cmdMap
 }
 

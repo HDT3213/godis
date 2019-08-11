@@ -179,6 +179,10 @@ func LRange(db *DB, args [][]byte)redis.Reply {
     }
     stop := int(stop64)
 
+    // lock key
+    db.Locks.RLock(key)
+    defer db.Locks.RUnLock(key)
+
     // get data
     entity, exists := db.Get(key)
     if !exists {
