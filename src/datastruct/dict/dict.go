@@ -1,6 +1,7 @@
 package dict
 
 import (
+    "math/rand"
     "sync"
     "sync/atomic"
 )
@@ -563,4 +564,95 @@ func (dict *Dict)ForEach(consumer Consumer) {
            }
        }
    }
+}
+
+func (dict *Dict)Keys()[]string {
+    keys := make([]string, dict.Len())
+    i := 0
+    dict.ForEach(func(key string, val interface{})bool {
+        if i < len(keys) {
+            keys[i] = key
+            i++
+        } else {
+            keys = append(keys, key)
+        }
+        return true
+    })
+    return keys
+}
+
+func (shard *Shard)RandomKey()string {
+    if shard == nil {
+        panic("shard is nil")
+    }
+    shard.mutex.RLock()
+    defer shard.mutex.RUnlock()
+
+    keys := make([]string, 0)
+    i := 0
+    node := shard.head
+    for node != nil {
+        if node.key != "" {
+            keys = append(keys, node.key)
+            i++
+        }
+        node = node.next
+    }
+    if i > 0 {
+        return keys[rand.Intn(i)]
+    } else {
+        return ""
+    }
+}
+
+func (dict *Dict)RandomKeys(limit int)[]string {
+    size := dict.Len()
+    if limit >= size {
+        return dict.Keys()
+    }
+    table, _ := dict.table.Load().([]*Shard)
+    shardCount := len(table)
+
+    result := make([]string, limit)
+    for i := 0; i < limit; {
+        shard := dict.getShard(uint32(rand.Intn(shardCount)))
+        if shard == nil {
+            continue
+        }
+        key := shard.RandomKey()
+        if key != "" {
+            result[i] = key
+            i++
+        }
+    }
+    return result
+}
+
+func (dict *Dict)RandomDistinctKeys(limit int)[]string {
+    size := dict.Len()
+    if limit >= size {
+        return dict.Keys()
+    }
+
+    table, _ := dict.table.Load().([]*Shard)
+    shardCount := len(table)
+    result := make(map[string]bool)
+    for len(result) < limit {
+        shardIndex := uint32(rand.Intn(shardCount))
+        shard := dict.getShard(shardIndex)
+        if shard == nil {
+            continue
+        }
+        key := shard.RandomKey()
+        if key != "" {
+            result[key] = true
+        }
+    }
+    arr := make([]string, limit)
+    i := 0
+    for k := range result {
+        arr[i] = k
+        i++
+    }
+    return arr
 }
