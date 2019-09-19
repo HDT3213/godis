@@ -117,6 +117,21 @@ func MakeCmdMap()map[string]CmdFunc {
     cmdMap["sdiffstore"] = SDiffStore
     cmdMap["srandmember"] = SRandMember
 
+    cmdMap["zadd"] = ZAdd
+    cmdMap["zscore"] = ZScore
+    cmdMap["zincrby"] = ZIncrBy
+    cmdMap["zrank"] = ZRank
+    cmdMap["zcount"] = ZCount
+    cmdMap["zrevrank"] = ZRevRank
+    cmdMap["zcard"] = ZCard
+    cmdMap["zrange"] = ZRange
+    cmdMap["zrevrange"] = ZRevRange
+    cmdMap["zrangebyscore"] = ZRangeByScore
+    cmdMap["zrevrangebyscore"] = ZRevRangeByScore
+    cmdMap["zrem"] = ZRem
+    cmdMap["zremrangebyscore"] = ZRemRangeByScore
+    cmdMap["zremrangebyrank"] = ZRemRangeByRank
+
     return cmdMap
 }
 
