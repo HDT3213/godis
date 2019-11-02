@@ -9,6 +9,8 @@ var (
     CRLF               = "\r\n"
 )
 
+/* ---- Bulk Reply ---- */
+
 type BulkReply struct {
     Arg []byte
 }
@@ -25,6 +27,8 @@ func (r *BulkReply) ToBytes() []byte {
     }
     return []byte("$" + strconv.Itoa(len(r.Arg)) + CRLF + string(r.Arg) + CRLF)
 }
+
+/* ---- Multi Bulk Reply ---- */
 
 type MultiBulkReply struct {
     Args [][]byte
@@ -49,6 +53,8 @@ func (r *MultiBulkReply) ToBytes() []byte {
     return []byte(res)
 }
 
+/* ---- Status Reply ---- */
+
 type StatusReply struct {
     Status string
 }
@@ -63,19 +69,7 @@ func (r *StatusReply) ToBytes() []byte {
     return []byte("+" + r.Status + "\r\n")
 }
 
-type ErrReply struct {
-    Status string
-}
-
-func MakeErrReply(status string) *ErrReply {
-    return &ErrReply{
-        Status: status,
-    }
-}
-
-func (r *ErrReply) ToBytes() []byte {
-    return []byte("-" + r.Status + "\r\n")
-}
+/* ---- Int Reply ---- */
 
 type IntReply struct {
     Code int64
@@ -89,4 +83,30 @@ func MakeIntReply(code int64) *IntReply {
 
 func (r *IntReply) ToBytes() []byte {
     return []byte(":" + strconv.FormatInt(r.Code, 10) + CRLF)
+}
+
+
+/* ---- Error Reply ---- */
+
+type ErrorReply interface {
+    Error() string
+    ToBytes() []byte
+}
+
+type StandardErrReply struct {
+    Status string
+}
+
+func MakeErrReply(status string) *StandardErrReply {
+    return &StandardErrReply{
+        Status: status,
+    }
+}
+
+func (r *StandardErrReply) ToBytes() []byte {
+    return []byte("-" + r.Status + "\r\n")
+}
+
+func (r *StandardErrReply) Error() string {
+    return r.Status
 }

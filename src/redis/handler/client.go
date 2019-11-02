@@ -1,12 +1,13 @@
 package handler
 
 import (
-    "net"
-    "github.com/HDT3213/godis/src/lib/sync/wait"
     "github.com/HDT3213/godis/src/lib/sync/atomic"
+    "github.com/HDT3213/godis/src/lib/sync/wait"
+    "net"
     "time"
 )
 
+// abstract of active server
 type Client struct {
     conn   net.Conn
 
@@ -26,7 +27,7 @@ type Client struct {
 
 func (c *Client)Close()error {
     c.waitingReply.WaitWithTimeout(10 * time.Second)
-    c.conn.Close()
+    _ = c.conn.Close()
     return nil
 }
 

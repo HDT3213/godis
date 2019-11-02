@@ -8,6 +8,34 @@ import (
     "strconv"
 )
 
+func (db *DB)getAsDict(key string)(*Dict.Dict, reply.ErrorReply) {
+    entity, exists := db.Get(key)
+    if !exists {
+        return nil, nil
+    }
+    dict, ok := entity.Data.(*Dict.Dict)
+    if !ok {
+        return nil, &reply.WrongTypeErrReply{}
+    }
+    return dict, nil
+}
+
+func (db *DB) getOrInitDict(key string)(dict *Dict.Dict, inited bool, errReply reply.ErrorReply) {
+    dict, errReply = db.getAsDict(key)
+    if errReply != nil {
+        return nil, false, errReply
+    }
+    inited = false
+    if dict == nil {
+        dict = Dict.Make(0)
+        db.Data.Put(key, &DataEntity{
+            Data: dict,
+        })
+        inited = true
+    }
+    return dict, inited, nil
+}
+
 func HSet(db *DB, args [][]byte)redis.Reply {
     // parse args
     if len(args) != 3 {
@@ -18,25 +46,15 @@ func HSet(db *DB, args [][]byte)redis.Reply {
     value := args[2]
 
     // lock
-    db.Locks.Lock(key)
-    defer db.Locks.UnLock(key)
+    db.Locker.Lock(key)
+    defer db.Locker.UnLock(key)
 
     // get or init entity
-    entity, exists := db.Get(key)
-    if !exists {
-        entity = &DataEntity{
-            Code: DictCode,
-            Data: Dict.Make(0),
-        }
-        db.Data.Put(key, entity)
+    dict, _, errReply := db.getOrInitDict(key)
+    if errReply != nil {
+        return errReply
     }
 
-    // check type
-    if entity.Code != DictCode {
-        return &reply.WrongTypeErrReply{}
-    }
-
-    dict, _ := entity.Data.(*Dict.Dict)
     result := dict.Put(field, value)
     return reply.MakeIntReply(int64(result))
 }
@@ -50,26 +68,14 @@ func HSetNX(db *DB, args [][]byte)redis.Reply {
     field := string(args[1])
     value := args[2]
 
-    // lock
-    db.Locks.Lock(key)
-    defer db.Locks.UnLock(key)
+    db.Lock(key)
+    defer db.UnLock(key)
 
-    // get or init entity
-    entity, exists := db.Get(key)
-    if !exists {
-        entity = &DataEntity{
-            Code: DictCode,
-            Data: Dict.Make(0),
-        }
-        db.Data.Put(key, entity)
+    dict, _, errReply := db.getOrInitDict(key)
+    if errReply != nil {
+        return errReply
     }
 
-    // check type
-    if entity.Code != DictCode {
-        return &reply.WrongTypeErrReply{}
-    }
-
-    dict, _ := entity.Data.(*Dict.Dict)
     result := dict.PutIfAbsent(field, value)
     return reply.MakeIntReply(int64(result))
 }
@@ -83,16 +89,14 @@ func HGet(db *DB, args [][]byte)redis.Reply {
     field := string(args[1])
 
     // get entity
-    entity, exists := db.Get(key)
-    if !exists {
+    dict, errReply := db.getAsDict(key)
+    if errReply != nil {
+        return errReply
+    }
+    if dict == nil {
         return &reply.NullBulkReply{}
     }
-    // check type
-    if entity.Code != DictCode {
-        return &reply.WrongTypeErrReply{}
-    }
 
-    dict, _ := entity.Data.(*Dict.Dict)
     raw, exists := dict.Get(field)
     if !exists {
         return &reply.NullBulkReply{}
@@ -110,17 +114,15 @@ func HExists(db *DB, args [][]byte)redis.Reply {
     field := string(args[1])
 
     // get entity
-    entity, exists := db.Get(key)
-    if !exists {
+    dict, errReply := db.getAsDict(key)
+    if errReply != nil {
+        return errReply
+    }
+    if dict == nil {
         return reply.MakeIntReply(0)
     }
-    // check type
-    if entity.Code != DictCode {
-        return &reply.WrongTypeErrReply{}
-    }
 
-    dict, _ := entity.Data.(*Dict.Dict)
-    _, exists = dict.Get(field)
+    _, exists := dict.Get(field)
     if exists {
         return reply.MakeIntReply(1)
     }
@@ -139,20 +141,18 @@ func HDel(db *DB, args [][]byte)redis.Reply {
         fields[i] = string(v)
     }
 
-    db.Locks.Lock(key)
-    defer db.Locks.UnLock(key)
+    db.Locker.Lock(key)
+    defer db.Locker.UnLock(key)
 
     // get entity
-    entity, exists := db.Get(key)
-    if !exists {
+    dict, errReply := db.getAsDict(key)
+    if errReply != nil {
+        return errReply
+    }
+    if dict == nil {
         return reply.MakeIntReply(0)
     }
-    // check type
-    if entity.Code != DictCode {
-        return &reply.WrongTypeErrReply{}
-    }
 
-    dict, _ := entity.Data.(*Dict.Dict)
     deleted := 0
     for _, field := range fields {
         result := dict.Remove(field)
@@ -172,17 +172,13 @@ func HLen(db *DB, args [][]byte)redis.Reply {
     }
     key := string(args[0])
 
-    // get entity
-    entity, exists := db.Get(key)
-    if !exists {
+    dict, errReply := db.getAsDict(key)
+    if errReply != nil {
+        return errReply
+    }
+    if dict == nil {
         return reply.MakeIntReply(0)
     }
-    // check type
-    if entity.Code != DictCode {
-        return &reply.WrongTypeErrReply{}
-    }
-
-    dict, _ := entity.Data.(*Dict.Dict)
     return reply.MakeIntReply(int64(dict.Len()))
 }
 
@@ -193,43 +189,27 @@ func HMSet(db *DB, args [][]byte)redis.Reply {
     }
     key := string(args[0])
     size := (len(args) - 1) / 2
-    entities := make([]*DataEntityWithKey, size)
+    fields := make([]string, size)
+    values := make([][]byte, size)
     for i := 0; i < size; i++ {
-        field := string(args[2 * i + 1])
-        value := args[2 * i + 2]
-        entity := &DataEntityWithKey{
-            DataEntity: DataEntity{
-                Code: StringCode,
-                Data: value,
-            },
-            Key: field,
-        }
-        entities[i] = entity
+        fields[i] = string(args[2 * i + 1])
+        values[i] = args[2 * i + 2]
     }
 
     // lock key
-    db.Locks.Lock(key)
-    defer db.Locks.UnLock(key)
+    db.Locker.Lock(key)
+    defer db.Locker.UnLock(key)
 
     // get or init entity
-    entity, exists := db.Get(key)
-    if !exists {
-        entity = &DataEntity{
-            Code: DictCode,
-            Data: Dict.Make(0),
-        }
-        db.Data.Put(key, entity)
-    }
-
-    // check type
-    if entity.Code != DictCode {
-        return &reply.WrongTypeErrReply{}
+    dict, _, errReply := db.getOrInitDict(key)
+    if errReply != nil {
+        return errReply
     }
 
     // put data
-    dict, _ := entity.Data.(*Dict.Dict)
-    for _, e := range entities {
-        dict.Put(e.Key, e.Data)
+    for i, field := range fields {
+        value := values[i]
+        dict.Put(field, value)
     }
     return &reply.OkReply{}
 }
@@ -245,22 +225,19 @@ func HMGet(db *DB, args [][]byte)redis.Reply {
         fields[i] = string(args[i + 1])
     }
 
-    db.Locks.RLock(key)
-    defer db.Locks.RUnLock(key)
+    db.Locker.RLock(key)
+    defer db.Locker.RUnLock(key)
 
     // get entity
     result := make([][]byte, size)
-    entity, exists := db.Get(key)
-    if !exists {
+    dict, errReply := db.getAsDict(key)
+    if errReply != nil {
+        return errReply
+    }
+    if dict == nil {
         return reply.MakeMultiBulkReply(result)
     }
 
-    // check type
-    if entity.Code != DictCode {
-        return &reply.WrongTypeErrReply{}
-    }
-
-    dict, _ := entity.Data.(*Dict.Dict)
     for i, field := range fields {
         value, ok := dict.Get(field)
         if !ok {
@@ -279,21 +256,17 @@ func HKeys(db *DB, args [][]byte)redis.Reply {
     }
     key := string(args[0])
 
-    db.Locks.RLock(key)
-    defer db.Locks.RUnLock(key)
+    db.Locker.RLock(key)
+    defer db.Locker.RUnLock(key)
 
-    // get entity
-    entity, exists := db.Get(key)
-    if !exists {
+    dict, errReply := db.getAsDict(key)
+    if errReply != nil {
+        return errReply
+    }
+    if dict == nil {
         return &reply.EmptyMultiBulkReply{}
     }
 
-    // check type
-    if entity.Code != DictCode {
-        return &reply.WrongTypeErrReply{}
-    }
-
-    dict, _ := entity.Data.(*Dict.Dict)
     fields := make([][]byte, dict.Len())
     i := 0
     dict.ForEach(func(key string, val interface{})bool {
@@ -310,21 +283,18 @@ func HVals(db *DB, args [][]byte)redis.Reply {
     }
     key := string(args[0])
 
-    db.Locks.RLock(key)
-    defer db.Locks.RUnLock(key)
+    db.Locker.RLock(key)
+    defer db.Locker.RUnLock(key)
 
     // get entity
-    entity, exists := db.Get(key)
-    if !exists {
+    dict, errReply := db.getAsDict(key)
+    if errReply != nil {
+        return errReply
+    }
+    if dict == nil {
         return &reply.EmptyMultiBulkReply{}
     }
 
-    // check type
-    if entity.Code != DictCode {
-        return &reply.WrongTypeErrReply{}
-    }
-
-    dict, _ := entity.Data.(*Dict.Dict)
     values := make([][]byte, dict.Len())
     i := 0
     dict.ForEach(func(key string, val interface{})bool {
@@ -341,21 +311,18 @@ func HGetAll(db *DB, args [][]byte)redis.Reply {
     }
     key := string(args[0])
 
-    db.Locks.RLock(key)
-    defer db.Locks.RUnLock(key)
+    db.Locker.RLock(key)
+    defer db.Locker.RUnLock(key)
 
     // get entity
-    entity, exists := db.Get(key)
-    if !exists {
+    dict, errReply := db.getAsDict(key)
+    if errReply != nil {
+        return errReply
+    }
+    if dict == nil {
         return &reply.EmptyMultiBulkReply{}
     }
 
-    // check type
-    if entity.Code != DictCode {
-        return &reply.WrongTypeErrReply{}
-    }
-
-    dict, _ := entity.Data.(*Dict.Dict)
     size := dict.Len()
     result := make([][]byte, size * 2)
     i := 0
@@ -381,26 +348,14 @@ func HIncrBy(db *DB, args [][]byte)redis.Reply {
         return reply.MakeErrReply("ERR value is not an integer or out of range")
     }
 
-    db.Locks.Lock(key)
-    defer db.Locks.UnLock(key)
+    db.Locker.Lock(key)
+    defer db.Locker.UnLock(key)
 
-    // get or init entity
-    entity, exists := db.Get(key)
-    if !exists {
-        entity = &DataEntity{
-            Code: DictCode,
-            Data: Dict.Make(0),
-        }
-        db.Data.Put(key, entity)
+    dict, _, errReply := db.getOrInitDict(key)
+    if errReply != nil {
+        return errReply
     }
 
-    // check type
-    if entity.Code != DictCode {
-        return &reply.WrongTypeErrReply{}
-    }
-
-    // put data
-    dict, _ := entity.Data.(*Dict.Dict)
     value, exists := dict.Get(field)
     if !exists {
         dict.Put(field, args[2])
@@ -429,26 +384,15 @@ func HIncrByFloat(db *DB, args [][]byte)redis.Reply {
         return reply.MakeErrReply("ERR value is not a valid float")
     }
 
-    db.Locks.Lock(key)
-    defer db.Locks.UnLock(key)
+    db.Locker.Lock(key)
+    defer db.Locker.UnLock(key)
 
     // get or init entity
-    entity, exists := db.Get(key)
-    if !exists {
-        entity = &DataEntity{
-            Code: DictCode,
-            Data: Dict.Make(0),
-        }
-        db.Data.Put(key, entity)
+    dict, _, errReply := db.getOrInitDict(key)
+    if errReply != nil {
+        return errReply
     }
 
-    // check type
-    if entity.Code != DictCode {
-        return &reply.WrongTypeErrReply{}
-    }
-
-    // put data
-    dict, _ := entity.Data.(*Dict.Dict)
     value, exists := dict.Get(field)
     if !exists {
         dict.Put(field, args[2])

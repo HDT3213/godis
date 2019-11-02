@@ -1,6 +1,10 @@
 package db
 
 import (
+    "github.com/HDT3213/godis/src/datastruct/dict"
+    "github.com/HDT3213/godis/src/datastruct/list"
+    "github.com/HDT3213/godis/src/datastruct/set"
+    "github.com/HDT3213/godis/src/datastruct/sortedset"
     "github.com/HDT3213/godis/src/interface/redis"
     "github.com/HDT3213/godis/src/redis/reply"
     "strconv"
@@ -16,8 +20,104 @@ func Del(db *DB, args [][]byte)redis.Reply {
         keys[i] = string(v)
     }
 
+    db.Locker.Locks(keys...)
+    defer func() {
+        db.Locker.UnLocks(keys...)
+        db.Locker.Cleans(keys...)
+    }()
+
     deleted := db.Removes(keys...)
     return reply.MakeIntReply(int64(deleted))
+}
+
+func Exists(db *DB, args [][]byte)redis.Reply {
+    if len(args) != 1 {
+        return reply.MakeErrReply("ERR wrong number of arguments for 'exists' command")
+    }
+    key := string(args[0])
+    _, exists := db.Get(key)
+    if exists {
+        return reply.MakeIntReply(1)
+    } else {
+        return reply.MakeIntReply(0)
+    }
+}
+
+func Type(db *DB, args [][]byte)redis.Reply {
+    if len(args) != 1 {
+        return reply.MakeErrReply("ERR wrong number of arguments for 'type' command")
+    }
+    key := string(args[0])
+    entity, exists := db.Get(key)
+    if !exists {
+        return reply.MakeStatusReply("none")
+    }
+    switch entity.Data.(type) {
+    case []byte:
+        return reply.MakeStatusReply("string")
+    case *list.LinkedList:
+        return reply.MakeStatusReply("list")
+    case *dict.Dict:
+        return reply.MakeStatusReply("hash")
+    case *set.Set:
+        return reply.MakeStatusReply("set")
+    case *sortedset.SortedSet:
+        return reply.MakeStatusReply("zset")
+    }
+    return &reply.UnknownErrReply{}
+}
+
+func Rename(db *DB, args [][]byte)redis.Reply {
+    if len(args) != 2 {
+        return reply.MakeErrReply("ERR wrong number of arguments for 'rename' command")
+    }
+    src := string(args[0])
+    dest := string(args[1])
+
+    db.Locks(src, dest)
+    defer db.UnLocks(src, dest)
+
+    entity, ok := db.Get(src)
+    if !ok {
+        return reply.MakeErrReply("no such key")
+    }
+    rawTTL, hasTTL := db.TTLMap.Get(src)
+    db.Removes(src, dest) // clean src and dest with their ttl
+    db.Put(dest, entity)
+    if hasTTL {
+        expireTime, _ := rawTTL.(time.Time)
+        db.Expire(dest, expireTime)
+    }
+    return &reply.OkReply{}
+}
+
+func RenameNx(db *DB, args [][]byte)redis.Reply {
+    if len(args) != 2 {
+        return reply.MakeErrReply("ERR wrong number of arguments for 'renamenx' command")
+    }
+    src := string(args[0])
+    dest := string(args[1])
+
+    db.Locks(src, dest)
+    defer db.UnLocks(src, dest)
+
+    _, ok := db.Get(dest)
+    if ok {
+        return reply.MakeIntReply(0)
+    }
+
+    entity, ok := db.Get(src)
+    if !ok {
+        return reply.MakeErrReply("no such key")
+    }
+    rawTTL, hasTTL := db.TTLMap.Get(src)
+    db.Removes(src, dest) // clean src and dest with their ttl
+    db.Put(dest, entity)
+    if hasTTL {
+        expireTime, _ := rawTTL.(time.Time)
+        db.Expire(dest, expireTime)
+    }
+    return reply.MakeIntReply(1)
 }
 
 func Expire(db *DB, args [][]byte)redis.Reply {

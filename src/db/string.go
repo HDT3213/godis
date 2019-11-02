@@ -9,24 +9,31 @@ import (
     "time"
 )
 
+func (db *DB)getAsString(key string)([]byte, reply.ErrorReply) {
+    entity, ok := db.Get(key)
+    if !ok {
+        return nil, nil
+    }
+    bytes, ok := entity.Data.([]byte)
+    if !ok {
+        return nil, &reply.WrongTypeErrReply{}
+    }
+    return bytes, nil
+}
+
 func Get(db *DB, args [][]byte)redis.Reply {
     if len(args) != 1 {
         return reply.MakeErrReply("ERR wrong number of arguments for 'get' command")
     }
     key := string(args[0])
-    entity, ok := db.Get(key)
-    if !ok {
+    bytes, err := db.getAsString(key)
+    if err != nil {
+        return err
+    }
+    if bytes == nil {
         return &reply.NullBulkReply{}
     }
-    if entity.Code == StringCode {
-        bytes, ok := entity.Data.([]byte)
-        if !ok {
-            return &reply.UnknownErrReply{}
-        }
-        return reply.MakeBulkReply(bytes)
-    } else {
-        return &reply.WrongTypeErrReply{}
-    }
+    return reply.MakeBulkReply(bytes)
 }
 
 const (
@@ -100,9 +107,7 @@ func Set(db *DB, args [][]byte)redis.Reply {
         }
     }
 
-
     entity := &DataEntity{
-        Code: StringCode,
         Data: value,
     }
 
@@ -119,7 +124,7 @@ func Set(db *DB, args [][]byte)redis.Reply {
         expireTime := time.Now().Add(time.Duration(ttl) * time.Millisecond)
         db.Expire(key, expireTime)
     } else {
-        db.TTLMap.Remove(key) // override ttl
+        db.Persist(key) // override ttl
     }
 
     return &reply.OkReply{}
@@ -127,12 +132,11 @@ func Set(db *DB, args [][]byte)redis.Reply {
 
 func SetNX(db *DB, args [][]byte)redis.Reply {
     if len(args) != 2 {
-        reply.MakeErrReply("ERR wrong number of arguments for 'setnx' command")
+        return reply.MakeErrReply("ERR wrong number of arguments for 'setnx' command")
     }
     key := string(args[0])
     value := args[1]
     entity := &DataEntity{
-        Code: StringCode,
         Data: value,
     }
     result := db.Data.PutIfAbsent(key, entity)
@@ -156,7 +160,6 @@ func SetEX(db *DB, args [][]byte)redis.Reply {
     ttl := ttlArg * 1000
 
     entity := &DataEntity{
-        Code: StringCode,
         Data: value,
     }
     if db.Data.PutIfExists(key, entity) > 0 && ttl != unlimitedTTL{
@@ -182,7 +185,6 @@ func PSetEX(db *DB, args [][]byte)redis.Reply {
     }
 
     entity := &DataEntity{
-        Code: StringCode,
         Data: value,
     }
     if db.Data.PutIfExists(key, entity) > 0 && ttl != unlimitedTTL{
@@ -196,23 +198,21 @@ func MSet(db *DB, args [][]byte)redis.Reply {
     if len(args) % 2 != 0 || len(args) == 0 {
         return reply.MakeErrReply("ERR wrong number of arguments for 'mset' command")
     }
+
     size := len(args) / 2
-    entities := make([]*DataEntityWithKey, size)
+    keys := make([]string, size)
+    values := make([][]byte, size)
     for i := 0; i < size; i++ {
-        key := string(args[2 * i])
-        value := args[2 * i + 1]
-        entity := &DataEntityWithKey{
-            DataEntity: DataEntity{
-                Code: StringCode,
-                Data: value,
-            },
-            Key: key,
-        }
-        entities[i] = entity
+        keys[i] = string(args[2 * i])
+        values[i] = args[2 * i + 1]
     }
 
-    for _, entity := range entities {
-        db.Data.Put(entity.Key, &entity.DataEntity)
+    db.Locks(keys...)
+    defer db.UnLocks(keys...)
+
+    for i, key := range keys {
+        value := values[i]
+        db.Data.Put(key, &DataEntity{Data:value})
     }
 
     return &reply.OkReply{}
@@ -229,17 +229,17 @@ func MGet(db *DB, args [][]byte)redis.Reply {
 
     result := make([][]byte, len(args))
     for i, key := range keys {
-        entity, exists := db.Get(key)
-        if !exists {
-            result[i] = nil
-            continue
+        bytes, err := db.getAsString(key)
+        if err != nil {
+            _, isWrongType := err.(*reply.WrongTypeErrReply)
+            if isWrongType {
+                result[i] = nil
+                continue
+            } else {
+                return err
+            }
         }
-        if entity.Code != StringCode {
-            result[i] = nil
-            continue
-        }
-        bytes, _ := entity.Data.([]byte)
-        result[i] = bytes
+        result[i] = bytes // nil or []byte
     }
 
     return reply.MakeMultiBulkReply(result)
@@ -251,25 +251,16 @@ func MSetNX(db *DB, args [][]byte)redis.Reply {
         return reply.MakeErrReply("ERR wrong number of arguments for 'msetnx' command")
     }
     size := len(args) / 2
-    entities := make([]*DataEntityWithKey, size)
+    values := make([][]byte, size)
     keys := make([]string, size)
     for i := 0; i < size; i++ {
-        key := string(args[2 * i])
-        value := args[2 * i + 1]
-        entity := &DataEntityWithKey{
-            DataEntity: DataEntity{
-                Code: StringCode,
-                Data: value,
-            },
-            Key: key,
-        }
-        entities[i] = entity
-        keys[i] = key
+        keys[i] = string(args[2 * i])
+        values[i] = args[2 * i + 1]
     }
 
     // lock keys
-    db.Locks.Locks(keys...)
-    defer db.Locks.UnLocks(keys...)
+    db.Locks(keys...)
+    defer db.UnLocks(keys...)
 
     for _, key := range keys {
         _, exists := db.Get(key)
@@ -278,10 +269,10 @@ func MSetNX(db *DB, args [][]byte)redis.Reply {
         }
     }
 
-    for _, entity := range entities {
-        db.Data.Put(entity.Key, &entity.DataEntity)
+    for i, key := range keys {
+        value := values[i]
+        db.Data.Put(key, &DataEntity{Data:value})
     }
-
     return reply.MakeIntReply(1)
 }
 
@@ -292,21 +283,13 @@ func GetSet(db *DB, args [][]byte)redis.Reply {
     key := string(args[0])
     value := args[1]
 
-    entity, exists := db.Get(key)
-    var old []byte = nil
-    if exists {
-        if entity.Code != StringCode {
-            return &reply.WrongTypeErrReply{}
-        }
-        old, _ = entity.Data.([]byte)
+    old, err := db.getAsString(key)
+    if err != nil {
+        return err
     }
 
-    entity = &DataEntity{
-        Code: StringCode,
-        Data: value,
-    }
-    db.Data.Put(key, entity)
-    db.TTLMap.Remove(key) // override ttl
+    db.Data.Put(key, &DataEntity{Data: value})
+    db.Persist(key) // override ttl
 
     return reply.MakeBulkReply(old)
 }
@@ -317,27 +300,26 @@ func Incr(db *DB, args [][]byte)redis.Reply {
     }
     key := string(args[0])
 
-    db.Locks.Lock(key)
-    defer db.Locks.UnLock(key)
+    db.Lock(key)
+    defer db.UnLock(key)
 
-    entity, exists := db.Get(key)
-    if exists {
-        if entity.Code != StringCode {
-            return &reply.WrongTypeErrReply{}
-        }
-        bytes, _ := entity.Data.([]byte)
+    bytes, err := db.getAsString(key)
+    if err != nil {
+        return err
+    }
+    if bytes != nil {
         val, err := strconv.ParseInt(string(bytes), 10, 64)
         if err != nil {
             return reply.MakeErrReply("ERR value is not an integer or out of range")
         }
-        entity.Data = []byte(strconv.FormatInt(val + 1, 10))
+        db.Data.Put(key, &DataEntity{
+            Data: []byte(strconv.FormatInt(val + 1, 10)),
+        })
         return reply.MakeIntReply(val + 1)
     } else {
-        entity := &DataEntity{
-            Code: StringCode,
+        db.Data.Put(key, &DataEntity{
             Data: []byte("1"),
-        }
-        db.Data.Put(key, entity)
+        })
         return reply.MakeIntReply(1)
     }
 }
@@ -353,27 +335,26 @@ func IncrBy(db *DB, args [][]byte)redis.Reply {
         return reply.MakeErrReply("ERR value is not an integer or out of range")
     }
 
-    db.Locks.Lock(key)
-    defer db.Locks.UnLock(key)
+    db.Lock(key)
+    defer db.UnLock(key)
 
-    entity, exists := db.Get(key)
-    if exists {
-        if entity.Code != StringCode {
-            return &reply.WrongTypeErrReply{}
-        }
-        bytes, _ := entity.Data.([]byte)
+    bytes, errReply := db.getAsString(key)
+    if errReply != nil {
+        return errReply
+    }
+    if bytes != nil {
         val, err := strconv.ParseInt(string(bytes), 10, 64)
         if err != nil {
             return reply.MakeErrReply("ERR value is not an integer or out of range")
         }
-        entity.Data = []byte(strconv.FormatInt(val + delta, 10))
+        db.Data.Put(key, &DataEntity{
+            Data: []byte(strconv.FormatInt(val + delta, 10)),
+        })
         return reply.MakeIntReply(val + delta)
     } else {
-        entity := &DataEntity{
-            Code: StringCode,
+        db.Data.Put(key, &DataEntity{
             Data: args[1],
-        }
-        db.Data.Put(key, entity)
+        })
         return reply.MakeIntReply(delta)
     }
 }
@@ -389,29 +370,27 @@ func IncrByFloat(db *DB, args [][]byte)redis.Reply {
         return reply.MakeErrReply("ERR value is not a valid float")
     }
 
-    db.Locks.Lock(key)
-    defer db.Locks.UnLock(key)
+    db.Lock(key)
+    defer db.UnLock(key)
 
-    entity, exists := db.Get(key)
-    if exists {
-        if entity.Code != StringCode {
-            return &reply.WrongTypeErrReply{}
-        }
-        bytes, _ := entity.Data.([]byte)
+    bytes, errReply := db.getAsString(key)
+    if errReply != nil {
+        return errReply
+    }
+    if bytes != nil {
         val, err := decimal.NewFromString(string(bytes))
         if err != nil {
             return reply.MakeErrReply("ERR value is not a valid float")
         }
-        result := val.Add(delta)
-        resultBytes:= []byte(result.String())
-        entity.Data = resultBytes
+        resultBytes:= []byte(val.Add(delta).String())
+        db.Data.Put(key, &DataEntity{
+            Data: resultBytes,
+        })
         return reply.MakeBulkReply(resultBytes)
     } else {
-        entity := &DataEntity{
-            Code: StringCode,
+        db.Data.Put(key, &DataEntity{
             Data: args[1],
-        }
-        db.Data.Put(key, entity)
+        })
         return reply.MakeBulkReply(args[1])
     }
 }
@@ -422,24 +401,24 @@ func Decr(db *DB, args [][]byte)redis.Reply {
     }
     key := string(args[0])
 
-    db.Locks.Lock(key)
-    defer db.Locks.UnLock(key)
+    db.Lock(key)
+    defer db.UnLock(key)
 
-    entity, exists := db.Get(key)
-    if exists {
-        if entity.Code != StringCode {
-            return &reply.WrongTypeErrReply{}
-        }
-        bytes, _ := entity.Data.([]byte)
+    bytes, errReply := db.getAsString(key)
+    if errReply != nil {
+        return errReply
+    }
+    if bytes != nil {
         val, err := strconv.ParseInt(string(bytes), 10, 64)
         if err != nil {
             return reply.MakeErrReply("ERR value is not an integer or out of range")
         }
-        entity.Data = []byte(strconv.FormatInt(val - 1, 10))
+        db.Data.Put(key, &DataEntity{
+            Data: []byte(strconv.FormatInt(val - 1, 10)),
+        })
         return reply.MakeIntReply(val - 1)
     } else {
         entity := &DataEntity{
-            Code: StringCode,
             Data: []byte("-1"),
         }
         db.Data.Put(key, entity)
@@ -458,28 +437,27 @@ func DecrBy(db *DB, args [][]byte)redis.Reply {
         return reply.MakeErrReply("ERR value is not an integer or out of range")
     }
 
-    db.Locks.Lock(key)
-    defer db.Locks.UnLock(key)
+    db.Lock(key)
+    defer db.UnLock(key)
 
-    entity, exists := db.Get(key)
-    if exists {
-        if entity.Code != StringCode {
-            return &reply.WrongTypeErrReply{}
-        }
-        bytes, _ := entity.Data.([]byte)
+    bytes, errReply := db.getAsString(key)
+    if errReply != nil {
+        return errReply
+    }
+    if bytes != nil {
         val, err := strconv.ParseInt(string(bytes), 10, 64)
         if err != nil {
             return reply.MakeErrReply("ERR value is not an integer or out of range")
         }
-        entity.Data = []byte(strconv.FormatInt(val - delta, 10))
+        db.Data.Put(key, &DataEntity{
+            Data: []byte(strconv.FormatInt(val - delta, 10)),
+        })
         return reply.MakeIntReply(val - delta)
     } else {
         valueStr := strconv.FormatInt(-delta, 10)
-        entity := &DataEntity{
-            Code: StringCode,
+        db.Data.Put(key, &DataEntity{
             Data: []byte(valueStr),
-        }
-        db.Data.Put(key, entity)
+        })
         return reply.MakeIntReply(-delta)
     }
 }

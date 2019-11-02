@@ -1,10 +1,10 @@
 package main
 
 import (
-    "github.com/HDT3213/godis/src/server"
-    "time"
     "github.com/HDT3213/godis/src/lib/logger"
     "github.com/HDT3213/godis/src/redis/handler"
+    "github.com/HDT3213/godis/src/server"
+    "time"
 )
 
 func main() {

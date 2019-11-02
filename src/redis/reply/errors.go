@@ -9,6 +9,10 @@ func (r *UnknownErrReply)ToBytes()[]byte {
     return unknownErrBytes
 }
 
+func (r *UnknownErrReply) Error()string {
+    return "Err unknown"
+}
+
 // ArgNumErr
 type ArgNumErrReply struct {
     Cmd string
@@ -16,6 +20,10 @@ type ArgNumErrReply struct {
 
 func (r *ArgNumErrReply)ToBytes()[]byte {
     return []byte("-ERR wrong number of arguments for '" + r.Cmd + "' command\r\n")
+}
+
+func (r *ArgNumErrReply) Error()string {
+    return "ERR wrong number of arguments for '" + r.Cmd + "' command"
 }
 
 // SyntaxErr
@@ -27,6 +35,10 @@ func (r *SyntaxErrReply)ToBytes()[]byte {
     return syntaxErrBytes
 }
 
+func (r *SyntaxErrReply)Error()string {
+    return "Err syntax error"
+}
+
 // WrongTypeErr
 type WrongTypeErrReply struct {}
 
@@ -34,4 +46,8 @@ var wrongTypeErrBytes = []byte("-WRONGTYPE Operation against a key holding the w
 
 func (r *WrongTypeErrReply)ToBytes()[]byte {
     return wrongTypeErrBytes
+}
+
+func (r *WrongTypeErrReply)Error()string {
+    return "WRONGTYPE Operation against a key holding the wrong kind of value"
 }
