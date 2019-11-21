@@ -5,6 +5,7 @@ package handler
  */
 
 import (
+    "github.com/HDT3213/godis/src/redis/reply"
     "sync"
     "github.com/HDT3213/godis/src/lib/sync/atomic"
     "net"
@@ -46,11 +47,20 @@ func (h *Handler)Handle(ctx context.Context, conn net.Conn) {
     h.activeConn.Store(client, 1)
 
     reader := bufio.NewReader(conn)
+    var fixedLen int64 = 0
+    var err error
+    var msg []byte
     for {
         // may occurs: client EOF, client timeout, server early close
-        msg, err := reader.ReadBytes('\n')
+        if fixedLen == 0 {
+            msg, err = reader.ReadBytes('\n')
+        } else {
+            msg = make([]byte, fixedLen + 2)
+            _, err = io.ReadFull(reader, msg)
+            fixedLen = 0
+        }
         if err != nil {
-            if err == io.EOF {
+            if err == io.EOF || err == io.ErrUnexpectedEOF {
                 logger.Info("connection close")
             } else {
                 logger.Warn(err)
@@ -84,14 +94,23 @@ func (h *Handler)Handle(ctx context.Context, conn net.Conn) {
             }
         } else {
             // receive following part of a request
-            client.sentLines[client.sentLineCount] = msg[0:len(msg)-2]
+            line := msg[0:len(msg)-2]
+            if line[0] == '$' {
+                fixedLen, err = strconv.ParseInt(string(line[1:]), 10, 64)
+                if err != nil {
+                    errReply := &reply.ProtocolErrReply{Msg:err.Error()}
+                    _, _ = client.conn.Write(errReply.ToBytes())
+                }
+            }
+            client.sentLines[client.sentLineCount] = line
             client.sentLineCount++
+
             // if sending finished
             if client.sentLineCount == client.expectedLineCount {
                 client.sending.Set(false) // finish sending progress
                 // exec cmd
                 if len(client.sentLines) % 2 != 0 {
-                    client.conn.Write(UnknownErrReplyBytes)
+                    _, _ = client.conn.Write(UnknownErrReplyBytes)
                     client.expectedLineCount = 0
                     client.sentLineCount = 0
                     client.sentLines = nil

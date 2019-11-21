@@ -51,3 +51,17 @@ func (r *WrongTypeErrReply)ToBytes()[]byte {
 func (r *WrongTypeErrReply)Error()string {
     return "WRONGTYPE Operation against a key holding the wrong kind of value"
 }
+
+// ProtocolErr
+
+type ProtocolErrReply struct {
+    Msg string
+}
+
+func (r *ProtocolErrReply)ToBytes()[]byte {
+    return []byte("-ERR Protocol error: '" + r.Msg + "\r\n")
+}
+
+func (r *ProtocolErrReply) Error()string {
+    return "ERR Protocol error: '" + r.Msg
+}
