@@ -59,7 +59,7 @@ type ProtocolErrReply struct {
 }
 
 func (r *ProtocolErrReply)ToBytes()[]byte {
-    return []byte("-ERR Protocol error: '" + r.Msg + "\r\n")
+    return []byte("-ERR Protocol error: '" + r.Msg + "'\r\n")
 }
 
 func (r *ProtocolErrReply) Error()string {
