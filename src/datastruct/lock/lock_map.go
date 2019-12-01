@@ -7,97 +7,108 @@ import (
     "strconv"
     "strings"
     "sync"
+    "testing"
     "time"
 )
 
-type LockMap struct {
-    m sync.Map // key -> mutex
+const (
+    prime32 = uint32(16777619)
+)
+
+type Locks struct {
+    table []*sync.RWMutex
 }
 
-func (lock *LockMap)Lock(key string) {
-    mu := &sync.RWMutex{}
-    existed, loaded := lock.m.LoadOrStore(key, mu)
-    if loaded {
-        mu, _ = existed.(*sync.RWMutex)
+func Make(tableSize int) *Locks {
+    table := make([]*sync.RWMutex, tableSize)
+    for i := 0; i < tableSize; i++ {
+        table[i] = &sync.RWMutex{}
     }
+    return &Locks{
+        table: table,
+    }
+}
+
+func fnv32(key string) uint32 {
+    hash := uint32(2166136261)
+    for i := 0; i < len(key); i++ {
+        hash *= prime32
+        hash ^= uint32(key[i])
+    }
+    return hash
+}
+
+func (locks *Locks) spread(hashCode uint32) uint32 {
+    if locks == nil {
+        panic("dict is nil")
+    }
+    tableSize := uint32(len(locks.table))
+    return (tableSize - 1) & uint32(hashCode)
+}
+
+func (locks *Locks)Lock(key string) {
+    index := locks.spread(fnv32(key))
+    mu := locks.table[index]
     mu.Lock()
 }
 
-func (lock *LockMap)RLock(key string) {
-    mu := &sync.RWMutex{}
-    existed, loaded := lock.m.LoadOrStore(key, mu)
-    if loaded {
-        mu, _ = existed.(*sync.RWMutex)
-    }
+func (locks *Locks)RLock(key string) {
+    index := locks.spread(fnv32(key))
+    mu := locks.table[index]
     mu.RLock()
 }
 
-func (lock *LockMap)UnLock(key string) {
-    value, ok := lock.m.Load(key)
-    if !ok {
-        return
-    }
-    mu := value.(*sync.RWMutex)
+func (locks *Locks)UnLock(key string) {
+    index := locks.spread(fnv32(key))
+    mu := locks.table[index]
     mu.Unlock()
 }
 
-func (lock *LockMap)RUnLock(key string) {
-    value, ok := lock.m.Load(key)
-    if !ok {
-        return
-    }
-    mu := value.(*sync.RWMutex)
+func (locks *Locks)RUnLock(key string) {
+    index := locks.spread(fnv32(key))
+    mu := locks.table[index]
+    mu.Lock()
     mu.RUnlock()
 }
 
-func (lock *LockMap)Locks(keys ...string) {
+func (locks *Locks)Locks(keys ...string) {
     keySlice := make(sort.StringSlice, len(keys))
     copy(keySlice, keys)
     sort.Sort(keySlice)
     for _, key := range keySlice {
-        lock.Lock(key)
+        locks.Lock(key)
     }
 }
 
-func (lock *LockMap)RLocks(keys ...string) {
+func (locks *Locks)RLocks(keys ...string) {
     keySlice := make(sort.StringSlice, len(keys))
     copy(keySlice, keys)
     sort.Sort(keySlice)
     for _, key := range keySlice {
-        lock.RLock(key)
+        locks.RLock(key)
     }
 }
 
 
-func (lock *LockMap)UnLocks(keys ...string) {
+func (locks *Locks)UnLocks(keys ...string) {
     size := len(keys)
     keySlice := make(sort.StringSlice, size)
     copy(keySlice, keys)
     sort.Sort(keySlice)
     for i := size - 1; i >= 0; i-- {
         key := keySlice[i]
-        lock.UnLock(key)
+        locks.UnLock(key)
     }
 }
 
-func (lock *LockMap)RUnLocks(keys ...string) {
+func (locks *Locks)RUnLocks(keys ...string) {
     size := len(keys)
     keySlice := make(sort.StringSlice, size)
     copy(keySlice, keys)
     sort.Sort(keySlice)
     for i := size - 1; i >= 0; i-- {
         key := keySlice[i]
-        lock.RUnLock(key)
-    }
-}
-
-func (lock *LockMap)Clean(key string) {
-    lock.m.Delete(key)
-}
-
-func (lock *LockMap)Cleans(keys ...string) {
-    for _, key := range keys {
-        lock.Clean(key)
+        locks.RUnLock(key)
     }
 }
 
@@ -112,8 +123,8 @@ func GoID() int {
     return id
 }
 
-func debug() {
-    lm := LockMap{}
+func debug(testing.T) {
+    lm := Locks{}
     size := 10
     var wg sync.WaitGroup
     wg.Add(size)

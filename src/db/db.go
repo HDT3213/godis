@@ -28,7 +28,7 @@ type DB struct {
 
     // dict will ensure thread safety of its method
     // use this mutex for complicated command only, eg. rpush, incr ...
-    Locker *lock.LockMap
+    Locker *lock.Locks
 
     // TimerTask interval
     interval time.Duration
@@ -40,7 +40,7 @@ func MakeDB() *DB {
     db := &DB{
         Data:     dict.Make(1024),
         TTLMap:   dict.Make(512),
-        Locker:   &lock.LockMap{},
+        Locker:   lock.Make(128),
         interval: 5 * time.Second,
     }
     db.TimerTask()
@@ -144,7 +144,6 @@ func (db *DB)Put(key string, entity *DataEntity) {
 func (db *DB)Remove(key string) {
     db.Data.Remove(key)
     db.TTLMap.Remove(key)
-    db.Locker.Clean(key)
 }
 
 func (db *DB)Removes(keys ...string)(deleted int) {
@@ -168,7 +167,6 @@ func (db *DB)CleanExpired() {
         if now.After(expireTime) {
             // expired
             db.Data.Remove(key)
-            db.Locker.Clean(key)
             toRemove.Add(key)
         }
         return true
