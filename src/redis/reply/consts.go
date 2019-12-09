@@ -31,3 +31,12 @@ type EmptyMultiBulkReply struct {}
 func (r *EmptyMultiBulkReply)ToBytes()[]byte {
     return emptyMultiBulkBytes
 }
+
+// reply nothing, for commands like subscribe
+type NoReply struct {}
+
+var NoBytes = []byte("")
+
+func (r *NoReply)ToBytes()[]byte {
+    return NoBytes
+}

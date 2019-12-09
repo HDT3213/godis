@@ -264,6 +264,18 @@ func (list *LinkedList)ForEach(consumer func(int, interface{})bool) {
     }
 }
 
+func (list *LinkedList)Contains(val interface{})bool {
+    contains := false
+    list.ForEach(func(i int, actual interface{}) bool {
+        if actual == val {
+            contains = true
+            return false
+        }
+        return true
+    })
+    return contains
+}
+
 func (list *LinkedList)Range(start int, stop int)[]interface{} {
     if list == nil {
         panic("list is nil")
