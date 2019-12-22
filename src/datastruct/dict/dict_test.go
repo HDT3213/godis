@@ -4,7 +4,6 @@ import (
     "strconv"
     "sync"
     "testing"
-    "time"
 )
 
 func TestPut(t *testing.T) {
@@ -27,14 +26,13 @@ func TestPut(t *testing.T) {
                     t.Error("put test failed: expected " + strconv.Itoa(i) + ", actual: " + strconv.Itoa(intVal) + ", key: " + key)
                 }
             } else {
-                time.Sleep(2 * time.Second)
-                val2, ok2 := d.Get(key)
-                intVal2, _ := val2.(int)
-                t.Error("put test failed: expected true, actual: false, key: " + key +
-                    ", retry: " + strconv.FormatBool(ok2) + ", val: " + strconv.Itoa(intVal2))
+                _, ok := d.Get(key)
+                t.Error("put test failed: expected true, actual: false, key: " + key + ", retry: " + strconv.FormatBool(ok))
             }
+            wg.Done()
         }(i)
     }
+    wg.Wait()
 }
 
 func TestPutIfAbsent(t *testing.T) {
@@ -58,7 +56,8 @@ func TestPutIfAbsent(t *testing.T) {
                         ", key: " + key)
                 }
             } else {
-                t.Error("put test failed: expected true, actual: false, key: " + key)
+                _, ok := d.Get(key)
+                t.Error("put test failed: expected true, actual: false, key: " + key + ", retry: " + strconv.FormatBool(ok))
             }
 
             // update
@@ -75,8 +74,10 @@ func TestPutIfAbsent(t *testing.T) {
             } else {
                 t.Error("put test failed: expected true, actual: false, key: " + key)
             }
+            wg.Done()
         }(i)
     }
+    wg.Wait()
 }
 
 func TestPutIfExists(t *testing.T) {
@@ -103,10 +104,13 @@ func TestPutIfExists(t *testing.T) {
                     t.Error("put test failed: expected " + strconv.Itoa(10 * i) + ", actual: " + strconv.Itoa(intVal))
                 }
             } else {
-                t.Error("put test failed: expected true, actual: false")
+                _, ok := d.Get(key)
+                t.Error("put test failed: expected true, actual: false, key: " + key + ", retry: " + strconv.FormatBool(ok))
             }
+            wg.Done()
         }(i)
     }
+    wg.Wait()
 }
 
 func TestRemove(t *testing.T) {

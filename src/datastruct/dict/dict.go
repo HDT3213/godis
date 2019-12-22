@@ -38,8 +38,7 @@ const (
     loadFactor       = 0.75
 )
 
-// return the mini power of two which is not less than cap
-// See Hackers Delight, sec 3.2
+// return the mini 2^n  which is not less than cap
 func computeCapacity(param int) (size int) {
     if param <= minCapacity {
         return minCapacity
@@ -106,8 +105,14 @@ func (dict *Dict) getNextShard(hashCode uint32) *Shard {
     if dict == nil {
         panic("dict is nil")
     }
+
+    // in case next table has been released during get shard
+    dict.nextTableMu.Lock()
+    defer dict.nextTableMu.Unlock()
+
+    // rehashing may be in progress or rehashing has finished while waiting nextTableMu
     if dict.nextTable == nil {
-        panic("next table is nil")
+        return nil
     }
     nextTableSize := uint32(len(dict.nextTable))
     index := (nextTableSize - 1) & uint32(hashCode)
@@ -148,8 +153,6 @@ func (shard *Shard) Get(key string) (val interface{}, exists bool) {
     if shard == nil {
         panic("shard is nil")
     }
-    shard.mutex.RLock()
-    defer shard.mutex.RUnlock()
 
     node := shard.head
     for node != nil {
@@ -167,6 +170,9 @@ func (dict *Dict) Get(key string) (val interface{}, exists bool) {
     }
     hashCode := fnv32(key)
     index := dict.spread(hashCode)
+    shard := dict.getShard(index)
+    shard.mutex.RLock()
+
     rehashIndex := atomic.LoadInt32(&dict.rehashIndex)
     if rehashIndex >= int32(index) {
         /*
@@ -174,15 +180,24 @@ func (dict *Dict) Get(key string) (val interface{}, exists bool) {
          * if rehashIndex == index, the shard may be resizing or just finished.
          * Resizing will not be finished until the lock has been released
          */
-        dict.ensureNextTable()
+        shard.mutex.RUnlock()
         nextShard := dict.getNextShard(hashCode)
-        val, exists = nextShard.Get(key)
+        if nextShard == nil {
+            shard := dict.getShard(dict.spread(hashCode))
+            shard.mutex.RLock()
+            val, exists =  shard.Get(key)
+            shard.mutex.RUnlock()
+        } else {
+            nextShard.mutex.RLock()
+            val, exists = nextShard.Get(key)
+            nextShard.mutex.RUnlock()
+        }
     } else {
         /*
          * if rehashing not in progress or the shard has not been rehashing, put in current shard
          */
-        shard := dict.getShard(index)
         val, exists =  shard.Get(key)
+        shard.mutex.RUnlock()
     }
 
     return
@@ -199,8 +214,6 @@ func (shard *Shard) Put(key string, val interface{}, hashCode uint32) int {
     if shard == nil {
         panic("shard is nil")
     }
-    shard.mutex.Lock()
-    defer shard.mutex.Unlock()
 
     node := shard.head
     if node == nil {
@@ -240,21 +253,33 @@ func (dict *Dict) Put(key string, val interface{}) (result int) {
     }
     hashCode := fnv32(key)
     index := dict.spread(hashCode)
+    shard := dict.getShard(index)
+    shard.mutex.Lock()
+
     rehashIndex := atomic.LoadInt32(&dict.rehashIndex)
     if rehashIndex >= int32(index) {
         /* if rehashIndex > index. then the shard has finished resize, put in next table
          * if rehashIndex == index, the shard may be resizing or just finished.
          * Resizing will not be finished until the lock has been released
          */
-        dict.ensureNextTable()
+        shard.mutex.Unlock()
         nextShard := dict.getNextShard(hashCode)
-        result = nextShard.Put(key, val, hashCode)
+        if nextShard == nil {
+            shard := dict.getShard(dict.spread(hashCode))
+            shard.mutex.Lock()
+            result = shard.Put(key, val, hashCode)
+            shard.mutex.Unlock()
+        } else {
+            nextShard.mutex.Lock()
+            result = nextShard.Put(key, val, hashCode)
+            nextShard.mutex.Unlock()
+        }
     } else {
         /*
          * if rehashing not in progress or the shard has not been rehashing, put in current shard
          */
-        shard := dict.getShard(index)
         result = shard.Put(key, val, hashCode)
+        shard.mutex.Unlock()
     }
     if result == 1 {
         dict.addCount()
@@ -263,8 +288,6 @@ func (dict *Dict) Put(key string, val interface{}) (result int) {
 }
 
 func (shard *Shard) PutIfAbsent(key string, val interface{}, hashCode uint32)int {
-    shard.mutex.Lock()
-    defer shard.mutex.Unlock()
     node := shard.head
     if node == nil {
         // empty shard
@@ -302,14 +325,25 @@ func (dict *Dict) PutIfAbsent(key string, val interface{}) (result int) {
     }
     hashCode := fnv32(key)
     index := dict.spread(hashCode)
+    shard := dict.getShard(index)
+    shard.mutex.Lock()
     rehashIndex := atomic.LoadInt32(&dict.rehashIndex)
     if rehashIndex >= int32(index) {
-        dict.ensureNextTable()
+        shard.mutex.Unlock()
         nextShard := dict.getNextShard(hashCode)
-        result = nextShard.PutIfAbsent(key, val, hashCode)
+        if nextShard == nil {
+            shard := dict.getShard(dict.spread(hashCode))
+            shard.mutex.Lock()
+            result = shard.PutIfAbsent(key, val, hashCode)
+            shard.mutex.Unlock()
+        } else {
+            nextShard.mutex.Lock()
+            result = nextShard.PutIfAbsent(key, val, hashCode)
+            nextShard.mutex.Unlock()
+        }
     } else {
-        shard := dict.getShard(index)
         result = shard.PutIfAbsent(key, val, hashCode)
+        shard.mutex.Unlock()
     }
     if result == 1 {
         dict.addCount()
@@ -321,8 +355,6 @@ func (shard *Shard) PutIfExists(key string, val interface{})int {
     if shard == nil {
         panic("shard is nil")
     }
-    shard.mutex.Lock()
-    defer shard.mutex.Unlock()
 
     node := shard.head
     for node != nil {
@@ -342,15 +374,25 @@ func (dict *Dict) PutIfExists(key string, val interface{})(result int) {
     }
     hashCode := fnv32(key)
     index := dict.spread(hashCode)
-
+    shard := dict.getShard(index)
+    shard.mutex.Lock()
     rehashIndex := atomic.LoadInt32(&dict.rehashIndex)
     if rehashIndex >= int32(index) {
-        dict.ensureNextTable()
+        shard.mutex.Unlock()
         nextShard := dict.getNextShard(hashCode)
-        result = nextShard.PutIfExists(key, val)
+        if nextShard == nil {
+            shard := dict.getShard(dict.spread(hashCode))
+            shard.mutex.Lock()
+            result = shard.PutIfExists(key, val)
+            shard.mutex.Unlock()
+        } else {
+            nextShard.mutex.Lock()
+            result = nextShard.PutIfExists(key, val)
+            nextShard.mutex.Unlock()
+        }
     } else {
-        shard := dict.getShard(index)
         result = shard.PutIfExists(key, val)
+        shard.mutex.Unlock()
     }
     return
 }
@@ -359,8 +401,6 @@ func (shard *Shard) Remove(key string) int {
     if shard == nil {
         panic("shard is nil")
     }
-    shard.mutex.Lock()
-    defer shard.mutex.Unlock()
 
     node := shard.head
     if node == nil {
@@ -392,14 +432,27 @@ func (dict *Dict) Remove(key string)(result int) {
     }
     hashCode := fnv32(key)
     index := dict.spread(hashCode)
+    shard := dict.getShard(index)
+    shard.mutex.Lock()
+
     rehashIndex := atomic.LoadInt32(&dict.rehashIndex)
     if rehashIndex >= int32(index) {
-        dict.ensureNextTable()
+        shard.mutex.Unlock()
         nextShard := dict.getNextShard(hashCode)
-        result = nextShard.Remove(key)
+        if nextShard == nil {
+            shard := dict.getShard(dict.spread(hashCode))
+            shard.mutex.Lock()
+            result = shard.Remove(key)
+            shard.mutex.Unlock()
+        } else {
+            nextShard.mutex.Lock()
+            result = nextShard.Remove(key)
+            nextShard.mutex.Unlock()
+        }
     } else {
         shard := dict.getShard(dict.spread(hashCode))
         result = shard.Remove(key)
+        shard.mutex.Unlock()
     }
     if result > 0 {
         atomic.AddInt32(&dict.count, -1)
@@ -431,9 +484,11 @@ func (dict *Dict) resize() {
     wg.Wait()
 
     // finish rehash
+    dict.nextTableMu.Lock()
     dict.table.Store(dict.nextTable)
     dict.nextTable = nil
     atomic.StoreInt32(&dict.rehashIndex, -1)
+    dict.nextTableMu.Unlock()
 }
 
 func (dict *Dict) transfer(wg *sync.WaitGroup) {
