@@ -67,7 +67,6 @@ func (locks *Locks)UnLock(key string) {
 func (locks *Locks)RUnLock(key string) {
     index := locks.spread(fnv32(key))
     mu := locks.table[index]
-    mu.Lock()
     mu.RUnlock()
 }
 

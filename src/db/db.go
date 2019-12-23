@@ -46,12 +46,12 @@ var router = MakeRouter()
 
 func MakeDB() *DB {
     db := &DB{
-        Data:     dict.Make(1024),
-        TTLMap:   dict.Make(128),
+        Data:     dict.Make(128),
+        TTLMap:   dict.Make(64),
         Locker:   lock.Make(128),
         interval: 5 * time.Second,
 
-        subs:     dict.Make(16),
+        subs:     dict.Make(4),
         subsLocker: lock.Make(16),
     }
     db.TimerTask()
