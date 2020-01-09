@@ -28,7 +28,7 @@ func (db *DB) getOrInitDict(key string)(dict *Dict.Dict, inited bool, errReply r
     inited = false
     if dict == nil {
         dict = Dict.Make(1)
-        db.Data.Put(key, &DataEntity{
+        db.Put(key, &DataEntity{
             Data: dict,
         })
         inited = true

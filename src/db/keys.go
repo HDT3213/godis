@@ -42,6 +42,22 @@ func Exists(db *DB, args [][]byte)redis.Reply {
     }
 }
 
+func FlushDB(db *DB, args [][]byte)redis.Reply {
+    if len(args) != 0 {
+        return reply.MakeErrReply("ERR wrong number of arguments for 'flushdb' command")
+    }
+    db.Flush()
+    return &reply.OkReply{}
+}
+
+func FlushAll(db *DB, args [][]byte)redis.Reply {
+    if len(args) != 0 {
+        return reply.MakeErrReply("ERR wrong number of arguments for 'flushall' command")
+    }
+    db.Flush()
+    return &reply.OkReply{}
+}
+
 func Type(db *DB, args [][]byte)redis.Reply {
     if len(args) != 1 {
         return reply.MakeErrReply("ERR wrong number of arguments for 'type' command")

@@ -10,12 +10,19 @@ import (
     "github.com/HDT3213/godis/src/redis/reply"
     "runtime/debug"
     "strings"
+    "sync"
     "time"
 )
 
 type DataEntity struct {
     Data interface{}
 }
+
+const (
+    dataDictSize = 2 << 20
+    ttlDictSize = 2 << 10
+    lockerSize = 128
+)
 
 // args don't include cmd line
 type CmdFunc func(db *DB, args [][]byte)redis.Reply
@@ -39,6 +46,8 @@ type DB struct {
     subs *dict.Dict
     // lock channel
     subsLocker *lock.Locks
+
+    stopWorld sync.RWMutex
 }
 
 
@@ -46,9 +55,9 @@ var router = MakeRouter()
 
 func MakeDB() *DB {
     db := &DB{
-        Data:     dict.Make(128),
-        TTLMap:   dict.Make(64),
-        Locker:   lock.Make(128),
+        Data:     dict.Make(dataDictSize),
+        TTLMap:   dict.Make(ttlDictSize),
+        Locker:   lock.Make(lockerSize),
         interval: 5 * time.Second,
 
         subs:     dict.Make(4),
@@ -89,7 +98,12 @@ func (db *DB)Exec(c redis.Client, args [][]byte)(result redis.Reply) {
     return
 }
 
+/* ---- Data Access ----- */
+
 func (db *DB)Get(key string)(*DataEntity, bool) {
+    db.stopWorld.RLock()
+    defer db.stopWorld.RUnlock()
+
     raw, ok := db.Data.Get(key)
     if !ok {
         return nil, false
@@ -99,6 +113,55 @@ func (db *DB)Get(key string)(*DataEntity, bool) {
     }
     entity, _ := raw.(*DataEntity)
     return entity, true
+}
+
+func (db *DB)Put(key string, entity *DataEntity)int {
+    db.stopWorld.RLock()
+    defer db.stopWorld.RUnlock()
+    return db.Data.Put(key, entity)
+}
+
+func (db *DB)PutIfExists(key string, entity *DataEntity)int {
+    db.stopWorld.RLock()
+    defer db.stopWorld.RUnlock()
+    return db.Data.PutIfExists(key, entity)
+}
+
+func (db *DB)PutIfAbsent(key string, entity *DataEntity)int {
+    db.stopWorld.RLock()
+    defer db.stopWorld.RUnlock()
+    return db.Data.PutIfAbsent(key, entity)
+}
+
+func (db *DB)Remove(key string) {
+    db.stopWorld.RLock()
+    defer db.stopWorld.RUnlock()
+    db.Data.Remove(key)
+    db.TTLMap.Remove(key)
+}
+
+func (db *DB)Removes(keys ...string)(deleted int) {
+    db.stopWorld.RLock()
+    defer db.stopWorld.RUnlock()
+    deleted = 0
+    for _, key := range keys {
+        _, exists := db.Data.Get(key)
+        if exists {
+            db.Data.Remove(key)
+            db.TTLMap.Remove(key)
+            deleted++
+        }
+    }
+    return deleted
+}
+
+func (db *DB)Flush() {
+    db.stopWorld.Lock()
+    defer db.stopWorld.Unlock()
+
+    db.Data = dict.Make(dataDictSize)
+    db.TTLMap = dict.Make(ttlDictSize)
+    db.Locker = lock.Make(lockerSize)
 }
 
 /* ---- Lock Function ----- */
@@ -138,10 +201,14 @@ func (db *DB)RUnLocks(keys ...string) {
 /* ---- TTL Functions ---- */
 
 func (db *DB)Expire(key string, expireTime time.Time) {
+    db.stopWorld.RLock()
+    defer db.stopWorld.RUnlock()
     db.TTLMap.Put(key, expireTime)
 }
 
 func (db *DB)Persist(key string) {
+    db.stopWorld.RLock()
+    defer db.stopWorld.RUnlock()
     db.TTLMap.Remove(key)
 }
 
@@ -156,28 +223,6 @@ func (db *DB)IsExpired(key string)bool {
         db.Remove(key)
     }
     return expired
-}
-
-func (db *DB)Put(key string, entity *DataEntity) {
-    db.Data.Put(key, entity)
-}
-
-func (db *DB)Remove(key string) {
-    db.Data.Remove(key)
-    db.TTLMap.Remove(key)
-}
-
-func (db *DB)Removes(keys ...string)(deleted int) {
-    deleted = 0
-    for _, key := range keys {
-        _, exists := db.Data.Get(key)
-        if exists {
-            db.Data.Remove(key)
-            db.TTLMap.Remove(key)
-            deleted++
-        }
-    }
-    return deleted
 }
 
 func (db *DB)CleanExpired() {
