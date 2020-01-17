@@ -35,6 +35,12 @@ func MakeHandler() *Handler {
     }
 }
 
+func (h *Handler) closeClient(client *Client) {
+    _ = client.Close()
+    h.db.AfterClientClose(client)
+    h.activeConn.Delete(client)
+}
+
 func (h *Handler)Handle(ctx context.Context, conn net.Conn) {
     if h.closing.Get() {
         // closing handler refuse new connection
@@ -51,6 +57,17 @@ func (h *Handler)Handle(ctx context.Context, conn net.Conn) {
     for {
         if fixedLen == 0 {
             msg, err = reader.ReadBytes('\n')
+            if err != nil {
+                if err == io.EOF || err == io.ErrUnexpectedEOF {
+                    logger.Info("connection close")
+                } else {
+                    logger.Warn(err)
+                }
+
+                // after client close
+                h.closeClient(client)
+                return // io error, disconnect with client
+            }
             if len(msg) == 0 || msg[len(msg) - 2] != '\r' {
                 errReply := &reply.ProtocolErrReply{Msg:"invalid multibulk length"}
                 _, _ =  client.conn.Write(errReply.ToBytes())
@@ -58,6 +75,17 @@ func (h *Handler)Handle(ctx context.Context, conn net.Conn) {
         } else {
             msg = make([]byte, fixedLen + 2)
             _, err = io.ReadFull(reader, msg)
+            if err != nil {
+                if err == io.EOF || err == io.ErrUnexpectedEOF {
+                    logger.Info("connection close")
+                } else {
+                    logger.Warn(err)
+                }
+
+                // after client close
+                h.closeClient(client)
+                return // io error, disconnect with client
+            }
             if len(msg) == 0 ||
                 msg[len(msg) - 2] != '\r' ||
                 msg[len(msg) - 1] != '\n'{
@@ -65,20 +93,6 @@ func (h *Handler)Handle(ctx context.Context, conn net.Conn) {
                 _, _ =  client.conn.Write(errReply.ToBytes())
             }
             fixedLen = 0
-        }
-        if err != nil {
-            if err == io.EOF || err == io.ErrUnexpectedEOF {
-                logger.Info("connection close")
-            } else {
-                logger.Warn(err)
-            }
-
-            // after client close
-            _ = client.Close()
-            h.db.AfterClientClose(client)
-            h.activeConn.Delete(client)
-
-            return // io error, disconnect with client
         }
 
         if !client.uploading.Get() {
@@ -162,8 +176,9 @@ func (h *Handler)Close()error {
     // TODO: concurrent wait
     h.activeConn.Range(func(key interface{}, val interface{})bool {
         client := key.(*Client)
-        client.Close()
+        _ = client.Close()
         return true
     })
+    h.db.Close()
     return nil
 }

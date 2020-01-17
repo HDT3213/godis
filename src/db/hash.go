@@ -36,10 +36,10 @@ func (db *DB) getOrInitDict(key string)(dict *Dict.Dict, inited bool, errReply r
     return dict, inited, nil
 }
 
-func HSet(db *DB, args [][]byte)redis.Reply {
+func HSet(db *DB, args [][]byte) (redis.Reply, *extra) {
     // parse args
     if len(args) != 3 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hset' command")
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hset' command"), nil
     }
     key := string(args[0])
     field := string(args[1])
@@ -52,17 +52,17 @@ func HSet(db *DB, args [][]byte)redis.Reply {
     // get or init entity
     dict, _, errReply := db.getOrInitDict(key)
     if errReply != nil {
-        return errReply
+        return errReply, nil
     }
 
     result := dict.Put(field, value)
-    return reply.MakeIntReply(int64(result))
+    return reply.MakeIntReply(int64(result)), &extra{toPersist: true}
 }
 
-func HSetNX(db *DB, args [][]byte)redis.Reply {
+func HSetNX(db *DB, args [][]byte) (redis.Reply, *extra) {
     // parse args
     if len(args) != 3 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hsetnx' command")
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hsetnx' command"), nil
     }
     key := string(args[0])
     field := string(args[1])
@@ -73,17 +73,17 @@ func HSetNX(db *DB, args [][]byte)redis.Reply {
 
     dict, _, errReply := db.getOrInitDict(key)
     if errReply != nil {
-        return errReply
+        return errReply, nil
     }
 
     result := dict.PutIfAbsent(field, value)
-    return reply.MakeIntReply(int64(result))
+    return reply.MakeIntReply(int64(result)), &extra{toPersist: result > 0}
 }
 
-func HGet(db *DB, args [][]byte)redis.Reply {
+func HGet(db *DB, args [][]byte) (redis.Reply, *extra) {
     // parse args
     if len(args) != 2 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hget' command")
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hget' command"), nil
     }
     key := string(args[0])
     field := string(args[1])
@@ -91,24 +91,24 @@ func HGet(db *DB, args [][]byte)redis.Reply {
     // get entity
     dict, errReply := db.getAsDict(key)
     if errReply != nil {
-        return errReply
+        return errReply, nil
     }
     if dict == nil {
-        return &reply.NullBulkReply{}
+        return &reply.NullBulkReply{}, nil
     }
 
     raw, exists := dict.Get(field)
     if !exists {
-        return &reply.NullBulkReply{}
+        return &reply.NullBulkReply{}, nil
     }
     value, _ := raw.([]byte)
-    return reply.MakeBulkReply(value)
+    return reply.MakeBulkReply(value), nil
 }
 
-func HExists(db *DB, args [][]byte)redis.Reply {
+func HExists(db *DB, args [][]byte) (redis.Reply, *extra) {
     // parse args
     if len(args) != 2 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hexists' command")
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hexists' command"), nil
     }
     key := string(args[0])
     field := string(args[1])
@@ -116,23 +116,23 @@ func HExists(db *DB, args [][]byte)redis.Reply {
     // get entity
     dict, errReply := db.getAsDict(key)
     if errReply != nil {
-        return errReply
+        return errReply, nil
     }
     if dict == nil {
-        return reply.MakeIntReply(0)
+        return reply.MakeIntReply(0), nil
     }
 
     _, exists := dict.Get(field)
     if exists {
-        return reply.MakeIntReply(1)
+        return reply.MakeIntReply(1), nil
     }
-    return reply.MakeIntReply(0)
+    return reply.MakeIntReply(0), nil
 }
 
-func HDel(db *DB, args [][]byte)redis.Reply {
+func HDel(db *DB, args [][]byte) (redis.Reply, *extra) {
     // parse args
     if len(args) < 2 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hdel' command")
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hdel' command"), nil
     }
     key := string(args[0])
     fields := make([]string, len(args) - 1)
@@ -147,10 +147,10 @@ func HDel(db *DB, args [][]byte)redis.Reply {
     // get entity
     dict, errReply := db.getAsDict(key)
     if errReply != nil {
-        return errReply
+        return errReply, nil
     }
     if dict == nil {
-        return reply.MakeIntReply(0)
+        return reply.MakeIntReply(0), nil
     }
 
     deleted := 0
@@ -162,30 +162,30 @@ func HDel(db *DB, args [][]byte)redis.Reply {
         db.Remove(key)
     }
 
-    return reply.MakeIntReply(int64(deleted))
+    return reply.MakeIntReply(int64(deleted)), &extra{toPersist: deleted > 0}
 }
 
-func HLen(db *DB, args [][]byte)redis.Reply {
+func HLen(db *DB, args [][]byte) (redis.Reply, *extra) {
     // parse args
     if len(args) != 1 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hlen' command")
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hlen' command"), nil
     }
     key := string(args[0])
 
     dict, errReply := db.getAsDict(key)
     if errReply != nil {
-        return errReply
+        return errReply, nil
     }
     if dict == nil {
-        return reply.MakeIntReply(0)
+        return reply.MakeIntReply(0), nil
     }
-    return reply.MakeIntReply(int64(dict.Len()))
+    return reply.MakeIntReply(int64(dict.Len())), nil
 }
 
-func HMSet(db *DB, args [][]byte)redis.Reply {
+func HMSet(db *DB, args [][]byte) (redis.Reply, *extra) {
     // parse args
     if len(args) < 3 || len(args) % 2 != 1 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hmset' command")
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hmset' command"), nil
     }
     key := string(args[0])
     size := (len(args) - 1) / 2
@@ -203,7 +203,7 @@ func HMSet(db *DB, args [][]byte)redis.Reply {
     // get or init entity
     dict, _, errReply := db.getOrInitDict(key)
     if errReply != nil {
-        return errReply
+        return errReply, nil
     }
 
     // put data
@@ -211,12 +211,12 @@ func HMSet(db *DB, args [][]byte)redis.Reply {
         value := values[i]
         dict.Put(field, value)
     }
-    return &reply.OkReply{}
+    return &reply.OkReply{}, &extra{toPersist: true}
 }
 
-func HMGet(db *DB, args [][]byte)redis.Reply {
+func HMGet(db *DB, args [][]byte) (redis.Reply, *extra) {
     if len(args) < 2 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hmget' command")
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hmget' command"), nil
     }
     key := string(args[0])
     size := len(args) - 1
@@ -232,10 +232,10 @@ func HMGet(db *DB, args [][]byte)redis.Reply {
     result := make([][]byte, size)
     dict, errReply := db.getAsDict(key)
     if errReply != nil {
-        return errReply
+        return errReply, nil
     }
     if dict == nil {
-        return reply.MakeMultiBulkReply(result)
+        return reply.MakeMultiBulkReply(result), nil
     }
 
     for i, field := range fields {
@@ -247,12 +247,12 @@ func HMGet(db *DB, args [][]byte)redis.Reply {
             result[i] = bytes
         }
     }
-    return reply.MakeMultiBulkReply(result)
+    return reply.MakeMultiBulkReply(result), nil
 }
 
-func HKeys(db *DB, args [][]byte)redis.Reply {
+func HKeys(db *DB, args [][]byte) (redis.Reply, *extra) {
     if len(args) != 1 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hkeys' command")
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hkeys' command"), nil
     }
     key := string(args[0])
 
@@ -261,10 +261,10 @@ func HKeys(db *DB, args [][]byte)redis.Reply {
 
     dict, errReply := db.getAsDict(key)
     if errReply != nil {
-        return errReply
+        return errReply, nil
     }
     if dict == nil {
-        return &reply.EmptyMultiBulkReply{}
+        return &reply.EmptyMultiBulkReply{}, nil
     }
 
     fields := make([][]byte, dict.Len())
@@ -274,12 +274,12 @@ func HKeys(db *DB, args [][]byte)redis.Reply {
         i++
         return true
     })
-    return reply.MakeMultiBulkReply(fields[:i])
+    return reply.MakeMultiBulkReply(fields[:i]), nil
 }
 
-func HVals(db *DB, args [][]byte)redis.Reply {
+func HVals(db *DB, args [][]byte) (redis.Reply, *extra) {
     if len(args) != 1 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hvals' command")
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hvals' command"), nil
     }
     key := string(args[0])
 
@@ -289,10 +289,10 @@ func HVals(db *DB, args [][]byte)redis.Reply {
     // get entity
     dict, errReply := db.getAsDict(key)
     if errReply != nil {
-        return errReply
+        return errReply, nil
     }
     if dict == nil {
-        return &reply.EmptyMultiBulkReply{}
+        return &reply.EmptyMultiBulkReply{}, nil
     }
 
     values := make([][]byte, dict.Len())
@@ -302,12 +302,12 @@ func HVals(db *DB, args [][]byte)redis.Reply {
         i++
         return true
     })
-    return reply.MakeMultiBulkReply(values[:i])
+    return reply.MakeMultiBulkReply(values[:i]), nil
 }
 
-func HGetAll(db *DB, args [][]byte)redis.Reply {
+func HGetAll(db *DB, args [][]byte) (redis.Reply, *extra) {
     if len(args) != 1 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hgetAll' command")
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hgetAll' command"), nil
     }
     key := string(args[0])
 
@@ -317,10 +317,10 @@ func HGetAll(db *DB, args [][]byte)redis.Reply {
     // get entity
     dict, errReply := db.getAsDict(key)
     if errReply != nil {
-        return errReply
+        return errReply, nil
     }
     if dict == nil {
-        return &reply.EmptyMultiBulkReply{}
+        return &reply.EmptyMultiBulkReply{}, nil
     }
 
     size := dict.Len()
@@ -333,19 +333,19 @@ func HGetAll(db *DB, args [][]byte)redis.Reply {
         i++
         return true
     })
-    return reply.MakeMultiBulkReply(result[:i])
+    return reply.MakeMultiBulkReply(result[:i]), nil
 }
 
-func HIncrBy(db *DB, args [][]byte)redis.Reply {
+func HIncrBy(db *DB, args [][]byte) (redis.Reply, *extra) {
     if len(args) != 3 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hincrby' command")
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hincrby' command"), nil
     }
     key := string(args[0])
     field := string(args[1])
     rawDelta := string(args[2])
     delta, err := strconv.ParseInt(rawDelta, 10, 64)
     if err != nil {
-        return reply.MakeErrReply("ERR value is not an integer or out of range")
+        return reply.MakeErrReply("ERR value is not an integer or out of range"), nil
     }
 
     db.Locker.Lock(key)
@@ -353,35 +353,35 @@ func HIncrBy(db *DB, args [][]byte)redis.Reply {
 
     dict, _, errReply := db.getOrInitDict(key)
     if errReply != nil {
-        return errReply
+        return errReply, nil
     }
 
     value, exists := dict.Get(field)
     if !exists {
         dict.Put(field, args[2])
-        return reply.MakeBulkReply(args[2])
+        return reply.MakeBulkReply(args[2]), nil
     } else {
         val, err := strconv.ParseInt(string(value.([]byte)), 10, 64)
         if err != nil {
-            return reply.MakeErrReply("ERR hash value is not an integer")
+            return reply.MakeErrReply("ERR hash value is not an integer"), nil
         }
         val += delta
         bytes := []byte(strconv.FormatInt(val, 10))
         dict.Put(field, bytes)
-        return reply.MakeBulkReply(bytes)
+        return reply.MakeBulkReply(bytes), &extra{toPersist: true}
     }
 }
 
-func HIncrByFloat(db *DB, args [][]byte)redis.Reply {
+func HIncrByFloat(db *DB, args [][]byte) (redis.Reply, *extra) {
     if len(args) != 3 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hincrbyfloat' command")
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hincrbyfloat' command"), nil
     }
     key := string(args[0])
     field := string(args[1])
     rawDelta := string(args[2])
     delta, err := decimal.NewFromString(rawDelta)
     if err != nil {
-        return reply.MakeErrReply("ERR value is not a valid float")
+        return reply.MakeErrReply("ERR value is not a valid float"), nil
     }
 
     db.Locker.Lock(key)
@@ -390,21 +390,21 @@ func HIncrByFloat(db *DB, args [][]byte)redis.Reply {
     // get or init entity
     dict, _, errReply := db.getOrInitDict(key)
     if errReply != nil {
-        return errReply
+        return errReply, nil
     }
 
     value, exists := dict.Get(field)
     if !exists {
         dict.Put(field, args[2])
-        return reply.MakeBulkReply(args[2])
+        return reply.MakeBulkReply(args[2]), nil
     } else {
         val, err := decimal.NewFromString(string(value.([]byte)))
         if err != nil {
-            return reply.MakeErrReply("ERR hash value is not a float")
+            return reply.MakeErrReply("ERR hash value is not a float"), nil
         }
         result := val.Add(delta)
         resultBytes:= []byte(result.String())
         dict.Put(field, resultBytes)
-        return reply.MakeBulkReply(resultBytes)
+        return reply.MakeBulkReply(resultBytes), &extra{toPersist: true}
     }
 }
