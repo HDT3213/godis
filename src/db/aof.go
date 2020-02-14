@@ -54,7 +54,7 @@ func trim(msg []byte) string {
 		if msg[i] == '\r' || msg[i] == '\n' {
 			continue
 		}
-		trimed = string(msg[:i+1])
+		return string(msg[:i+1])
 	}
 	return trimed
 }
@@ -195,6 +195,14 @@ func (db *DB) aofRewrite() {
 			cmd = persistZSet(key, val)
 
 		}
+		if cmd != nil {
+			_, _ = file.Write(cmd.ToBytes())
+		}
+		return true
+	})
+	tmpDB.TTLMap.ForEach(func(key string, raw interface{}) bool {
+		expireTime, _ := raw.(time.Time)
+		cmd := makeExpireCmd(key, expireTime)
 		if cmd != nil {
 			_, _ = file.Write(cmd.ToBytes())
 		}
