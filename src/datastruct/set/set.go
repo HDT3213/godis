@@ -3,18 +3,18 @@ package set
 import "github.com/HDT3213/godis/src/datastruct/dict"
 
 type Set struct {
-    dict *dict.Dict
+    dict dict.Dict
 }
 
-func Make(shardCountHint int)*Set {
+func Make() *Set {
     return &Set{
-        dict: dict.Make(shardCountHint),
+        dict: dict.MakeSimple(),
     }
 }
 
 func MakeFromVals(members ...string)*Set {
     set := &Set{
-        dict: dict.Make(len(members)),
+        dict: dict.MakeConcurrent(len(members)),
     }
     for _, member := range members {
         set.Add(member)
@@ -65,14 +65,8 @@ func (set *Set)Intersect(another *Set)*Set {
     if set == nil {
         panic("set is nil")
     }
-    setSize := set.Len()
-    anotherSize := another.Len()
-    size := setSize
-    if anotherSize < setSize {
-        size = anotherSize
-    }
 
-    result := Make(size)
+    result := Make()
     another.ForEach(func(member string)bool {
         if set.Has(member) {
             result.Add(member)
@@ -86,7 +80,7 @@ func (set *Set)Union(another *Set)*Set {
     if set == nil {
         panic("set is nil")
     }
-    result := Make(set.Len() + another.Len())
+    result := Make()
     another.ForEach(func(member string)bool {
         result.Add(member)
         return true
@@ -103,7 +97,7 @@ func (set *Set)Diff(another *Set)*Set {
         panic("set is nil")
     }
 
-    result := Make(set.Len())
+    result := Make()
     set.ForEach(func(member string)bool {
         if !another.Has(member) {
             result.Add(member)

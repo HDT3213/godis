@@ -38,11 +38,11 @@ type CmdFunc func(db *DB, args [][]byte) (redis.Reply, *extra)
 
 type DB struct {
 	// key -> DataEntity
-	Data *dict.Dict
+	Data dict.Dict
 	// key -> expireTime (time.Time)
-	TTLMap *dict.Dict
+	TTLMap dict.Dict
 	// channel -> list<*client>
-	SubMap *dict.Dict
+	SubMap dict.Dict
 
 	// dict will ensure thread safety of its method
 	// use this mutex for complicated command only, eg. rpush, incr ...
@@ -52,7 +52,7 @@ type DB struct {
 	interval time.Duration
 
 	// channel -> list(*Client)
-	subs *dict.Dict
+	subs dict.Dict
 	// lock channel
 	subsLocker *lock.Locks
 
@@ -71,12 +71,12 @@ var router = MakeRouter()
 
 func MakeDB() *DB {
 	db := &DB{
-		Data:     dict.Make(dataDictSize),
-		TTLMap:   dict.Make(ttlDictSize),
+		Data:     dict.MakeConcurrent(dataDictSize),
+		TTLMap:   dict.MakeConcurrent(ttlDictSize),
 		Locker:   lock.Make(lockerSize),
 		interval: 5 * time.Second,
 
-		subs:       dict.Make(4),
+		subs:       dict.MakeConcurrent(4),
 		subsLocker: lock.Make(16),
 	}
 
@@ -216,8 +216,8 @@ func (db *DB) Flush() {
 	db.stopWorld.Lock()
 	defer db.stopWorld.Unlock()
 
-	db.Data = dict.Make(dataDictSize)
-	db.TTLMap = dict.Make(ttlDictSize)
+	db.Data = dict.MakeConcurrent(dataDictSize)
+	db.TTLMap = dict.MakeConcurrent(ttlDictSize)
 	db.Locker = lock.Make(lockerSize)
 }
 

@@ -8,26 +8,26 @@ import (
     "strconv"
 )
 
-func (db *DB)getAsDict(key string)(*Dict.Dict, reply.ErrorReply) {
+func (db *DB) getAsDict(key string) (Dict.Dict, reply.ErrorReply) {
     entity, exists := db.Get(key)
     if !exists {
         return nil, nil
     }
-    dict, ok := entity.Data.(*Dict.Dict)
+    dict, ok := entity.Data.(Dict.Dict)
     if !ok {
         return nil, &reply.WrongTypeErrReply{}
     }
     return dict, nil
 }
 
-func (db *DB) getOrInitDict(key string)(dict *Dict.Dict, inited bool, errReply reply.ErrorReply) {
+func (db *DB) getOrInitDict(key string) (dict Dict.Dict, inited bool, errReply reply.ErrorReply) {
     dict, errReply = db.getAsDict(key)
     if errReply != nil {
         return nil, false, errReply
     }
     inited = false
     if dict == nil {
-        dict = Dict.Make(1)
+        dict = Dict.MakeSimple()
         db.Put(key, &DataEntity{
             Data: dict,
         })

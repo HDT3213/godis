@@ -7,7 +7,7 @@ import (
 )
 
 func TestPut(t *testing.T) {
-    d := Make(0)
+    d := MakeConcurrent(0)
     count := 100
     var wg sync.WaitGroup
     wg.Add(count)
@@ -36,7 +36,7 @@ func TestPut(t *testing.T) {
 }
 
 func TestPutIfAbsent(t *testing.T) {
-    d := Make(0)
+    d := MakeConcurrent(0)
     count := 100
     var wg sync.WaitGroup
     wg.Add(count)
@@ -81,7 +81,7 @@ func TestPutIfAbsent(t *testing.T) {
 }
 
 func TestPutIfExists(t *testing.T) {
-    d := Make(0)
+    d := MakeConcurrent(0)
     count := 100
     var wg sync.WaitGroup
     wg.Add(count)
@@ -114,7 +114,7 @@ func TestPutIfExists(t *testing.T) {
 }
 
 func TestRemove(t *testing.T) {
-    d := Make(0)
+    d := MakeConcurrent(0)
 
     // remove head node
     for i := 0; i < 100; i++ {
@@ -150,7 +150,7 @@ func TestRemove(t *testing.T) {
     }
 
     // remove tail node
-    d = Make(0)
+    d = MakeConcurrent(0)
     for i := 0; i < 100; i++ {
         // insert
         key := "k" + strconv.Itoa(i)
@@ -184,7 +184,7 @@ func TestRemove(t *testing.T) {
     }
 
     // remove middle node
-    d = Make(0)
+    d = MakeConcurrent(0)
     d.Put("head", 0)
     for i := 0; i < 10; i++ {
         // insert
@@ -221,7 +221,7 @@ func TestRemove(t *testing.T) {
 }
 
 func TestForEach(t *testing.T) {
-    d := Make(0)
+    d := MakeConcurrent(0)
     size := 100
     for i := 0; i < size; i++ {
         // insert

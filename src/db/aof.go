@@ -169,8 +169,8 @@ func (db *DB) aofRewrite() {
 
 	// load aof file
 	tmpDB := &DB{
-		Data:     dict.Make(dataDictSize),
-		TTLMap:   dict.Make(ttlDictSize),
+		Data:     dict.MakeSimple(),
+		TTLMap:   dict.MakeSimple(),
 		Locker:   lock.Make(lockerSize),
 		interval: 5 * time.Second,
 
@@ -189,7 +189,7 @@ func (db *DB) aofRewrite() {
 			cmd = persistList(key, val)
 		case *set.Set:
 			cmd = persistSet(key, val)
-		case *dict.Dict:
+		case dict.Dict:
 			cmd = persistHash(key, val)
 		case *SortedSet.SortedSet:
 			cmd = persistZSet(key, val)
@@ -245,7 +245,7 @@ func persistSet(key string, set *set.Set) *reply.MultiBulkReply {
 
 var hMSetCmd = []byte("HMSET")
 
-func persistHash(key string, hash *dict.Dict) *reply.MultiBulkReply {
+func persistHash(key string, hash dict.Dict) *reply.MultiBulkReply {
 	args := make([][]byte, 2+hash.Len()*2)
 	args[0] = hMSetCmd
 	args[1] = []byte(key)

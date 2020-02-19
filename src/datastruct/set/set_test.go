@@ -7,7 +7,7 @@ import (
 
 func TestSet(t *testing.T) {
     size := 10
-    set := Make(0)
+    set := Make()
     for i := 0; i < size; i++ {
         set.Add(strconv.Itoa(i))
     }
