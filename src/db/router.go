@@ -91,6 +91,7 @@ func MakeRouter()map[string]CmdFunc {
 
     routerMap["flushdb"] = FlushDB
     routerMap["flushall"] = FlushAll
+    routerMap["keys"] = Keys
 
     return routerMap
 }

@@ -6,6 +6,7 @@ import (
 	"github.com/HDT3213/godis/src/datastruct/set"
 	"github.com/HDT3213/godis/src/datastruct/sortedset"
 	"github.com/HDT3213/godis/src/interface/redis"
+	"github.com/HDT3213/godis/src/lib/wildcard"
 	"github.com/HDT3213/godis/src/redis/reply"
 	"strconv"
 	"time"
@@ -296,4 +297,19 @@ func BGRewriteAOF(db *DB, args [][]byte) (redis.Reply, *extra) {
 	}
 	go db.aofRewrite()
 	return reply.MakeStatusReply("Background append only file rewriting started"), nil
+}
+
+func Keys(db *DB, args [][]byte) (redis.Reply, *extra) {
+	if len(args) != 1 {
+		return reply.MakeErrReply("ERR wrong number of arguments for 'keys' command"), nil
+	}
+	pattern := wildcard.CompilePattern(string(args[0]))
+	result := make([][]byte, 0)
+	db.Data.ForEach(func(key string, val interface{}) bool {
+		if pattern.IsMatch(key) {
+			result = append(result, []byte(key))
+		}
+		return true
+	})
+	return reply.MakeMultiBulkReply(result), nil
 }
