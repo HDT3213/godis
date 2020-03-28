@@ -21,8 +21,8 @@ type DataEntity struct {
 }
 
 const (
-	dataDictSize = 2 << 20
-	ttlDictSize  = 2 << 10
+	dataDictSize = 1 << 16
+	ttlDictSize  = 1 << 10
 	lockerSize   = 128
 	aofQueueSize = 2 << 10
 )
