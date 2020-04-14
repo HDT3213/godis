@@ -82,7 +82,7 @@ func MakeDB() *DB {
 
 	if config.Properties.AppendOnly {
 		db.aofFilename = config.Properties.AppendFilename
-		db.loadAof()
+		db.loadAof(0)
 		aofFile, err := os.OpenFile(db.aofFilename, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0600)
 		if err != nil {
 			logger.Warn(err)
