@@ -22,9 +22,16 @@ var Properties *PropertyHolder
 
 func LoadConfig(configFilename string) *PropertyHolder {
 	// open config file
+	config := &PropertyHolder{
+		Bind:           "127.0.0.1",
+		Port:           6379,
+		AppendOnly:     true,
+		AppendFilename: "appendonly.aof",
+	}
 	file, err := os.Open(configFilename)
 	if err != nil {
-		log.Fatal(err)
+		log.Print(err)
+		return config
 	}
 	defer file.Close()
 
@@ -48,7 +55,6 @@ func LoadConfig(configFilename string) *PropertyHolder {
 	}
 
 	// parse format
-	config := &PropertyHolder{}
 	t := reflect.TypeOf(config)
 	v := reflect.ValueOf(config)
 	n := t.Elem().NumField()
