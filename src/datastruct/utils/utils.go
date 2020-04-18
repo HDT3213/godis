@@ -4,12 +4,12 @@ func Equals(a interface{}, b interface{})bool {
     sliceA, okA :=  a.([]byte)
     sliceB, okB :=  b.([]byte)
     if okA && okB {
-        return sliceEquals(sliceA, sliceB)
+        return BytesEquals(sliceA, sliceB)
     }
     return a == b
 }
 
-func sliceEquals(a []byte, b []byte)bool {
+func BytesEquals(a []byte, b []byte) bool {
     if (a == nil && b != nil) || (a != nil && b == nil) {
         return false
     }

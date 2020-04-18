@@ -111,7 +111,7 @@ func Set(db *DB, args [][]byte) (redis.Reply, *extra) {
         Data: value,
     }
 
-    db.Remove(key) // clean ttl
+    db.Persist(key) // clean ttl
     var result int
     switch policy {
     case upsertPolicy:
@@ -138,8 +138,11 @@ func Set(db *DB, args [][]byte) (redis.Reply, *extra) {
             db.Persist(key) // override ttl
         }
     }
-
-    return &reply.OkReply{}, extra
+    if policy == upsertPolicy || result > 0 {
+        return &reply.OkReply{}, extra
+    } else {
+        return &reply.NullBulkReply{}, extra
+    }
 }
 
 func SetNX(db *DB, args [][]byte) (redis.Reply, *extra) {
