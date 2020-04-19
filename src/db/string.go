@@ -163,7 +163,7 @@ func SetEX(db *DB, args [][]byte) (redis.Reply, *extra) {
         return reply.MakeErrReply("ERR wrong number of arguments for 'setex' command"), nil
     }
     key := string(args[0])
-    value := args[1]
+    value := args[2]
 
     ttlArg, err := strconv.ParseInt(string(args[1]), 10, 64)
     if err != nil {
@@ -177,11 +177,9 @@ func SetEX(db *DB, args [][]byte) (redis.Reply, *extra) {
     entity := &DataEntity{
         Data: value,
     }
-    result := db.PutIfExists(key, entity)
-    if result > 0 && ttl != unlimitedTTL {
-        expireTime := time.Now().Add(time.Duration(ttl) * time.Millisecond)
-        db.Expire(key, expireTime)
-    }
+    result := db.Put(key, entity)
+    expireTime := time.Now().Add(time.Duration(ttl) * time.Millisecond)
+    db.Expire(key, expireTime)
     return &reply.OkReply{}, &extra{toPersist: result > 0}
 }
 

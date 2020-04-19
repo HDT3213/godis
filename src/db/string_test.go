@@ -76,18 +76,14 @@ func TestSetNX(t *testing.T) {
     }
 }
 
-func TestSetXX(t *testing.T) {
+func TestSetEX(t *testing.T) {
     FlushAll(db, [][]byte{})
     key := strconv.FormatInt(int64(rand.Int()), 10)
     value := strconv.FormatInt(int64(rand.Int()), 10)
-    actual, _ := SetEX(db, toArgs(key, value))
-    expected := reply.MakeIntReply(int64(0))
-    if !utils.BytesEquals(actual.ToBytes(), expected.ToBytes()) {
-        t.Error("expected: " + string(expected.ToBytes()) + ", actual: " + string(actual.ToBytes()))
-    }
+    ttl := "1000"
 
-    SetEX(db, toArgs(key, value))
-    actual, _ = Get(db, toArgs(key))
+    SetEX(db, toArgs(key, ttl, value))
+    actual, _ := Get(db, toArgs(key))
     expected2 := reply.MakeBulkReply([]byte(value))
     if !utils.BytesEquals(actual.ToBytes(), expected2.ToBytes()) {
         t.Error("expected: " + string(expected2.ToBytes()) + ", actual: " + string(actual.ToBytes()))
@@ -112,5 +108,45 @@ func TestMSet(t *testing.T) {
     if !utils.BytesEquals(actual.ToBytes(), expected.ToBytes()) {
         t.Error("expected: " + string(expected.ToBytes()) + ", actual: " + string(actual.ToBytes()))
     }
+}
 
+func TestIncr(t *testing.T) {
+    FlushAll(db, [][]byte{})
+    size := 10
+    key := strconv.FormatInt(int64(rand.Int()), 10)
+    for i := 0; i < size; i++ {
+        Incr(db, toArgs(key))
+        actual, _ := Get(db, toArgs(key))
+        expected := reply.MakeBulkReply([]byte(strconv.FormatInt(int64(i+1), 10)))
+        if !utils.BytesEquals(actual.ToBytes(), expected.ToBytes()) {
+            t.Error("expected: " + string(expected.ToBytes()) + ", actual: " + string(actual.ToBytes()))
+        }
+    }
+    for i := 0; i < size; i++ {
+        IncrBy(db, toArgs(key, "-1"))
+        actual, _ := Get(db, toArgs(key))
+        expected := reply.MakeBulkReply([]byte(strconv.FormatInt(int64(size-i-1), 10)))
+        if !utils.BytesEquals(actual.ToBytes(), expected.ToBytes()) {
+            t.Error("expected: " + string(expected.ToBytes()) + ", actual: " + string(actual.ToBytes()))
+        }
+    }
+
+    FlushAll(db, [][]byte{})
+    key = strconv.FormatInt(int64(rand.Int()), 10)
+    for i := 0; i < size; i++ {
+        IncrBy(db, toArgs(key, "1"))
+        actual, _ := Get(db, toArgs(key))
+        expected := reply.MakeBulkReply([]byte(strconv.FormatInt(int64(i+1), 10)))
+        if !utils.BytesEquals(actual.ToBytes(), expected.ToBytes()) {
+            t.Error("expected: " + string(expected.ToBytes()) + ", actual: " + string(actual.ToBytes()))
+        }
+    }
+    for i := 0; i < size; i++ {
+        IncrByFloat(db, toArgs(key, "-1.0"))
+        actual, _ := Get(db, toArgs(key))
+        expected := reply.MakeBulkReply([]byte(strconv.FormatInt(int64(size-i-1), 10)))
+        if !utils.BytesEquals(actual.ToBytes(), expected.ToBytes()) {
+            t.Error("expected: " + string(expected.ToBytes()) + ", actual: " + string(actual.ToBytes()))
+        }
+    }
 }

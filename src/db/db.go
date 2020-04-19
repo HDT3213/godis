@@ -56,7 +56,7 @@ type DB struct {
 	// lock channel
 	subsLocker *lock.Locks
 
-	stopWorld sync.RWMutex
+	stopWorld sync.WaitGroup
 
 	// main goroutine send commands to aof goroutine through aofChan
 	aofChan     chan *reply.MultiBulkReply
@@ -162,8 +162,7 @@ func (db *DB) Exec(c redis.Client, args [][]byte) (result redis.Reply) {
 /* ---- Data Access ----- */
 
 func (db *DB) Get(key string) (*DataEntity, bool) {
-	db.stopWorld.RLock()
-	defer db.stopWorld.RUnlock()
+	db.stopWorld.Wait()
 
 	raw, ok := db.Data.Get(key)
 	if !ok {
@@ -177,33 +176,28 @@ func (db *DB) Get(key string) (*DataEntity, bool) {
 }
 
 func (db *DB) Put(key string, entity *DataEntity) int {
-	db.stopWorld.RLock()
-	defer db.stopWorld.RUnlock()
+	db.stopWorld.Wait()
 	return db.Data.Put(key, entity)
 }
 
 func (db *DB) PutIfExists(key string, entity *DataEntity) int {
-	db.stopWorld.RLock()
-	defer db.stopWorld.RUnlock()
+	db.stopWorld.Wait()
 	return db.Data.PutIfExists(key, entity)
 }
 
 func (db *DB) PutIfAbsent(key string, entity *DataEntity) int {
-	db.stopWorld.RLock()
-	defer db.stopWorld.RUnlock()
+	db.stopWorld.Wait()
 	return db.Data.PutIfAbsent(key, entity)
 }
 
 func (db *DB) Remove(key string) {
-	db.stopWorld.RLock()
-	defer db.stopWorld.RUnlock()
+	db.stopWorld.Wait()
 	db.Data.Remove(key)
 	db.TTLMap.Remove(key)
 }
 
 func (db *DB) Removes(keys ...string) (deleted int) {
-	db.stopWorld.RLock()
-	defer db.stopWorld.RUnlock()
+	db.stopWorld.Wait()
 	deleted = 0
 	for _, key := range keys {
 		_, exists := db.Data.Get(key)
@@ -217,12 +211,13 @@ func (db *DB) Removes(keys ...string) (deleted int) {
 }
 
 func (db *DB) Flush() {
-	db.stopWorld.Lock()
-	defer db.stopWorld.Unlock()
+	db.stopWorld.Add(1)
+	defer db.stopWorld.Done()
 
 	db.Data = dict.MakeConcurrent(dataDictSize)
 	db.TTLMap = dict.MakeConcurrent(ttlDictSize)
 	db.Locker = lock.Make(lockerSize)
+
 }
 
 /* ---- Lock Function ----- */
@@ -262,14 +257,12 @@ func (db *DB) RUnLocks(keys ...string) {
 /* ---- TTL Functions ---- */
 
 func (db *DB) Expire(key string, expireTime time.Time) {
-	db.stopWorld.RLock()
-	defer db.stopWorld.RUnlock()
+	db.stopWorld.Wait()
 	db.TTLMap.Put(key, expireTime)
 }
 
 func (db *DB) Persist(key string) {
-	db.stopWorld.RLock()
-	defer db.stopWorld.RUnlock()
+	db.stopWorld.Wait()
 	db.TTLMap.Remove(key)
 }
 
