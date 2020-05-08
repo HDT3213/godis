@@ -152,6 +152,42 @@ func (sortedSet *SortedSet) Count(min *ScoreBorder, max *ScoreBorder)int64 {
     return i
 }
 
+func (sortedSet *SortedSet) ForEachByScore(min *ScoreBorder, max *ScoreBorder, offset int64, limit int64, desc bool, consumer func(element *Element) bool) {
+    // find start node
+    var node *Node
+    if desc {
+        node = sortedSet.skiplist.getLastInScoreRange(min, max)
+    } else {
+        node = sortedSet.skiplist.getFirstInScoreRange(min, max)
+    }
+
+    for node != nil && offset > 0 {
+        if desc {
+            node = node.backward
+        } else {
+            node = node.level[0].forward
+        }
+        offset--
+    }
+
+    // A negative limit returns all elements from the offset
+    for i := 0; (i < int(limit) || limit < 0) && node != nil; i++ {
+        if !consumer(&node.Element) {
+            break
+        }
+        if desc {
+            node = node.backward
+        } else {
+            node = node.level[0].forward
+        }
+        gtMin := min.less(node.Element.Score) // greater than min
+        ltMax := max.greater(node.Element.Score)
+        if !gtMin || !ltMax {
+            break // break through score border
+        }
+    }
+}
+
 /*
  * param limit: <0 means no limit
  */
@@ -160,23 +196,8 @@ func (sortedSet *SortedSet) RangeByScore(min *ScoreBorder, max *ScoreBorder, off
         return make([]*Element, 0)
     }
     slice := make([]*Element, 0)
-    var skipped int64 = 0
-    sortedSet.ForEach(0, sortedSet.Len(), desc, func(element *Element)bool {
-        gtMin := min.less(element.Score) // greater than min
-        ltMax := max.greater(element.Score) // less than max
-        if gtMin && ltMax { // in score range
-            if skipped < offset {
-                skipped++
-                return true
-            }
-            slice = append(slice, element)
-            if len(slice) == int(limit) { // reach limit
-                return false
-            }
-        }
-        if (desc && !gtMin) || (!desc && !ltMax) {
-            return false // break through score border
-        }
+    sortedSet.ForEachByScore(min, max, offset, limit, desc, func(element *Element) bool {
+        slice = append(slice, element)
         return true
     })
     return slice

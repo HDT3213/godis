@@ -24,7 +24,7 @@ const (
 	dataDictSize = 1 << 16
 	ttlDictSize  = 1 << 10
 	lockerSize   = 128
-	aofQueueSize = 2 << 10
+	aofQueueSize = 1 << 16
 )
 
 type extra struct {

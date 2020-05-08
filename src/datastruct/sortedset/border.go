@@ -24,6 +24,8 @@ type ScoreBorder struct {
     Exclude bool
 }
 
+// if max.greater(score) then the score is within the upper border
+// do not use min.greater()
 func (border *ScoreBorder)greater(value float64)bool {
     if border.Inf == negativeInf {
         return false

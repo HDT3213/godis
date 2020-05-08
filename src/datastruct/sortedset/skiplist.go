@@ -131,7 +131,7 @@ func (skiplist *skiplist)insert(member string, score float64)*Node {
 
 /*
  * param node: node to delete
- * param update: backward node (of target) or last node of each level
+ * param update: backward node (of target)
  */
 func (skiplist *skiplist) removeNode(node *Node, update []*Node) {
     for i := int16(0); i < skiplist.level; i++ {
@@ -221,6 +221,62 @@ func (skiplist *skiplist) getByRank(rank int64)*Node {
         }
     }
     return nil
+}
+
+func (skiplist *skiplist) hasInRange(min *ScoreBorder, max *ScoreBorder) bool {
+    // min & max = empty
+    if min.Value > max.Value || (min.Value == max.Value && (min.Exclude || max.Exclude)) {
+        return false
+    }
+    // min > tail
+    n := skiplist.tail
+    if n == nil || !min.less(n.Score) {
+        return false
+    }
+    // max < head
+    n = skiplist.header.level[0].forward
+    if n == nil || !max.greater(n.Score) {
+        return false
+    }
+    return true
+}
+
+func (skiplist *skiplist) getFirstInScoreRange(min *ScoreBorder, max *ScoreBorder) *Node {
+    if !skiplist.hasInRange(min, max) {
+        return nil
+    }
+    n := skiplist.header
+    // scan from top level
+    for level := skiplist.level - 1; level >= 0; level-- {
+        // if forward is not in range than move forward
+        for n.level[level].forward != nil && !min.less(n.level[level].forward.Score) {
+            n = n.level[level].forward
+        }
+    }
+    /* This is an inner range, so the next node cannot be NULL. */
+    n = n.level[0].forward
+    if !max.greater(n.Score) {
+        return nil
+    }
+    return n
+}
+
+func (skiplist *skiplist) getLastInScoreRange(min *ScoreBorder, max *ScoreBorder) *Node {
+    if !skiplist.hasInRange(min, max) {
+        return nil
+    }
+    n := skiplist.header
+    // scan from top level
+    for level := skiplist.level - 1; level >= 0; level-- {
+        for n.level[level].forward != nil && max.greater(n.level[level].forward.Score) {
+            n = n.level[level].forward
+        }
+    }
+    n = n.level[0].forward
+    if !min.less(n.Score) {
+        return nil
+    }
+    return n
 }
 
 /*
