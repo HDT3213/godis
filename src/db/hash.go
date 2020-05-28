@@ -36,33 +36,34 @@ func (db *DB) getOrInitDict(key string) (dict Dict.Dict, inited bool, errReply r
     return dict, inited, nil
 }
 
-func HSet(db *DB, args [][]byte) (redis.Reply, *extra) {
+func HSet(db *DB, args [][]byte) redis.Reply {
     // parse args
     if len(args) != 3 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hset' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hset' command")
     }
     key := string(args[0])
     field := string(args[1])
     value := args[2]
 
     // lock
-    db.Locker.Lock(key)
-    defer db.Locker.UnLock(key)
+    db.Lock(key)
+    defer db.UnLock(key)
 
     // get or init entity
     dict, _, errReply := db.getOrInitDict(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
 
     result := dict.Put(field, value)
-    return reply.MakeIntReply(int64(result)), &extra{toPersist: true}
+    db.addAof(makeAofCmd("hset", args))
+    return reply.MakeIntReply(int64(result))
 }
 
-func HSetNX(db *DB, args [][]byte) (redis.Reply, *extra) {
+func HSetNX(db *DB, args [][]byte) redis.Reply {
     // parse args
     if len(args) != 3 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hsetnx' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hsetnx' command")
     }
     key := string(args[0])
     field := string(args[1])
@@ -73,17 +74,21 @@ func HSetNX(db *DB, args [][]byte) (redis.Reply, *extra) {
 
     dict, _, errReply := db.getOrInitDict(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
 
     result := dict.PutIfAbsent(field, value)
-    return reply.MakeIntReply(int64(result)), &extra{toPersist: result > 0}
+    if result > 0 {
+        db.addAof(makeAofCmd("hsetnx", args))
+
+    }
+    return reply.MakeIntReply(int64(result))
 }
 
-func HGet(db *DB, args [][]byte) (redis.Reply, *extra) {
+func HGet(db *DB, args [][]byte) redis.Reply {
     // parse args
     if len(args) != 2 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hget' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hget' command")
     }
     key := string(args[0])
     field := string(args[1])
@@ -91,24 +96,24 @@ func HGet(db *DB, args [][]byte) (redis.Reply, *extra) {
     // get entity
     dict, errReply := db.getAsDict(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
     if dict == nil {
-        return &reply.NullBulkReply{}, nil
+        return &reply.NullBulkReply{}
     }
 
     raw, exists := dict.Get(field)
     if !exists {
-        return &reply.NullBulkReply{}, nil
+        return &reply.NullBulkReply{}
     }
     value, _ := raw.([]byte)
-    return reply.MakeBulkReply(value), nil
+    return reply.MakeBulkReply(value)
 }
 
-func HExists(db *DB, args [][]byte) (redis.Reply, *extra) {
+func HExists(db *DB, args [][]byte) redis.Reply {
     // parse args
     if len(args) != 2 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hexists' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hexists' command")
     }
     key := string(args[0])
     field := string(args[1])
@@ -116,23 +121,23 @@ func HExists(db *DB, args [][]byte) (redis.Reply, *extra) {
     // get entity
     dict, errReply := db.getAsDict(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
     if dict == nil {
-        return reply.MakeIntReply(0), nil
+        return reply.MakeIntReply(0)
     }
 
     _, exists := dict.Get(field)
     if exists {
-        return reply.MakeIntReply(1), nil
+        return reply.MakeIntReply(1)
     }
-    return reply.MakeIntReply(0), nil
+    return reply.MakeIntReply(0)
 }
 
-func HDel(db *DB, args [][]byte) (redis.Reply, *extra) {
+func HDel(db *DB, args [][]byte) redis.Reply {
     // parse args
     if len(args) < 2 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hdel' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hdel' command")
     }
     key := string(args[0])
     fields := make([]string, len(args) - 1)
@@ -141,16 +146,16 @@ func HDel(db *DB, args [][]byte) (redis.Reply, *extra) {
         fields[i] = string(v)
     }
 
-    db.Locker.Lock(key)
-    defer db.Locker.UnLock(key)
+    db.Lock(key)
+    defer db.UnLock(key)
 
     // get entity
     dict, errReply := db.getAsDict(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
     if dict == nil {
-        return reply.MakeIntReply(0), nil
+        return reply.MakeIntReply(0)
     }
 
     deleted := 0
@@ -161,31 +166,34 @@ func HDel(db *DB, args [][]byte) (redis.Reply, *extra) {
     if dict.Len() == 0 {
         db.Remove(key)
     }
+    if deleted > 0 {
+        db.addAof(makeAofCmd("hdel", args))
+    }
 
-    return reply.MakeIntReply(int64(deleted)), &extra{toPersist: deleted > 0}
+    return reply.MakeIntReply(int64(deleted))
 }
 
-func HLen(db *DB, args [][]byte) (redis.Reply, *extra) {
+func HLen(db *DB, args [][]byte) redis.Reply {
     // parse args
     if len(args) != 1 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hlen' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hlen' command")
     }
     key := string(args[0])
 
     dict, errReply := db.getAsDict(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
     if dict == nil {
-        return reply.MakeIntReply(0), nil
+        return reply.MakeIntReply(0)
     }
-    return reply.MakeIntReply(int64(dict.Len())), nil
+    return reply.MakeIntReply(int64(dict.Len()))
 }
 
-func HMSet(db *DB, args [][]byte) (redis.Reply, *extra) {
+func HMSet(db *DB, args [][]byte) redis.Reply {
     // parse args
     if len(args) < 3 || len(args) % 2 != 1 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hmset' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hmset' command")
     }
     key := string(args[0])
     size := (len(args) - 1) / 2
@@ -203,7 +211,7 @@ func HMSet(db *DB, args [][]byte) (redis.Reply, *extra) {
     // get or init entity
     dict, _, errReply := db.getOrInitDict(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
 
     // put data
@@ -211,12 +219,13 @@ func HMSet(db *DB, args [][]byte) (redis.Reply, *extra) {
         value := values[i]
         dict.Put(field, value)
     }
-    return &reply.OkReply{}, &extra{toPersist: true}
+    db.addAof(makeAofCmd("hmset", args))
+    return &reply.OkReply{}
 }
 
-func HMGet(db *DB, args [][]byte) (redis.Reply, *extra) {
+func HMGet(db *DB, args [][]byte) redis.Reply {
     if len(args) < 2 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hmget' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hmget' command")
     }
     key := string(args[0])
     size := len(args) - 1
@@ -225,17 +234,17 @@ func HMGet(db *DB, args [][]byte) (redis.Reply, *extra) {
         fields[i] = string(args[i + 1])
     }
 
-    db.Locker.RLock(key)
-    defer db.Locker.RUnLock(key)
+    db.RLock(key)
+    defer db.RUnLock(key)
 
     // get entity
     result := make([][]byte, size)
     dict, errReply := db.getAsDict(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
     if dict == nil {
-        return reply.MakeMultiBulkReply(result), nil
+        return reply.MakeMultiBulkReply(result)
     }
 
     for i, field := range fields {
@@ -247,24 +256,24 @@ func HMGet(db *DB, args [][]byte) (redis.Reply, *extra) {
             result[i] = bytes
         }
     }
-    return reply.MakeMultiBulkReply(result), nil
+    return reply.MakeMultiBulkReply(result)
 }
 
-func HKeys(db *DB, args [][]byte) (redis.Reply, *extra) {
+func HKeys(db *DB, args [][]byte) redis.Reply {
     if len(args) != 1 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hkeys' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hkeys' command")
     }
     key := string(args[0])
 
-    db.Locker.RLock(key)
-    defer db.Locker.RUnLock(key)
+    db.RLock(key)
+    defer db.RUnLock(key)
 
     dict, errReply := db.getAsDict(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
     if dict == nil {
-        return &reply.EmptyMultiBulkReply{}, nil
+        return &reply.EmptyMultiBulkReply{}
     }
 
     fields := make([][]byte, dict.Len())
@@ -274,25 +283,25 @@ func HKeys(db *DB, args [][]byte) (redis.Reply, *extra) {
         i++
         return true
     })
-    return reply.MakeMultiBulkReply(fields[:i]), nil
+    return reply.MakeMultiBulkReply(fields[:i])
 }
 
-func HVals(db *DB, args [][]byte) (redis.Reply, *extra) {
+func HVals(db *DB, args [][]byte) redis.Reply {
     if len(args) != 1 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hvals' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hvals' command")
     }
     key := string(args[0])
 
-    db.Locker.RLock(key)
-    defer db.Locker.RUnLock(key)
+    db.RLock(key)
+    defer db.RUnLock(key)
 
     // get entity
     dict, errReply := db.getAsDict(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
     if dict == nil {
-        return &reply.EmptyMultiBulkReply{}, nil
+        return &reply.EmptyMultiBulkReply{}
     }
 
     values := make([][]byte, dict.Len())
@@ -302,25 +311,25 @@ func HVals(db *DB, args [][]byte) (redis.Reply, *extra) {
         i++
         return true
     })
-    return reply.MakeMultiBulkReply(values[:i]), nil
+    return reply.MakeMultiBulkReply(values[:i])
 }
 
-func HGetAll(db *DB, args [][]byte) (redis.Reply, *extra) {
+func HGetAll(db *DB, args [][]byte) redis.Reply {
     if len(args) != 1 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hgetAll' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hgetAll' command")
     }
     key := string(args[0])
 
-    db.Locker.RLock(key)
-    defer db.Locker.RUnLock(key)
+    db.RLock(key)
+    defer db.RUnLock(key)
 
     // get entity
     dict, errReply := db.getAsDict(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
     if dict == nil {
-        return &reply.EmptyMultiBulkReply{}, nil
+        return &reply.EmptyMultiBulkReply{}
     }
 
     size := dict.Len()
@@ -333,19 +342,19 @@ func HGetAll(db *DB, args [][]byte) (redis.Reply, *extra) {
         i++
         return true
     })
-    return reply.MakeMultiBulkReply(result[:i]), nil
+    return reply.MakeMultiBulkReply(result[:i])
 }
 
-func HIncrBy(db *DB, args [][]byte) (redis.Reply, *extra) {
+func HIncrBy(db *DB, args [][]byte) redis.Reply {
     if len(args) != 3 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hincrby' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hincrby' command")
     }
     key := string(args[0])
     field := string(args[1])
     rawDelta := string(args[2])
     delta, err := strconv.ParseInt(rawDelta, 10, 64)
     if err != nil {
-        return reply.MakeErrReply("ERR value is not an integer or out of range"), nil
+        return reply.MakeErrReply("ERR value is not an integer or out of range")
     }
 
     db.Locker.Lock(key)
@@ -353,58 +362,61 @@ func HIncrBy(db *DB, args [][]byte) (redis.Reply, *extra) {
 
     dict, _, errReply := db.getOrInitDict(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
 
     value, exists := dict.Get(field)
     if !exists {
         dict.Put(field, args[2])
-        return reply.MakeBulkReply(args[2]), nil
+        db.addAof(makeAofCmd("hincrby", args))
+        return reply.MakeBulkReply(args[2])
     } else {
         val, err := strconv.ParseInt(string(value.([]byte)), 10, 64)
         if err != nil {
-            return reply.MakeErrReply("ERR hash value is not an integer"), nil
+            return reply.MakeErrReply("ERR hash value is not an integer")
         }
         val += delta
         bytes := []byte(strconv.FormatInt(val, 10))
         dict.Put(field, bytes)
-        return reply.MakeBulkReply(bytes), &extra{toPersist: true}
+        db.addAof(makeAofCmd("hincrby", args))
+        return reply.MakeBulkReply(bytes)
     }
 }
 
-func HIncrByFloat(db *DB, args [][]byte) (redis.Reply, *extra) {
+func HIncrByFloat(db *DB, args [][]byte) redis.Reply {
     if len(args) != 3 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'hincrbyfloat' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'hincrbyfloat' command")
     }
     key := string(args[0])
     field := string(args[1])
     rawDelta := string(args[2])
     delta, err := decimal.NewFromString(rawDelta)
     if err != nil {
-        return reply.MakeErrReply("ERR value is not a valid float"), nil
+        return reply.MakeErrReply("ERR value is not a valid float")
     }
 
-    db.Locker.Lock(key)
-    defer db.Locker.UnLock(key)
+    db.Lock(key)
+    defer db.UnLock(key)
 
     // get or init entity
     dict, _, errReply := db.getOrInitDict(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
 
     value, exists := dict.Get(field)
     if !exists {
         dict.Put(field, args[2])
-        return reply.MakeBulkReply(args[2]), nil
+        return reply.MakeBulkReply(args[2])
     } else {
         val, err := decimal.NewFromString(string(value.([]byte)))
         if err != nil {
-            return reply.MakeErrReply("ERR hash value is not a float"), nil
+            return reply.MakeErrReply("ERR hash value is not a float")
         }
         result := val.Add(delta)
         resultBytes:= []byte(result.String())
         dict.Put(field, resultBytes)
-        return reply.MakeBulkReply(resultBytes), &extra{toPersist: true}
+        db.addAof(makeAofCmd("hincrbyfloat", args))
+        return reply.MakeBulkReply(resultBytes)
     }
 }

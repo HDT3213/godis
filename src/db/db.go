@@ -27,14 +27,8 @@ const (
 	aofQueueSize = 1 << 16
 )
 
-type extra struct {
-	// need write into aof file
-	toPersist  bool
-	specialAof []*reply.MultiBulkReply
-}
-
 // args don't include cmd line
-type CmdFunc func(db *DB, args [][]byte) (redis.Reply, *extra)
+type CmdFunc func(db *DB, args [][]byte) redis.Reply
 
 type DB struct {
 	// key -> DataEntity
@@ -127,35 +121,24 @@ func (db *DB) Exec(c redis.Client, args [][]byte) (result redis.Reply) {
 	} else if cmd == "unsubscribe" {
 		return UnSubscribe(db, c, args[1:])
 	} else if cmd == "bgrewriteaof" {
-		reply, _ := BGRewriteAOF(db, args[1:])
+		// aof.go imports router.go, router.go cannot import BGRewriteAOF from aof.go
+		reply := BGRewriteAOF(db, args[1:])
 		return reply
 	}
 
 	// normal commands
-	var extra *extra
 	cmdFunc, ok := router[cmd]
 	if !ok {
 		return reply.MakeErrReply("ERR unknown command '" + cmd + "'")
 	}
 	if len(args) > 1 {
-		result, extra = cmdFunc(db, args[1:])
+		result = cmdFunc(db, args[1:])
 	} else {
-		result, extra = cmdFunc(db, [][]byte{})
+		result = cmdFunc(db, [][]byte{})
 	}
 
 	// aof
-	if config.Properties.AppendOnly {
-		if extra != nil && extra.toPersist {
-			if extra.specialAof != nil && len(extra.specialAof) > 0 {
-				for _, r := range extra.specialAof {
-					db.addAof(r)
-				}
-			} else {
-				r := reply.MakeMultiBulkReply(args)
-				db.addAof(r)
-			}
-		}
-	}
+
 	return
 }
 

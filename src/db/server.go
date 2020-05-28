@@ -5,12 +5,12 @@ import (
     "github.com/HDT3213/godis/src/redis/reply"
 )
 
-func Ping(db *DB, args [][]byte)(redis.Reply, *extra) {
+func Ping(db *DB, args [][]byte) redis.Reply {
     if len(args) == 0 {
-        return &reply.PongReply{}, nil
+        return &reply.PongReply{}
     } else if len(args) == 1 {
-        return reply.MakeStatusReply("\"" + string(args[0]) + "\""), nil
+        return reply.MakeStatusReply("\"" + string(args[0]) + "\"")
     } else {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'ping' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'ping' command")
     }
 }

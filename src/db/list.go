@@ -35,89 +35,90 @@ func (db *DB) getOrInitList(key string)(list *List.LinkedList, inited bool, errR
     return list, inited, nil
 }
 
-func LIndex(db *DB, args [][]byte)(redis.Reply, *extra){
+func LIndex(db *DB, args [][]byte) redis.Reply {
     // parse args
     if len(args) != 2 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'lindex' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'lindex' command")
     }
     key := string(args[0])
     index64, err := strconv.ParseInt(string(args[1]), 10, 64)
     if err != nil {
-        return reply.MakeErrReply("ERR value is not an integer or out of range"), nil
+        return reply.MakeErrReply("ERR value is not an integer or out of range")
     }
     index := int(index64)
 
     // get entity
     list, errReply := db.getAsList(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
     if list == nil {
-        return &reply.NullBulkReply{}, nil
+        return &reply.NullBulkReply{}
     }
 
     size := list.Len() // assert: size > 0
     if index < -1 * size {
-        return &reply.NullBulkReply{}, nil
+        return &reply.NullBulkReply{}
     } else if index < 0 {
         index = size + index
     } else if index >= size {
-        return &reply.NullBulkReply{}, nil
+        return &reply.NullBulkReply{}
     }
 
     val, _ := list.Get(index).([]byte)
-    return reply.MakeBulkReply(val), nil
+    return reply.MakeBulkReply(val)
 }
 
-func LLen(db *DB, args [][]byte)(redis.Reply, *extra) {
+func LLen(db *DB, args [][]byte) redis.Reply {
     // parse args
     if len(args) != 1 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'llen' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'llen' command")
     }
     key := string(args[0])
 
     list, errReply := db.getAsList(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
     if list == nil {
-        return reply.MakeIntReply(0), nil
+        return reply.MakeIntReply(0)
     }
 
     size := int64(list.Len())
-    return reply.MakeIntReply(size), nil
+    return reply.MakeIntReply(size)
 }
 
-func LPop(db *DB, args [][]byte)(redis.Reply, *extra) {
+func LPop(db *DB, args [][]byte) redis.Reply {
     // parse args
     if len(args) != 1 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'lindex' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'lindex' command")
     }
     key := string(args[0])
 
     // lock
-    db.Locker.Lock(key)
-    defer db.Locker.UnLock(key)
+    db.Lock(key)
+    defer db.UnLock(key)
 
     // get data
     list, errReply := db.getAsList(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
     if list == nil {
-        return &reply.NullBulkReply{}, nil
+        return &reply.NullBulkReply{}
     }
 
     val, _ := list.Remove(0).([]byte)
     if list.Len() == 0 {
         db.Remove(key)
     }
-    return reply.MakeBulkReply(val), &extra{toPersist: true}
+    db.addAof(makeAofCmd("lpop", args))
+    return reply.MakeBulkReply(val)
 }
 
-func LPush(db *DB, args [][]byte)(redis.Reply, *extra) {
+func LPush(db *DB, args [][]byte) redis.Reply {
     if len(args) < 2 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'lpush' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'lpush' command")
     }
     key := string(args[0])
     values := args[1:]
@@ -129,7 +130,7 @@ func LPush(db *DB, args [][]byte)(redis.Reply, *extra) {
     // get or init entity
     list, _, errReply := db.getOrInitList(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
 
     // insert
@@ -137,12 +138,13 @@ func LPush(db *DB, args [][]byte)(redis.Reply, *extra) {
         list.Insert(0, value)
     }
 
-    return reply.MakeIntReply(int64(list.Len())), &extra{toPersist: true}
+    db.addAof(makeAofCmd("lpush", args))
+    return reply.MakeIntReply(int64(list.Len()))
 }
 
-func LPushX(db *DB, args [][]byte)(redis.Reply, *extra) {
+func LPushX(db *DB, args [][]byte) redis.Reply {
     if len(args) < 2 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'lpush' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'lpushx' command")
     }
     key := string(args[0])
     values := args[1:]
@@ -154,34 +156,34 @@ func LPushX(db *DB, args [][]byte)(redis.Reply, *extra) {
     // get or init entity
     list, errReply := db.getAsList(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
     if list == nil {
-        return reply.MakeIntReply(0), nil
+        return reply.MakeIntReply(0)
     }
 
     // insert
     for _, value := range values {
         list.Insert(0, value)
     }
-
-    return reply.MakeIntReply(int64(list.Len())), &extra{toPersist: true}
+    db.addAof(makeAofCmd("lpushx", args))
+    return reply.MakeIntReply(int64(list.Len()))
 }
 
-func LRange(db *DB, args [][]byte)(redis.Reply, *extra){
+func LRange(db *DB, args [][]byte) redis.Reply {
     // parse args
     if len(args) != 3 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'lrange' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'lrange' command")
     }
     key := string(args[0])
     start64, err := strconv.ParseInt(string(args[1]), 10, 64)
     if err != nil {
-        return reply.MakeErrReply("ERR value is not an integer or out of range"), nil
+        return reply.MakeErrReply("ERR value is not an integer or out of range")
     }
     start := int(start64)
     stop64, err := strconv.ParseInt(string(args[2]), 10, 64)
     if err != nil {
-        return reply.MakeErrReply("ERR value is not an integer or out of range"), nil
+        return reply.MakeErrReply("ERR value is not an integer or out of range")
     }
     stop := int(stop64)
 
@@ -192,10 +194,10 @@ func LRange(db *DB, args [][]byte)(redis.Reply, *extra){
     // get data
     list, errReply := db.getAsList(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
     if list == nil {
-        return &reply.EmptyMultiBulkReply{}, nil
+        return &reply.EmptyMultiBulkReply{}
     }
 
     // compute index
@@ -205,7 +207,7 @@ func LRange(db *DB, args [][]byte)(redis.Reply, *extra){
     } else if start < 0 {
         start = size + start
     } else if start >= size {
-        return &reply.EmptyMultiBulkReply{}, nil
+        return &reply.EmptyMultiBulkReply{}
     }
     if stop < -1 * size {
         stop = 0
@@ -227,18 +229,18 @@ func LRange(db *DB, args [][]byte)(redis.Reply, *extra){
         bytes, _ := raw.([]byte)
         result[i] = bytes
     }
-    return reply.MakeMultiBulkReply(result), nil
+    return reply.MakeMultiBulkReply(result)
 }
 
-func LRem(db *DB, args [][]byte)(redis.Reply, *extra) {
+func LRem(db *DB, args [][]byte) redis.Reply {
     // parse args
     if len(args) != 3 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'lrem' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'lrem' command")
     }
     key := string(args[0])
     count64, err := strconv.ParseInt(string(args[1]), 10, 64)
     if err != nil {
-        return reply.MakeErrReply("ERR value is not an integer or out of range"), nil
+        return reply.MakeErrReply("ERR value is not an integer or out of range")
     }
     count := int(count64)
     value := args[2]
@@ -250,10 +252,10 @@ func LRem(db *DB, args [][]byte)(redis.Reply, *extra) {
     // get data entity
     list, errReply := db.getAsList(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
     if list == nil {
-        return reply.MakeIntReply(0), nil
+        return reply.MakeIntReply(0)
     }
 
     var removed int
@@ -268,19 +270,22 @@ func LRem(db *DB, args [][]byte)(redis.Reply, *extra) {
     if list.Len() == 0 {
         db.Remove(key)
     }
+    if removed > 0 {
+        db.addAof(makeAofCmd("lrem", args))
+    }
 
-    return reply.MakeIntReply(int64(removed)), &extra{toPersist: removed > 0}
+    return reply.MakeIntReply(int64(removed))
 }
 
-func LSet(db *DB, args [][]byte)(redis.Reply, *extra) {
+func LSet(db *DB, args [][]byte) redis.Reply {
     // parse args
     if len(args) != 3 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'lset' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'lset' command")
     }
     key := string(args[0])
     index64, err := strconv.ParseInt(string(args[1]), 10, 64)
     if err != nil {
-        return reply.MakeErrReply("ERR value is not an integer or out of range"), nil
+        return reply.MakeErrReply("ERR value is not an integer or out of range")
     }
     index := int(index64)
     value := args[2]
@@ -292,76 +297,78 @@ func LSet(db *DB, args [][]byte)(redis.Reply, *extra) {
     // get data
     list, errReply := db.getAsList(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
     if list == nil {
-        return reply.MakeErrReply("ERR no such key"), nil
+        return reply.MakeErrReply("ERR no such key")
     }
 
     size := list.Len() // assert: size > 0
     if index < -1 * size {
-        return reply.MakeErrReply("ERR index out of range"), nil
+        return reply.MakeErrReply("ERR index out of range")
     } else if index < 0 {
         index = size + index
     } else if index >= size {
-        return reply.MakeErrReply("ERR index out of range"), nil
+        return reply.MakeErrReply("ERR index out of range")
     }
 
     list.Set(index, value)
-    return &reply.OkReply{}, &extra{toPersist: true}
+    db.addAof(makeAofCmd("lset", args))
+    return &reply.OkReply{}
 }
 
-func RPop(db *DB, args [][]byte)(redis.Reply, *extra) {
+func RPop(db *DB, args [][]byte) redis.Reply {
     // parse args
     if len(args) != 1 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'lindex' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'lindex' command")
     }
     key := string(args[0])
 
     // lock
-    db.Locker.Lock(key)
-    defer db.Locker.UnLock(key)
+    db.Lock(key)
+    defer db.UnLock(key)
 
     // get data
     list, errReply := db.getAsList(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
     if list == nil {
-        return &reply.NullBulkReply{}, nil
+        return &reply.NullBulkReply{}
     }
 
     val, _ := list.RemoveLast().([]byte)
     if list.Len() == 0 {
         db.Remove(key)
     }
-    return reply.MakeBulkReply(val), &extra{toPersist: true}
+    db.addAof(makeAofCmd("rpop", args))
+    return reply.MakeBulkReply(val)
 }
 
-func RPopLPush(db *DB, args [][]byte)(redis.Reply, *extra) {
+func RPopLPush(db *DB, args [][]byte) redis.Reply {
     if len(args) != 2 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'rpoplpush' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'rpoplpush' command")
     }
     sourceKey := string(args[0])
     destKey := string(args[1])
 
     // lock
-    db.Locker.Locks(sourceKey, destKey)
-    defer db.Locker.UnLocks(sourceKey, destKey)
+    db.Locks(sourceKey, destKey)
+    defer db.UnLocks(sourceKey, destKey)
 
     // get source entity
     sourceList, errReply := db.getAsList(sourceKey)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
     if sourceList == nil {
-        return &reply.NullBulkReply{}, nil
+        return &reply.NullBulkReply{}
     }
 
     // get dest entity
     destList, _, errReply := db.getOrInitList(destKey)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
 
     // pop and push
@@ -372,59 +379,61 @@ func RPopLPush(db *DB, args [][]byte)(redis.Reply, *extra) {
         db.Remove(sourceKey)
     }
 
-    return reply.MakeBulkReply(val), &extra{toPersist: true}
+    db.addAof(makeAofCmd("rpoplpush", args))
+    return reply.MakeBulkReply(val)
 }
 
-func RPush(db *DB, args [][]byte)(redis.Reply, *extra) {
+func RPush(db *DB, args [][]byte) redis.Reply {
     // parse args
     if len(args) < 2 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'rpush' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'rpush' command")
     }
     key := string(args[0])
     values := args[1:]
 
     // lock
-    db.Locker.Lock(key)
-    defer db.Locker.UnLock(key)
+    db.Lock(key)
+    defer db.UnLock(key)
 
     // get or init entity
     list, _, errReply := db.getOrInitList(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
 
     // put list
     for _, value := range values {
         list.Add(value)
     }
-
-    return reply.MakeIntReply(int64(list.Len())), &extra{toPersist: true}
+    db.addAof(makeAofCmd("rpush", args))
+    return reply.MakeIntReply(int64(list.Len()))
 }
 
-func RPushX(db *DB, args [][]byte)(redis.Reply, *extra) {
+func RPushX(db *DB, args [][]byte) redis.Reply {
     if len(args) < 2 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'rpush' command"), nil
+        return reply.MakeErrReply("ERR wrong number of arguments for 'rpush' command")
     }
     key := string(args[0])
     values := args[1:]
 
     // lock
-    db.Locker.Lock(key)
-    defer db.Locker.UnLock(key)
+    db.Lock(key)
+    defer db.UnLock(key)
 
     // get or init entity
     list, errReply := db.getAsList(key)
     if errReply != nil {
-        return errReply, nil
+        return errReply
     }
     if list == nil {
-        return reply.MakeIntReply(0), nil
+        return reply.MakeIntReply(0)
     }
 
     // put list
     for _, value := range values {
         list.Add(value)
     }
+    db.addAof(makeAofCmd("rpushx", args))
 
-    return reply.MakeIntReply(int64(list.Len())), &extra{toPersist: true}
+    return reply.MakeIntReply(int64(list.Len()))
 }

@@ -121,9 +121,9 @@ func UnSubscribe(db *DB, c redis.Client, args [][]byte)redis.Reply {
     return &reply.NoReply{}
 }
 
-func Publish(db *DB, args [][]byte) (redis.Reply, *extra) {
+func Publish(db *DB, args [][]byte) redis.Reply {
     if len(args) != 2 {
-        return &reply.ArgNumErrReply{Cmd: "publish"}, nil
+        return &reply.ArgNumErrReply{Cmd: "publish"}
     }
     channel := string(args[0])
     message := args[1]
@@ -133,7 +133,7 @@ func Publish(db *DB, args [][]byte) (redis.Reply, *extra) {
 
     raw, ok := db.subs.Get(channel)
     if !ok {
-        return reply.MakeIntReply(0), nil
+        return reply.MakeIntReply(0)
     }
     subscribers, _ := raw.(*list.LinkedList)
     subscribers.ForEach(func(i int, c interface{}) bool {
@@ -145,6 +145,6 @@ func Publish(db *DB, args [][]byte) (redis.Reply, *extra) {
         _ = client.Write(reply.MakeMultiBulkReply(replyArgs).ToBytes())
         return true
     })
-    return reply.MakeIntReply(int64(subscribers.Len())), nil
+    return reply.MakeIntReply(int64(subscribers.Len()))
 }
 

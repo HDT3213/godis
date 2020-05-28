@@ -20,6 +20,15 @@ type PropertyHolder struct {
 
 var Properties *PropertyHolder
 
+func init() {
+    // default config
+    Properties = &PropertyHolder{
+        Bind:       "127.0.0.1",
+        Port:       6379,
+        AppendOnly: false,
+    }
+}
+
 func LoadConfig(configFilename string) *PropertyHolder {
 	// open config file
 	config := &PropertyHolder{
