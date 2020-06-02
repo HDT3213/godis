@@ -37,7 +37,8 @@ func makeAofCmd(cmd string, args [][]byte) *reply.MultiBulkReply {
 
 // send command to aof
 func (db *DB) addAof(args *reply.MultiBulkReply) {
-    if config.Properties.AppendOnly {
+    // aofChan == nil when loadAof
+    if config.Properties.AppendOnly && db.aofChan != nil {
         db.aofChan <- args
     }
 }
@@ -71,6 +72,13 @@ func trim(msg []byte) string {
 
 // read aof file
 func (db *DB) loadAof(maxBytes int) {
+    // delete aofChan to prevent write again
+    aofChan := db.aofChan
+    db.aofChan = nil
+    defer func(aofChan chan *reply.MultiBulkReply) {
+        db.aofChan = aofChan
+    }(aofChan)
+
 	file, err := os.Open(db.aofFilename)
 	if err != nil {
 		if _, ok := err.(*os.PathError); ok {
