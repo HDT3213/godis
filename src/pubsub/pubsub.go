@@ -1,4 +1,4 @@
-package db
+package pubsub
 
 import (
     "github.com/HDT3213/godis/src/datastruct/list"
@@ -8,13 +8,13 @@ import (
 )
 
 var (
-    _subscribe = "subscribe"
-    _unsubscribe = "unsubscribe"
-    messageBytes = []byte("message")
+    _subscribe         = "subscribe"
+    _unsubscribe       = "unsubscribe"
+    messageBytes       = []byte("message")
     unSubscribeNothing = []byte("*3\r\n$11\r\nunsubscribe\r\n$-1\n:0\r\n")
 )
 
-func makeMsg(t string, channel string, code int64)[]byte {
+func makeMsg(t string, channel string, code int64) []byte {
     return []byte("*3\r\n$" + strconv.FormatInt(int64(len(t)), 10) + reply.CRLF + t + reply.CRLF +
         "$" + strconv.FormatInt(int64(len(channel)), 10) + reply.CRLF + channel + reply.CRLF +
         ":" + strconv.FormatInt(code, 10) + reply.CRLF)
@@ -24,17 +24,17 @@ func makeMsg(t string, channel string, code int64)[]byte {
  * invoker should lock channel
  * return: is new subscribed
  */
-func subscribe0(db *DB, channel string, client redis.Client)bool {
+func subscribe0(hub *Hub, channel string, client redis.Client) bool {
     client.SubsChannel(channel)
 
-    // add into db.subs
-    raw, ok := db.subs.Get(channel)
+    // add into hub.subs
+    raw, ok := hub.subs.Get(channel)
     var subscribers *list.LinkedList
     if ok {
         subscribers, _ = raw.(*list.LinkedList)
     } else {
         subscribers = list.Make()
-        db.subs.Put(channel, subscribers)
+        hub.subs.Put(channel, subscribers)
     }
     if subscribers.Contains(client) {
         return false
@@ -47,54 +47,54 @@ func subscribe0(db *DB, channel string, client redis.Client)bool {
  * invoker should lock channel
  * return: is actually un-subscribe
  */
-func unsubscribe0(db *DB, channel string, client redis.Client)bool {
+func unsubscribe0(hub *Hub, channel string, client redis.Client) bool {
     client.UnSubsChannel(channel)
 
-    // remove from db.subs
-    raw, ok := db.subs.Get(channel)
+    // remove from hub.subs
+    raw, ok := hub.subs.Get(channel)
     if ok {
         subscribers, _ := raw.(*list.LinkedList)
         subscribers.RemoveAllByVal(client)
 
         if subscribers.Len() == 0 {
             // clean
-            db.subs.Remove(channel)
+            hub.subs.Remove(channel)
         }
         return true
     }
     return false
 }
 
-func Subscribe(db *DB, c redis.Client, args [][]byte)redis.Reply {
+func Subscribe(hub *Hub, c redis.Client, args [][]byte) redis.Reply {
     channels := make([]string, len(args))
     for i, b := range args {
         channels[i] = string(b)
     }
 
-    db.subsLocker.Locks(channels...)
-    defer db.subsLocker.UnLocks(channels...)
+    hub.subsLocker.Locks(channels...)
+    defer hub.subsLocker.UnLocks(channels...)
 
     for _, channel := range channels {
-        if subscribe0(db, channel, c) {
+        if subscribe0(hub, channel, c) {
             _ = c.Write(makeMsg(_subscribe, channel, int64(c.SubsCount())))
         }
     }
     return &reply.NoReply{}
 }
 
-func unsubscribeAll(db *DB, c redis.Client) {
+func UnsubscribeAll(hub *Hub, c redis.Client) {
     channels := c.GetChannels()
 
-    db.subsLocker.Locks(channels...)
-    defer db.subsLocker.UnLocks(channels...)
+    hub.subsLocker.Locks(channels...)
+    defer hub.subsLocker.UnLocks(channels...)
 
     for _, channel := range channels {
-        unsubscribe0(db, channel, c)
+        unsubscribe0(hub, channel, c)
     }
 
 }
 
-func UnSubscribe(db *DB, c redis.Client, args [][]byte)redis.Reply {
+func UnSubscribe(db *Hub, c redis.Client, args [][]byte) redis.Reply {
     var channels []string
     if len(args) > 0 {
         channels = make([]string, len(args))
@@ -121,17 +121,17 @@ func UnSubscribe(db *DB, c redis.Client, args [][]byte)redis.Reply {
     return &reply.NoReply{}
 }
 
-func Publish(db *DB, args [][]byte) redis.Reply {
+func Publish(hub *Hub, args [][]byte) redis.Reply {
     if len(args) != 2 {
         return &reply.ArgNumErrReply{Cmd: "publish"}
     }
     channel := string(args[0])
     message := args[1]
 
-    db.subsLocker.Lock(channel)
-    defer db.subsLocker.UnLock(channel)
+    hub.subsLocker.Lock(channel)
+    defer hub.subsLocker.UnLock(channel)
 
-    raw, ok := db.subs.Get(channel)
+    raw, ok := hub.subs.Get(channel)
     if !ok {
         return reply.MakeIntReply(0)
     }
@@ -147,4 +147,3 @@ func Publish(db *DB, args [][]byte) redis.Reply {
     })
     return reply.MakeIntReply(int64(subscribers.Len()))
 }
-

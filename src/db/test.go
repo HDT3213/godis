@@ -12,9 +12,6 @@ func makeTestDB() *DB {
         TTLMap:   dict.MakeConcurrent(ttlDictSize),
         Locker:   lock.Make(lockerSize),
         interval: 5 * time.Second,
-
-        subs:       dict.MakeConcurrent(4),
-        subsLocker: lock.Make(16),
     }
 }
 
