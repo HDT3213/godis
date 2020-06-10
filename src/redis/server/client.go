@@ -1,4 +1,4 @@
-package handler
+package server
 
 import (
     "github.com/HDT3213/godis/src/lib/sync/atomic"

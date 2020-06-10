@@ -1,4 +1,4 @@
-package server
+package tcp
 
 /**
  * A tcp server

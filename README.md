@@ -126,7 +126,7 @@ If you want to read my code in this repository, here is a simple guidance.
 
 I suggest focusing on the following directories:
 
-- server: the tcp server
+- tcp: the tcp server
 - redis: the redis protocol parser
 - datastruct: the implements of data structures
     - dict: a concurrent hash map

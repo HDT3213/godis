@@ -1,4 +1,4 @@
-package handler
+package server
 
 /*
  * A tcp.Handler implements redis protocol
@@ -7,6 +7,8 @@ package handler
 import (
     "bufio"
     "context"
+    "github.com/HDT3213/godis/src/cluster"
+    "github.com/HDT3213/godis/src/config"
     DBImpl "github.com/HDT3213/godis/src/db"
     "github.com/HDT3213/godis/src/interface/db"
     "github.com/HDT3213/godis/src/lib/logger"
@@ -30,8 +32,15 @@ type Handler struct {
 }
 
 func MakeHandler() *Handler {
+    var db db.DB
+    if config.Properties.Peers != nil &&
+        len(config.Properties.Peers) > 0 {
+        db = cluster.MakeCluster()
+    } else {
+        db = DBImpl.MakeDB()
+    }
     return &Handler{
-        db: DBImpl.MakeDB(),
+        db: db,
     }
 }
 

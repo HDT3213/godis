@@ -1,4 +1,4 @@
-package server
+package tcp
 
 /**
  * A echo server to test whether the server is functioning normally
