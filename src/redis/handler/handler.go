@@ -25,8 +25,8 @@ var (
 
 type Handler struct {
     activeConn sync.Map // *client -> placeholder
-    db db.DB
-    closing atomic.AtomicBool // refusing new client and new request
+    db         db.DB
+    closing    atomic.AtomicBool // refusing new client and new request
 }
 
 func MakeHandler() *Handler {
@@ -41,7 +41,7 @@ func (h *Handler) closeClient(client *Client) {
     h.activeConn.Delete(client)
 }
 
-func (h *Handler)Handle(ctx context.Context, conn net.Conn) {
+func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
     if h.closing.Get() {
         // closing handler refuse new connection
         _ = conn.Close()
@@ -58,7 +58,9 @@ func (h *Handler)Handle(ctx context.Context, conn net.Conn) {
         if fixedLen == 0 {
             msg, err = reader.ReadBytes('\n')
             if err != nil {
-                if err == io.EOF || err == io.ErrUnexpectedEOF {
+                if err == io.EOF ||
+                    err == io.ErrUnexpectedEOF ||
+                    strings.Contains(err.Error(), "use of closed network connection") {
                     logger.Info("connection close")
                 } else {
                     logger.Warn(err)
@@ -68,15 +70,17 @@ func (h *Handler)Handle(ctx context.Context, conn net.Conn) {
                 h.closeClient(client)
                 return // io error, disconnect with client
             }
-            if len(msg) == 0 || msg[len(msg) - 2] != '\r' {
-                errReply := &reply.ProtocolErrReply{Msg:"invalid multibulk length"}
-                _, _ =  client.conn.Write(errReply.ToBytes())
+            if len(msg) == 0 || msg[len(msg)-2] != '\r' {
+                errReply := &reply.ProtocolErrReply{Msg: "invalid multibulk length"}
+                _, _ = client.conn.Write(errReply.ToBytes())
             }
         } else {
-            msg = make([]byte, fixedLen + 2)
+            msg = make([]byte, fixedLen+2)
             _, err = io.ReadFull(reader, msg)
             if err != nil {
-                if err == io.EOF || err == io.ErrUnexpectedEOF {
+                if err == io.EOF ||
+                    err == io.ErrUnexpectedEOF ||
+                    strings.Contains(err.Error(), "use of closed network connection") {
                     logger.Info("connection close")
                 } else {
                     logger.Warn(err)
@@ -87,10 +91,10 @@ func (h *Handler)Handle(ctx context.Context, conn net.Conn) {
                 return // io error, disconnect with client
             }
             if len(msg) == 0 ||
-                msg[len(msg) - 2] != '\r' ||
-                msg[len(msg) - 1] != '\n'{
-                errReply := &reply.ProtocolErrReply{Msg:"invalid multibulk length"}
-                _, _ =  client.conn.Write(errReply.ToBytes())
+                msg[len(msg)-2] != '\r' ||
+                msg[len(msg)-1] != '\n' {
+                errReply := &reply.ProtocolErrReply{Msg: "invalid multibulk length"}
+                _, _ = client.conn.Write(errReply.ToBytes())
             }
             fixedLen = 0
         }
@@ -130,22 +134,21 @@ func (h *Handler)Handle(ctx context.Context, conn net.Conn) {
             }
         } else {
             // receive following part of a request
-            line := msg[0:len(msg)-2]
+            line := msg[0 : len(msg)-2]
             if line[0] == '$' {
                 fixedLen, err = strconv.ParseInt(string(line[1:]), 10, 64)
                 if err != nil {
-                    errReply := &reply.ProtocolErrReply{Msg:err.Error()}
+                    errReply := &reply.ProtocolErrReply{Msg: err.Error()}
                     _, _ = client.conn.Write(errReply.ToBytes())
                 }
                 if fixedLen <= 0 {
-                    errReply := &reply.ProtocolErrReply{Msg:"invalid multibulk length"}
+                    errReply := &reply.ProtocolErrReply{Msg: "invalid multibulk length"}
                     _, _ = client.conn.Write(errReply.ToBytes())
                 }
             } else {
                 client.args[client.receivedCount] = line
                 client.receivedCount++
             }
-
 
             // if sending finished
             if client.receivedCount == client.expectedArgsCount {
@@ -170,11 +173,11 @@ func (h *Handler)Handle(ctx context.Context, conn net.Conn) {
     }
 }
 
-func (h *Handler)Close()error {
+func (h *Handler) Close() error {
     logger.Info("handler shuting down...")
     h.closing.Set(true)
     // TODO: concurrent wait
-    h.activeConn.Range(func(key interface{}, val interface{})bool {
+    h.activeConn.Range(func(key interface{}, val interface{}) bool {
         client := key.(*Client)
         _ = client.Close()
         return true
