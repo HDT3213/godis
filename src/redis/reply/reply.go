@@ -1,6 +1,7 @@
 package reply
 
 import (
+    "github.com/HDT3213/godis/src/interface/redis"
     "strconv"
 )
 
@@ -101,6 +102,10 @@ func MakeErrReply(status string) *StandardErrReply {
     return &StandardErrReply{
         Status: status,
     }
+}
+
+func IsErrorReply(reply redis.Reply) bool {
+    return reply.ToBytes()[0] == '-'
 }
 
 func (r *StandardErrReply) ToBytes() []byte {

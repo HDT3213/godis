@@ -1,17 +1,10 @@
 package cluster
 
-import "github.com/HDT3213/godis/src/interface/redis"
-
-func defaultFunc(cluster *Cluster, c redis.Client, args [][]byte) redis.Reply {
-    key := string(args[1])
-    return cluster.Relay(key, c, args)
-}
-
 func MakeRouter() map[string]CmdFunc {
     routerMap := make(map[string]CmdFunc)
-    //routerMap["ping"] = defaultFunc
+    routerMap["ping"] = Ping
 
-    //routerMap["del"] = Del
+    routerMap["del"] = Del
     routerMap["expire"] = defaultFunc
     routerMap["expireat"] = defaultFunc
     routerMap["pexpire"] = defaultFunc
@@ -21,16 +14,16 @@ func MakeRouter() map[string]CmdFunc {
     routerMap["persist"] = defaultFunc
     routerMap["exists"] = defaultFunc
     routerMap["type"] = defaultFunc
-    //routerMap["rename"] = Rename
-    //routerMap["renamenx"] = RenameNx
+    routerMap["rename"] = Rename
+    routerMap["renamenx"] = RenameNx
 
     routerMap["set"] = defaultFunc
     routerMap["setnx"] = defaultFunc
     routerMap["setex"] = defaultFunc
     routerMap["psetex"] = defaultFunc
-    //routerMap["mset"] = MSet
-    //routerMap["mget"] = MGet
-    //routerMap["msetnx"] = MSetNX
+    routerMap["mset"] = MSet
+    routerMap["mget"] = MGet
+    routerMap["msetnx"] = MSetNX
     routerMap["get"] = defaultFunc
     routerMap["getset"] = defaultFunc
     routerMap["incr"] = defaultFunc

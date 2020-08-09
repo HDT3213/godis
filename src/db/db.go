@@ -100,7 +100,7 @@ func (db *DB) Close() {
     }
 }
 
-func (db *DB) Exec(c redis.Client, args [][]byte) (result redis.Reply) {
+func (db *DB) Exec(c redis.Connection, args [][]byte) (result redis.Reply) {
     defer func() {
         if err := recover(); err != nil {
             logger.Warn(fmt.Sprintf("error occurs: %v\n%s", err, string(debug.Stack())))
@@ -292,6 +292,6 @@ func (db *DB) TimerTask() {
 
 /* ---- Subscribe Functions ---- */
 
-func (db *DB) AfterClientClose(c redis.Client) {
+func (db *DB) AfterClientClose(c redis.Connection) {
     pubsub.UnsubscribeAll(db.hub, c)
 }

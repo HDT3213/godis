@@ -4,6 +4,7 @@ import (
     "hash/crc32"
     "sort"
     "strconv"
+    "strings"
 )
 
 type HashFunc func(data []byte) uint32
@@ -33,6 +34,9 @@ func (m *Map) IsEmpty() bool {
 
 func (m *Map) Add(keys ...string) {
     for _, key := range keys {
+        if key == "" {
+            continue
+        }
         for i := 0; i < m.replicas; i++ {
             hash := int(m.hashFunc([]byte(strconv.Itoa(i) + key)))
             m.keys = append(m.keys, hash)
@@ -42,13 +46,27 @@ func (m *Map) Add(keys ...string) {
     sort.Ints(m.keys)
 }
 
+// support hash tag
+func getPartitionKey(key string) string {
+    beg := strings.Index(key, "{")
+    if beg == -1 {
+        return key
+    }
+    end := strings.Index(key, "}")
+    if end == -1 || end == beg+1 {
+        return key
+    }
+    return key[beg+1 : end]
+}
+
 // Get gets the closest item in the hash to the provided key.
 func (m *Map) Get(key string) string {
     if m.IsEmpty() {
         return ""
     }
 
-    hash := int(m.hashFunc([]byte(key)))
+    partitionKey := getPartitionKey(key)
+    hash := int(m.hashFunc([]byte(partitionKey)))
 
     // Binary search for appropriate replica.
     idx := sort.Search(len(m.keys), func(i int) bool { return m.keys[i] >= hash })

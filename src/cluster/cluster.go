@@ -33,14 +33,24 @@ func MakeCluster() *Cluster {
         peerPicker: consistenthash.New(replicas, nil),
         peers:      make(map[string]*client.Client),
     }
-    if config.Properties.Peers != nil && len(config.Properties.Peers) > 0 {
-        cluster.peerPicker.Add(config.Properties.Peers...)
+    if config.Properties.Peers != nil && len(config.Properties.Peers) > 0 && config.Properties.Self != "" {
+        contains := make(map[string]bool)
+        peers := make([]string, len(config.Properties.Peers)+1)[:]
+        for _, peer := range config.Properties.Peers {
+            if _, ok := contains[peer]; ok {
+                continue
+            }
+            contains[peer] = true
+            peers = append(peers, peer)
+        }
+        peers = append(peers, config.Properties.Self)
+        cluster.peerPicker.Add(peers...)
     }
     return cluster
 }
 
 // args contains all
-type CmdFunc func(cluster *Cluster, c redis.Client, args [][]byte) redis.Reply
+type CmdFunc func(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply
 
 func (cluster *Cluster) Close() {
     cluster.db.Close()
@@ -48,7 +58,7 @@ func (cluster *Cluster) Close() {
 
 var router = MakeRouter()
 
-func (cluster *Cluster) Exec(c redis.Client, args [][]byte) (result redis.Reply) {
+func (cluster *Cluster) Exec(c redis.Connection, args [][]byte) (result redis.Reply) {
     defer func() {
         if err := recover(); err != nil {
             logger.Warn(fmt.Sprintf("error occurs: %v\n%s", err, string(debug.Stack())))
@@ -59,34 +69,12 @@ func (cluster *Cluster) Exec(c redis.Client, args [][]byte) (result redis.Reply)
     cmd := strings.ToLower(string(args[0]))
     cmdFunc, ok := router[cmd]
     if !ok {
-        return reply.MakeErrReply("ERR unknown command '" + cmd + "'")
+        return reply.MakeErrReply("ERR unknown command '" + cmd + "', or not supported in cluster mode")
     }
     result = cmdFunc(cluster, c, args)
     return
 }
 
-// relay command to peer
-func (cluster *Cluster) Relay(key string, c redis.Client, args [][]byte) redis.Reply {
-    peer := cluster.peerPicker.Get(key)
-    if peer == cluster.self {
-        // to self db
-        return cluster.db.Exec(c, args)
-    } else {
-        peerClient, ok := cluster.peers[peer]
-        // lazy init
-        if !ok {
-            var err error
-            peerClient, err = client.MakeClient(peer)
-            if err != nil {
-                return reply.MakeErrReply(err.Error())
-            }
-            peerClient.Start()
-            cluster.peers[peer] = peerClient
-        }
-        return peerClient.Send(args)
-    }
-}
-
-func (cluster *Cluster) AfterClientClose(c redis.Client) {
+func (cluster *Cluster) AfterClientClose(c redis.Connection) {
 
 }

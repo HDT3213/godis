@@ -1,6 +1,6 @@
 package redis
 
-type Client interface {
+type Connection interface {
     Write([]byte) error
 
     // client should keep its subscribing channels
