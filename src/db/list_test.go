@@ -211,3 +211,176 @@ func TestLRem(t *testing.T) {
         t.Error(fmt.Sprintf("expected %d, actually %d", 2, intResult.Code))
     }
 }
+
+func TestLSet(t *testing.T) {
+    FlushAll(testDB, [][]byte{})
+    key := strconv.FormatInt(int64(rand.Int()), 10)
+    values := []string{key, "a", "b", "c", "d", "e", "f"}
+    RPush(testDB, toArgs(values...))
+
+    // test positive index
+    size := len(values) - 1
+    for i := 0; i < size; i++ {
+        indexStr := strconv.Itoa(i)
+        value := strconv.FormatInt(int64(rand.Int()), 10)
+        result := LSet(testDB, toArgs(key, indexStr, value))
+        if _, ok := result.(*reply.OkReply); !ok {
+            t.Error(fmt.Sprintf("expected OK, actually %s", string(result.ToBytes())))
+        }
+        result = LIndex(testDB, toArgs(key, indexStr))
+        expected := reply.MakeBulkReply([]byte(value))
+        if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
+            t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+        }
+    }
+    // test negative index
+    for i := 1; i <= size; i++ {
+        value := strconv.FormatInt(int64(rand.Int()), 10)
+        result := LSet(testDB, toArgs(key, strconv.Itoa(-i), value))
+        if _, ok := result.(*reply.OkReply); !ok {
+            t.Error(fmt.Sprintf("expected OK, actually %s", string(result.ToBytes())))
+        }
+        result = LIndex(testDB, toArgs(key, strconv.Itoa(len(values)-i-1)))
+        expected := reply.MakeBulkReply([]byte(value))
+        if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
+            t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+        }
+    }
+
+    // test illegal index
+    value := strconv.FormatInt(int64(rand.Int()), 10)
+    result := LSet(testDB, toArgs(key, strconv.Itoa(-len(values)-1), value))
+    expected := reply.MakeErrReply("ERR index out of range")
+    if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
+        t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+    }
+    result = LSet(testDB, toArgs(key, strconv.Itoa(len(values)), value))
+    if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
+        t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+    }
+    result = LSet(testDB, toArgs(key, "a", value))
+    expected = reply.MakeErrReply("ERR value is not an integer or out of range")
+    if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
+        t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+    }
+}
+
+func TestLPop(t *testing.T) {
+    FlushAll(testDB, [][]byte{})
+    key := strconv.FormatInt(int64(rand.Int()), 10)
+    values := []string{key, "a", "b", "c", "d", "e", "f"}
+    RPush(testDB, toArgs(values...))
+    size := len(values) - 1
+
+    for i := 0; i < size; i++ {
+        result := LPop(testDB, toArgs(key))
+        expected := reply.MakeBulkReply([]byte(values[i+1]))
+        if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
+            t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+        }
+    }
+    result := RPop(testDB, toArgs(key))
+    expected := &reply.NullBulkReply{}
+    if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
+        t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+    }
+}
+
+func TestRPop(t *testing.T) {
+    FlushAll(testDB, [][]byte{})
+    key := strconv.FormatInt(int64(rand.Int()), 10)
+    values := []string{key, "a", "b", "c", "d", "e", "f"}
+    RPush(testDB, toArgs(values...))
+    size := len(values) - 1
+
+    for i := 0; i < size; i++ {
+        result := RPop(testDB, toArgs(key))
+        expected := reply.MakeBulkReply([]byte(values[len(values)-i-1]))
+        if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
+            t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+        }
+    }
+    result := RPop(testDB, toArgs(key))
+    expected := &reply.NullBulkReply{}
+    if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
+        t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+    }
+}
+
+func TestRPopLPush(t *testing.T) {
+    FlushAll(testDB, [][]byte{})
+    key1 := strconv.FormatInt(int64(rand.Int()), 10)
+    key2 := strconv.FormatInt(int64(rand.Int()), 10)
+    values := []string{key1, "a", "b", "c", "d", "e", "f"}
+    RPush(testDB, toArgs(values...))
+    size := len(values) - 1
+
+    for i := 0; i < size; i++ {
+        result := RPopLPush(testDB, toArgs(key1, key2))
+        expected := reply.MakeBulkReply([]byte(values[len(values)-i-1]))
+        if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
+            t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+        }
+        result = LIndex(testDB, toArgs(key2, "0"))
+        if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
+            t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+        }
+    }
+    result := RPop(testDB, toArgs(key1))
+    expected := &reply.NullBulkReply{}
+    if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
+        t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+    }
+}
+
+func TestRPushX(t *testing.T) {
+    FlushAll(testDB, [][]byte{})
+    key := strconv.FormatInt(int64(rand.Int()), 10)
+    result := RPushX(testDB, toArgs(key, "1"))
+    expected := reply.MakeIntReply(int64(0))
+    if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
+        t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+    }
+
+    RPush(testDB, toArgs(key, "1"))
+    for i := 0; i < 10; i++ {
+        value := strconv.FormatInt(int64(rand.Int()), 10)
+        result := RPushX(testDB, toArgs(key, value))
+        expected := reply.MakeIntReply(int64(i + 2))
+        if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
+            t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+        }
+        result = LIndex(testDB, toArgs(key, "-1"))
+        expected2 := reply.MakeBulkReply([]byte(value))
+        if !utils.BytesEquals(result.ToBytes(), expected2.ToBytes()) {
+            t.Error(fmt.Sprintf("expected %s, actually %s", string(expected2.ToBytes()), string(result.ToBytes())))
+        }
+    }
+}
+
+func TestLPushX(t *testing.T) {
+    FlushAll(testDB, [][]byte{})
+    key := strconv.FormatInt(int64(rand.Int()), 10)
+    result := RPushX(testDB, toArgs(key, "1"))
+    expected := reply.MakeIntReply(int64(0))
+    if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
+        t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+    }
+
+    LPush(testDB, toArgs(key, "1"))
+    for i := 0; i < 10; i++ {
+        value := strconv.FormatInt(int64(rand.Int()), 10)
+        result := LPushX(testDB, toArgs(key, value))
+        expected := reply.MakeIntReply(int64(i + 2))
+        if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
+            t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+        }
+        result = LIndex(testDB, toArgs(key, "0"))
+        expected2 := reply.MakeBulkReply([]byte(value))
+        if !utils.BytesEquals(result.ToBytes(), expected2.ToBytes()) {
+            t.Error(fmt.Sprintf("expected %s, actually %s", string(expected2.ToBytes()), string(result.ToBytes())))
+        }
+    }
+
+}
+

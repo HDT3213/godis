@@ -320,7 +320,7 @@ func LSet(db *DB, args [][]byte) redis.Reply {
 func RPop(db *DB, args [][]byte) redis.Reply {
     // parse args
     if len(args) != 1 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'lindex' command")
+        return reply.MakeErrReply("ERR wrong number of arguments for 'rpop' command")
     }
     key := string(args[0])
 
