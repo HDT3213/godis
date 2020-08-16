@@ -70,44 +70,56 @@ func (locks *Locks)RUnLock(key string) {
     mu.RUnlock()
 }
 
+func (locks *Locks) toLockIndices(keys []string, reverse bool) []uint32 {
+    indexMap := make(map[uint32]bool)
+    for _, key := range keys {
+        index := locks.spread(fnv32(key))
+        indexMap[index] = true
+    }
+    indices := make([]uint32, 0, len(indexMap))
+    for index := range indexMap {
+        indices = append(indices, index)
+    }
+    sort.Slice(indices, func(i, j int) bool {
+        if !reverse {
+            return indices[i] < indices[j]
+        } else {
+            return indices[i] > indices[j]
+        }
+    })
+    return indices
+}
+
 func (locks *Locks)Locks(keys ...string) {
-    keySlice := make(sort.StringSlice, len(keys))
-    copy(keySlice, keys)
-    sort.Sort(keySlice)
-    for _, key := range keySlice {
-        locks.Lock(key)
+    indices := locks.toLockIndices(keys, false)
+    for _, index := range indices {
+        mu := locks.table[index]
+        mu.Lock()
     }
 }
 
 func (locks *Locks)RLocks(keys ...string) {
-    keySlice := make(sort.StringSlice, len(keys))
-    copy(keySlice, keys)
-    sort.Sort(keySlice)
-    for _, key := range keySlice {
-        locks.RLock(key)
+    indices := locks.toLockIndices(keys, false)
+    for _, index := range indices {
+        mu := locks.table[index]
+        mu.RLock()
     }
 }
 
 
 func (locks *Locks)UnLocks(keys ...string) {
-    size := len(keys)
-    keySlice := make(sort.StringSlice, size)
-    copy(keySlice, keys)
-    sort.Sort(keySlice)
-    for i := size - 1; i >= 0; i-- {
-        key := keySlice[i]
-        locks.UnLock(key)
+    indices := locks.toLockIndices(keys, true)
+    for _, index := range indices {
+        mu := locks.table[index]
+        mu.Unlock()
     }
 }
 
 func (locks *Locks)RUnLocks(keys ...string) {
-    size := len(keys)
-    keySlice := make(sort.StringSlice, size)
-    copy(keySlice, keys)
-    sort.Sort(keySlice)
-    for i := size - 1; i >= 0; i-- {
-        key := keySlice[i]
-        locks.RUnLock(key)
+    indices := locks.toLockIndices(keys, true)
+    for _, index := range indices {
+        mu := locks.table[index]
+        mu.RUnlock()
     }
 }
 

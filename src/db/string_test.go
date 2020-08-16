@@ -95,7 +95,7 @@ func TestMSet(t *testing.T) {
     size := 10
     keys := make([]string, size)
     values := make([][]byte, size)
-    args := make([]string, size*2)[0:0]
+    args := make([]string, 0, size*2)
     for i := 0; i < size; i++ {
         keys[i] = strconv.FormatInt(int64(rand.Int()), 10)
         value := strconv.FormatInt(int64(rand.Int()), 10)
