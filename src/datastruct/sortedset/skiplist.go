@@ -272,7 +272,6 @@ func (skiplist *skiplist) getLastInScoreRange(min *ScoreBorder, max *ScoreBorder
             n = n.level[level].forward
         }
     }
-    n = n.level[0].forward
     if !min.less(n.Score) {
         return nil
     }

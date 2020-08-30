@@ -180,6 +180,9 @@ func (sortedSet *SortedSet) ForEachByScore(min *ScoreBorder, max *ScoreBorder, o
         } else {
             node = node.level[0].forward
         }
+        if node == nil {
+            break
+        }
         gtMin := min.less(node.Element.Score) // greater than min
         ltMax := max.greater(node.Element.Score)
         if !gtMin || !ltMax {
