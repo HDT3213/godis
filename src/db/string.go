@@ -125,15 +125,15 @@ func Set(db *DB, args [][]byte) redis.Reply {
         if ttl != unlimitedTTL {
             expireTime := time.Now().Add(time.Duration(ttl) * time.Millisecond)
             db.Expire(key, expireTime)
-            db.addAof(reply.MakeMultiBulkReply([][]byte{
+            db.AddAof(reply.MakeMultiBulkReply([][]byte{
                 []byte("SET"),
                 args[0],
                 args[1],
             }))
-            db.addAof(makeExpireCmd(key, expireTime))
+            db.AddAof(makeExpireCmd(key, expireTime))
         } else {
             db.Persist(key) // override ttl
-            db.addAof(makeAofCmd("set", args))
+            db.AddAof(makeAofCmd("set", args))
         }
     }
     if policy == upsertPolicy || result > 0 {
@@ -154,7 +154,7 @@ func SetNX(db *DB, args [][]byte) redis.Reply {
     }
     result := db.PutIfAbsent(key, entity)
     if result > 0 {
-        db.addAof(makeAofCmd("setnx", args))
+        db.AddAof(makeAofCmd("setnx", args))
     }
     return reply.MakeIntReply(int64(result))
 }
@@ -186,8 +186,8 @@ func SetEX(db *DB, args [][]byte) redis.Reply {
     expireTime := time.Now().Add(time.Duration(ttl) * time.Millisecond)
     db.Expire(key, expireTime)
     if result > 0 {
-        db.addAof(makeAofCmd("setex", args))
-        db.addAof(makeExpireCmd(key, expireTime))
+        db.AddAof(makeAofCmd("setex", args))
+        db.AddAof(makeExpireCmd(key, expireTime))
     }
     return &reply.OkReply{}
 }
@@ -212,11 +212,11 @@ func PSetEX(db *DB, args [][]byte) redis.Reply {
     }
     result := db.PutIfExists(key, entity)
     if result > 0 {
-        db.addAof(makeAofCmd("psetex", args))
+        db.AddAof(makeAofCmd("psetex", args))
         if ttl != unlimitedTTL {
             expireTime := time.Now().Add(time.Duration(ttl) * time.Millisecond)
             db.Expire(key, expireTime)
-            db.addAof(makeExpireCmd(key, expireTime))
+            db.AddAof(makeExpireCmd(key, expireTime))
         }
     }
     return &reply.OkReply{}
@@ -242,7 +242,7 @@ func MSet(db *DB, args [][]byte) redis.Reply {
         value := values[i]
         db.Put(key, &DataEntity{Data: value})
     }
-    db.addAof(makeAofCmd("mset", args))
+    db.AddAof(makeAofCmd("mset", args))
     return &reply.OkReply{}
 }
 
@@ -301,7 +301,7 @@ func MSetNX(db *DB, args [][]byte) redis.Reply {
         value := values[i]
         db.Put(key, &DataEntity{Data: value})
     }
-    db.addAof(makeAofCmd("msetnx", args))
+    db.AddAof(makeAofCmd("msetnx", args))
     return reply.MakeIntReply(1)
 }
 
@@ -319,7 +319,7 @@ func GetSet(db *DB, args [][]byte) redis.Reply {
 
     db.Put(key, &DataEntity{Data: value})
     db.Persist(key) // override ttl
-    db.addAof(makeAofCmd("getset", args))
+    db.AddAof(makeAofCmd("getset", args))
 
     return reply.MakeBulkReply(old)
 }
@@ -345,13 +345,13 @@ func Incr(db *DB, args [][]byte) redis.Reply {
         db.Put(key, &DataEntity{
             Data: []byte(strconv.FormatInt(val+1, 10)),
         })
-        db.addAof(makeAofCmd("incr", args))
+        db.AddAof(makeAofCmd("incr", args))
         return reply.MakeIntReply(val + 1)
     } else {
         db.Put(key, &DataEntity{
             Data: []byte("1"),
         })
-        db.addAof(makeAofCmd("incr", args))
+        db.AddAof(makeAofCmd("incr", args))
         return reply.MakeIntReply(1)
     }
 }
@@ -382,13 +382,13 @@ func IncrBy(db *DB, args [][]byte) redis.Reply {
         db.Put(key, &DataEntity{
             Data: []byte(strconv.FormatInt(val+delta, 10)),
         })
-        db.addAof(makeAofCmd("incrby", args))
+        db.AddAof(makeAofCmd("incrby", args))
         return reply.MakeIntReply(val + delta)
     } else {
         db.Put(key, &DataEntity{
             Data: args[1],
         })
-        db.addAof(makeAofCmd("incrby", args))
+        db.AddAof(makeAofCmd("incrby", args))
         return reply.MakeIntReply(delta)
     }
 }
@@ -420,13 +420,13 @@ func IncrByFloat(db *DB, args [][]byte) redis.Reply {
         db.Put(key, &DataEntity{
             Data: resultBytes,
         })
-        db.addAof(makeAofCmd("incrbyfloat", args))
+        db.AddAof(makeAofCmd("incrbyfloat", args))
         return reply.MakeBulkReply(resultBytes)
     } else {
         db.Put(key, &DataEntity{
             Data: args[1],
         })
-        db.addAof(makeAofCmd("incrbyfloat", args))
+        db.AddAof(makeAofCmd("incrbyfloat", args))
         return reply.MakeBulkReply(args[1])
     }
 }
@@ -452,14 +452,14 @@ func Decr(db *DB, args [][]byte) redis.Reply {
         db.Put(key, &DataEntity{
             Data: []byte(strconv.FormatInt(val-1, 10)),
         })
-        db.addAof(makeAofCmd("decr", args))
+        db.AddAof(makeAofCmd("decr", args))
         return reply.MakeIntReply(val - 1)
     } else {
         entity := &DataEntity{
             Data: []byte("-1"),
         }
         db.Put(key, entity)
-        db.addAof(makeAofCmd("decr", args))
+        db.AddAof(makeAofCmd("decr", args))
         return reply.MakeIntReply(-1)
     }
 }
@@ -490,14 +490,14 @@ func DecrBy(db *DB, args [][]byte) redis.Reply {
         db.Put(key, &DataEntity{
             Data: []byte(strconv.FormatInt(val-delta, 10)),
         })
-        db.addAof(makeAofCmd("decrby", args))
+        db.AddAof(makeAofCmd("decrby", args))
         return reply.MakeIntReply(val - delta)
     } else {
         valueStr := strconv.FormatInt(-delta, 10)
         db.Put(key, &DataEntity{
             Data: []byte(valueStr),
         })
-        db.addAof(makeAofCmd("decrby", args))
+        db.AddAof(makeAofCmd("decrby", args))
         return reply.MakeIntReply(-delta)
     }
 }

@@ -26,7 +26,7 @@ func Del(db *DB, args [][]byte) redis.Reply {
 
 	deleted := db.Removes(keys...)
 	if deleted > 0 {
-		db.addAof(makeAofCmd("del", args))
+		db.AddAof(makeAofCmd("del", args))
 	}
 	return reply.MakeIntReply(int64(deleted))
 }
@@ -49,7 +49,7 @@ func FlushDB(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'flushdb' command")
 	}
 	db.Flush()
-	db.addAof(makeAofCmd("flushdb", args))
+	db.AddAof(makeAofCmd("flushdb", args))
 	return &reply.OkReply{}
 }
 
@@ -58,7 +58,7 @@ func FlushAll(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'flushall' command")
 	}
 	db.Flush()
-	db.addAof(makeAofCmd("flushdb", args))
+	db.AddAof(makeAofCmd("flushdb", args))
 	return &reply.OkReply{}
 }
 
@@ -108,7 +108,7 @@ func Rename(db *DB, args [][]byte) redis.Reply {
 		expireTime, _ := rawTTL.(time.Time)
 		db.Expire(dest, expireTime)
 	}
-	db.addAof(makeAofCmd("rename", args))
+	db.AddAof(makeAofCmd("rename", args))
 	return &reply.OkReply{}
 }
 
@@ -138,7 +138,7 @@ func RenameNx(db *DB, args [][]byte) redis.Reply {
 		expireTime, _ := rawTTL.(time.Time)
 		db.Expire(dest, expireTime)
 	}
-	db.addAof(makeAofCmd("renamenx", args))
+	db.AddAof(makeAofCmd("renamenx", args))
 	return reply.MakeIntReply(1)
 }
 
@@ -161,7 +161,7 @@ func Expire(db *DB, args [][]byte) redis.Reply {
 
 	expireAt := time.Now().Add(ttl)
 	db.Expire(key, expireAt)
-	db.addAof(makeExpireCmd(key, expireAt), )
+	db.AddAof(makeExpireCmd(key, expireAt), )
 	return reply.MakeIntReply(1)
 }
 
@@ -183,7 +183,7 @@ func ExpireAt(db *DB, args [][]byte) redis.Reply {
 	}
 
 	db.Expire(key, expireTime)
-	db.addAof(makeExpireCmd(key, expireTime))
+	db.AddAof(makeExpireCmd(key, expireTime))
 	return reply.MakeIntReply(1)
 }
 
@@ -206,7 +206,7 @@ func PExpire(db *DB, args [][]byte) redis.Reply {
 
 	expireTime := time.Now().Add(ttl)
 	db.Expire(key, expireTime)
-	db.addAof(makeExpireCmd(key, expireTime))
+	db.AddAof(makeExpireCmd(key, expireTime))
 	return reply.MakeIntReply(1)
 }
 
@@ -229,7 +229,7 @@ func PExpireAt(db *DB, args [][]byte) redis.Reply {
 
 	db.Expire(key, expireTime)
 
-	db.addAof(makeExpireCmd(key, expireTime))
+	db.AddAof(makeExpireCmd(key, expireTime))
 	return reply.MakeIntReply(1)
 }
 
@@ -287,7 +287,7 @@ func Persist(db *DB, args [][]byte) redis.Reply {
 	}
 
 	db.TTLMap.Remove(key)
-	db.addAof(makeAofCmd("persist", args))
+	db.AddAof(makeAofCmd("persist", args))
 	return reply.MakeIntReply(1)
 }
 

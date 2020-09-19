@@ -1,9 +1,10 @@
-package client
+package cluster
 
 import (
     "bufio"
     "context"
     "errors"
+    "github.com/HDT3213/godis/src/cluster/idgenerator"
     "github.com/HDT3213/godis/src/interface/redis"
     "github.com/HDT3213/godis/src/lib/logger"
     "github.com/HDT3213/godis/src/lib/sync/wait"
@@ -11,54 +12,79 @@ import (
     "io"
     "net"
     "strconv"
-    "strings"
     "sync"
     "time"
 )
 
-type Client struct {
+const (
+    timeout = 2 * time.Second
+    CRLF    = "\r\n"
+)
+
+type InternalClient struct {
+    idGen       *idgenerator.IdGenerator
     conn        net.Conn
-    sendingReqs chan *Request // waiting sending
-    waitingReqs chan *Request // waiting response
+    sendingReqs chan *AsyncRequest
     ticker      *time.Ticker
     addr        string
+    waitingMap  *sync.Map // key -> request
 
     ctx        context.Context
     cancelFunc context.CancelFunc
     writing    *sync.WaitGroup
 }
 
-type Request struct {
-    id        uint64
+type AsyncRequest struct {
+    id        int64
     args      [][]byte
     reply     redis.Reply
     heartbeat bool
     waiting   *wait.Wait
 }
 
-const (
-    chanSize = 256
-    maxWait  = 3 * time.Second
-)
+type AsyncMultiBulkReply struct {
+    Args [][]byte
+}
 
-func MakeClient(addr string) (*Client, error) {
+func MakeAsyncMultiBulkReply(args [][]byte) *AsyncMultiBulkReply {
+    return &AsyncMultiBulkReply{
+        Args: args,
+    }
+}
+
+func (r *AsyncMultiBulkReply) ToBytes() []byte {
+    argLen := len(r.Args)
+    res := "@" + strconv.Itoa(argLen) + CRLF
+    for _, arg := range r.Args {
+        if arg == nil {
+            res += "$-1" + CRLF
+        } else {
+            res += "$" + strconv.Itoa(len(arg)) + CRLF + string(arg) + CRLF
+        }
+    }
+    return []byte(res)
+}
+
+func MakeInternalClient(addr string, idGen *idgenerator.IdGenerator) (*InternalClient, error) {
     conn, err := net.Dial("tcp", addr)
     if err != nil {
         return nil, err
     }
     ctx, cancel := context.WithCancel(context.Background())
-    return &Client{
+    return &InternalClient{
         addr:        addr,
         conn:        conn,
-        sendingReqs: make(chan *Request, chanSize),
-        waitingReqs: make(chan *Request, chanSize),
-        ctx:         ctx,
-        cancelFunc:  cancel,
-        writing:     &sync.WaitGroup{},
+        sendingReqs: make(chan *AsyncRequest, 256),
+        waitingMap:  &sync.Map{},
+
+        ctx:        ctx,
+        cancelFunc: cancel,
+        writing:    &sync.WaitGroup{},
+        idGen:      idGen,
     }, nil
 }
 
-func (client *Client) Start() {
+func (client *InternalClient) Start() {
     client.ticker = time.NewTicker(10 * time.Second)
     go client.handleWrite()
     go func() {
@@ -68,7 +94,7 @@ func (client *Client) Start() {
     go client.heartbeat()
 }
 
-func (client *Client) Close() {
+func (client *InternalClient) Close() {
     // send stop signal
     client.cancelFunc()
 
@@ -78,10 +104,9 @@ func (client *Client) Close() {
     // clean
     _ = client.conn.Close()
     close(client.sendingReqs)
-    close(client.waitingReqs)
 }
 
-func (client *Client) handleConnectionError(err error) error {
+func (client *InternalClient) handleConnectionError(err error) error {
     err1 := client.conn.Close()
     if err1 != nil {
         if opErr, ok := err1.(*net.OpError); ok {
@@ -104,12 +129,12 @@ func (client *Client) handleConnectionError(err error) error {
     return nil
 }
 
-func (client *Client) heartbeat() {
+func (client *InternalClient) heartbeat() {
 loop:
     for {
         select {
         case <-client.ticker.C:
-            client.sendingReqs <- &Request{
+            client.sendingReqs <- &AsyncRequest{
                 args:      [][]byte{[]byte("PING")},
                 heartbeat: true,
             }
@@ -119,7 +144,7 @@ loop:
     }
 }
 
-func (client *Client) handleWrite() {
+func (client *InternalClient) handleWrite() {
     client.writing.Add(1)
 loop:
     for {
@@ -133,23 +158,26 @@ loop:
     client.writing.Done()
 }
 
-// todo: wait with timeout
-func (client *Client) Send(args [][]byte) redis.Reply {
-    request := &Request{
+func (client *InternalClient) Send(args [][]byte) redis.Reply {
+    request := &AsyncRequest{
+        id:        client.idGen.NextId(),
         args:      args,
         heartbeat: false,
         waiting:   &wait.Wait{},
     }
     request.waiting.Add(1)
     client.sendingReqs <- request
-    timeout := request.waiting.WaitWithTimeout(maxWait)
-    if timeout {
-        return reply.MakeErrReply("server time out")
+    client.waitingMap.Store(request.id, request)
+    timeUp := request.waiting.WaitWithTimeout(timeout)
+    if timeUp {
+        client.waitingMap.Delete(request.id)
+        return nil
+    } else {
+        return request.reply
     }
-    return request.reply
 }
 
-func (client *Client) doRequest(req *Request) {
+func (client *InternalClient) doRequest(req *AsyncRequest) {
     bytes := reply.MakeMultiBulkReply(req.args).ToBytes()
     _, err := client.conn.Write(bytes)
     i := 0
@@ -160,25 +188,33 @@ func (client *Client) doRequest(req *Request) {
         }
         i++
     }
-    if err == nil {
-        client.waitingReqs <- req
-    }
 }
 
-func (client *Client) finishRequest(reply redis.Reply) {
-    request := <-client.waitingReqs
+func (client *InternalClient) finishRequest(reply *AsyncMultiBulkReply) {
+    if reply == nil || reply.Args == nil || len(reply.Args) == 0 {
+        return
+    }
+    reqId, err := strconv.ParseInt(string(reply.Args[0]), 10, 64)
+    if err != nil {
+        logger.Warn(err)
+        return
+    }
+    raw, ok := client.waitingMap.Load(reqId)
+    if !ok {
+        return
+    }
+    request := raw.(*AsyncRequest)
     request.reply = reply
     if request.waiting != nil {
         request.waiting.Done()
     }
 }
 
-func (client *Client) handleRead() error {
+func (client *InternalClient) handleRead() error {
     reader := bufio.NewReader(client.conn)
     downloading := false
     expectedArgsCount := 0
     receivedCount := 0
-    msgType := byte(0) // first char of msg
     var args [][]byte
     var fixedLen int64 = 0
     var err error
@@ -220,16 +256,15 @@ func (client *Client) handleRead() error {
         // parse line
         if !downloading {
             // receive new response
-            if msg[0] == '*' { // multi bulk response
+            if msg[0] == '@' { // customized multi bulk response
                 // bulk multi msg
                 expectedLine, err := strconv.ParseUint(string(msg[1:len(msg)-2]), 10, 32)
                 if err != nil {
                     return errors.New("protocol error: " + err.Error())
                 }
                 if expectedLine == 0 {
-                    client.finishRequest(&reply.EmptyMultiBulkReply{})
+                    client.finishRequest(nil)
                 } else if expectedLine > 0 {
-                    msgType = msg[0]
                     downloading = true
                     expectedArgsCount = int(expectedLine)
                     receivedCount = 0
@@ -237,40 +272,6 @@ func (client *Client) handleRead() error {
                 } else {
                     return errors.New("protocol error")
                 }
-            } else if msg[0] == '$' { // bulk response
-                fixedLen, err = strconv.ParseInt(string(msg[1:len(msg)-2]), 10, 64)
-                if err != nil {
-                    return err
-                }
-                if fixedLen == -1 { // null bulk
-                    client.finishRequest(&reply.NullBulkReply{})
-                    fixedLen = 0
-                } else if fixedLen > 0 {
-                    msgType = msg[0]
-                    downloading = true
-                    expectedArgsCount = 1
-                    receivedCount = 0
-                    args = make([][]byte, 1)
-                } else {
-                    return errors.New("protocol error")
-                }
-            } else { // single line response
-                str := strings.TrimSuffix(string(msg), "\n")
-                str = strings.TrimSuffix(str, "\r")
-                var result redis.Reply
-                switch msg[0] {
-                case '+':
-                    result = reply.MakeStatusReply(str[1:])
-                case '-':
-                    result = reply.MakeErrReply(str[1:])
-                case ':':
-                    val, err := strconv.ParseInt(str[1:], 10, 64)
-                    if err != nil {
-                        return errors.New("protocol error")
-                    }
-                    result = reply.MakeIntReply(val)
-                }
-                client.finishRequest(result)
             }
         } else {
             // receive following part of a request
@@ -294,22 +295,12 @@ func (client *Client) handleRead() error {
             if receivedCount == expectedArgsCount {
                 downloading = false // finish downloading progress
 
-                request := <-client.waitingReqs
-                if msgType == '*' {
-                    request.reply = reply.MakeMultiBulkReply(args)
-                } else if msgType == '$' {
-                    request.reply = reply.MakeBulkReply(args[0])
-                }
-
-                if request.waiting != nil {
-                    request.waiting.Done()
-                }
+                client.finishRequest(&AsyncMultiBulkReply{Args: args})
 
                 // finish reply
                 expectedArgsCount = 0
                 receivedCount = 0
                 args = nil
-                msgType = byte(0)
             }
         }
     }

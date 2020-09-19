@@ -21,6 +21,7 @@ func (w *Wait)Wait() {
     w.wg.Wait()
 }
 
+// return isTimeout
 func (w *Wait)WaitWithTimeout(timeout time.Duration)bool {
     c := make(chan bool)
     go func() {

@@ -56,7 +56,7 @@ func HSet(db *DB, args [][]byte) redis.Reply {
     }
 
     result := dict.Put(field, value)
-    db.addAof(makeAofCmd("hset", args))
+    db.AddAof(makeAofCmd("hset", args))
     return reply.MakeIntReply(int64(result))
 }
 
@@ -79,7 +79,7 @@ func HSetNX(db *DB, args [][]byte) redis.Reply {
 
     result := dict.PutIfAbsent(field, value)
     if result > 0 {
-        db.addAof(makeAofCmd("hsetnx", args))
+        db.AddAof(makeAofCmd("hsetnx", args))
 
     }
     return reply.MakeIntReply(int64(result))
@@ -167,7 +167,7 @@ func HDel(db *DB, args [][]byte) redis.Reply {
         db.Remove(key)
     }
     if deleted > 0 {
-        db.addAof(makeAofCmd("hdel", args))
+        db.AddAof(makeAofCmd("hdel", args))
     }
 
     return reply.MakeIntReply(int64(deleted))
@@ -219,7 +219,7 @@ func HMSet(db *DB, args [][]byte) redis.Reply {
         value := values[i]
         dict.Put(field, value)
     }
-    db.addAof(makeAofCmd("hmset", args))
+    db.AddAof(makeAofCmd("hmset", args))
     return &reply.OkReply{}
 }
 
@@ -368,7 +368,7 @@ func HIncrBy(db *DB, args [][]byte) redis.Reply {
     value, exists := dict.Get(field)
     if !exists {
         dict.Put(field, args[2])
-        db.addAof(makeAofCmd("hincrby", args))
+        db.AddAof(makeAofCmd("hincrby", args))
         return reply.MakeBulkReply(args[2])
     } else {
         val, err := strconv.ParseInt(string(value.([]byte)), 10, 64)
@@ -378,7 +378,7 @@ func HIncrBy(db *DB, args [][]byte) redis.Reply {
         val += delta
         bytes := []byte(strconv.FormatInt(val, 10))
         dict.Put(field, bytes)
-        db.addAof(makeAofCmd("hincrby", args))
+        db.AddAof(makeAofCmd("hincrby", args))
         return reply.MakeBulkReply(bytes)
     }
 }
@@ -416,7 +416,7 @@ func HIncrByFloat(db *DB, args [][]byte) redis.Reply {
         result := val.Add(delta)
         resultBytes:= []byte(result.String())
         dict.Put(field, resultBytes)
-        db.addAof(makeAofCmd("hincrbyfloat", args))
+        db.AddAof(makeAofCmd("hincrbyfloat", args))
         return reply.MakeBulkReply(resultBytes)
     }
 }

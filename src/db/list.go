@@ -112,7 +112,7 @@ func LPop(db *DB, args [][]byte) redis.Reply {
     if list.Len() == 0 {
         db.Remove(key)
     }
-    db.addAof(makeAofCmd("lpop", args))
+    db.AddAof(makeAofCmd("lpop", args))
     return reply.MakeBulkReply(val)
 }
 
@@ -138,7 +138,7 @@ func LPush(db *DB, args [][]byte) redis.Reply {
         list.Insert(0, value)
     }
 
-    db.addAof(makeAofCmd("lpush", args))
+    db.AddAof(makeAofCmd("lpush", args))
     return reply.MakeIntReply(int64(list.Len()))
 }
 
@@ -166,7 +166,7 @@ func LPushX(db *DB, args [][]byte) redis.Reply {
     for _, value := range values {
         list.Insert(0, value)
     }
-    db.addAof(makeAofCmd("lpushx", args))
+    db.AddAof(makeAofCmd("lpushx", args))
     return reply.MakeIntReply(int64(list.Len()))
 }
 
@@ -271,7 +271,7 @@ func LRem(db *DB, args [][]byte) redis.Reply {
         db.Remove(key)
     }
     if removed > 0 {
-        db.addAof(makeAofCmd("lrem", args))
+        db.AddAof(makeAofCmd("lrem", args))
     }
 
     return reply.MakeIntReply(int64(removed))
@@ -313,7 +313,7 @@ func LSet(db *DB, args [][]byte) redis.Reply {
     }
 
     list.Set(index, value)
-    db.addAof(makeAofCmd("lset", args))
+    db.AddAof(makeAofCmd("lset", args))
     return &reply.OkReply{}
 }
 
@@ -341,7 +341,7 @@ func RPop(db *DB, args [][]byte) redis.Reply {
     if list.Len() == 0 {
         db.Remove(key)
     }
-    db.addAof(makeAofCmd("rpop", args))
+    db.AddAof(makeAofCmd("rpop", args))
     return reply.MakeBulkReply(val)
 }
 
@@ -379,7 +379,7 @@ func RPopLPush(db *DB, args [][]byte) redis.Reply {
         db.Remove(sourceKey)
     }
 
-    db.addAof(makeAofCmd("rpoplpush", args))
+    db.AddAof(makeAofCmd("rpoplpush", args))
     return reply.MakeBulkReply(val)
 }
 
@@ -405,7 +405,7 @@ func RPush(db *DB, args [][]byte) redis.Reply {
     for _, value := range values {
         list.Add(value)
     }
-    db.addAof(makeAofCmd("rpush", args))
+    db.AddAof(makeAofCmd("rpush", args))
     return reply.MakeIntReply(int64(list.Len()))
 }
 
@@ -433,7 +433,7 @@ func RPushX(db *DB, args [][]byte) redis.Reply {
     for _, value := range values {
         list.Add(value)
     }
-    db.addAof(makeAofCmd("rpushx", args))
+    db.AddAof(makeAofCmd("rpushx", args))
 
     return reply.MakeIntReply(int64(list.Len()))
 }

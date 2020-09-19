@@ -36,7 +36,7 @@ func makeAofCmd(cmd string, args [][]byte) *reply.MultiBulkReply {
 }
 
 // send command to aof
-func (db *DB) addAof(args *reply.MultiBulkReply) {
+func (db *DB) AddAof(args *reply.MultiBulkReply) {
     // aofChan == nil when loadAof
     if config.Properties.AppendOnly && db.aofChan != nil {
         db.aofChan <- args
