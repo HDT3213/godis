@@ -129,56 +129,6 @@ func (cluster *Cluster) Relay(peer string, c redis.Connection, args [][]byte) re
     }
 }
 
-// rollback local transaction
-func Rollback(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
-    if len(args) != 2 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'rollback' command")
-    }
-    txId := string(args[1])
-    raw, ok := cluster.transactions.Get(txId)
-    if !ok {
-        return reply.MakeIntReply(0)
-    }
-    tx, _ := raw.(*Transaction)
-    err := tx.rollback()
-    if err != nil {
-        return reply.MakeErrReply(err.Error())
-    }
-    return reply.MakeIntReply(1)
-}
-
-func Commit(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
-    if len(args) != 2 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'commit' command")
-    }
-    txId := string(args[1])
-    raw, ok := cluster.transactions.Get(txId)
-    if !ok {
-        return reply.MakeIntReply(0)
-    }
-    tx, _ := raw.(*Transaction)
-
-    // finish transaction
-    defer func() {
-        cluster.db.UnLocks(tx.keys...)
-        cluster.transactions.Remove(tx.id)
-    }()
-
-    cmd := strings.ToLower(string(tx.args[0]))
-    var result redis.Reply
-    if cmd == "del" {
-        result = CommitDel(cluster, c, tx)
-    }
-
-    if reply.IsErrorReply(result) {
-        // failed
-        err2 := tx.rollback()
-        return reply.MakeErrReply(fmt.Sprintf("err occurs when rollback:  %v, origin err: %s", err2, result))
-    }
-
-    return &reply.OkReply{}
-}
-
 /*----- utils -------*/
 
 func makeArgs(cmd string, args ...string) [][]byte {

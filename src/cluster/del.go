@@ -23,51 +23,41 @@ func Del(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
     // prepare
     var errReply redis.Reply
     txId := cluster.idGenerator.NextId()
+    txIdStr := strconv.FormatInt(txId, 10)
     rollback := false
     for peer, group := range groupMap {
-        args := []string{strconv.FormatInt(txId, 10)}
+        args := []string{txIdStr}
         args = append(args, group...)
-        var ret redis.Reply
+        var resp redis.Reply
         if peer == cluster.self {
-            ret = PrepareDel(cluster, c, makeArgs("PrepareDel", args...))
+            resp = PrepareDel(cluster, c, makeArgs("PrepareDel", args...))
         } else {
-            ret = cluster.Relay(peer, c, makeArgs("PrepareDel", args...))
+            resp = cluster.Relay(peer, c, makeArgs("PrepareDel", args...))
         }
-        if reply.IsErrorReply(ret) {
-            errReply = ret
+        if reply.IsErrorReply(resp) {
+            errReply = resp
             rollback = true
             break
         }
     }
+    var respList []redis.Reply
     if rollback {
         // rollback
-        for peer := range groupMap {
-            cluster.Relay(peer, c, makeArgs("rollback", strconv.FormatInt(txId, 10)))
-        }
+        RequestRollback(cluster, c, txId, groupMap)
     } else {
         // commit
-        rollback = false
-        for peer := range groupMap {
-            var ret redis.Reply
-            if peer == cluster.self {
-                ret = Commit(cluster, c, makeArgs("commit", strconv.FormatInt(txId, 10)))
-            } else {
-                ret = cluster.Relay(peer, c, makeArgs("commit", strconv.FormatInt(txId, 10)))
-            }
-            if reply.IsErrorReply(ret) {
-                errReply = ret
-                rollback = true
-                break
-            }
-        }
-        if rollback {
-            for peer := range groupMap {
-                cluster.Relay(peer, c, makeArgs("rollback", strconv.FormatInt(txId, 10)))
-            }
+        respList, errReply = RequestCommit(cluster, c, txId, groupMap)
+        if errReply != nil {
+            rollback = true
         }
     }
     if !rollback {
-        return reply.MakeIntReply(int64(len(keys)))
+        var deleted int64 = 0
+        for _, resp := range respList {
+            intResp := resp.(*reply.IntReply)
+            deleted += intResp.Code
+        }
+        return reply.MakeIntReply(int64(deleted))
     }
     return errReply
 }
@@ -105,5 +95,5 @@ func CommitDel(cluster *Cluster, c redis.Connection, tx *Transaction) redis.Repl
     if deleted > 0 {
         cluster.db.AddAof(reply.MakeMultiBulkReply(tx.args))
     }
-    return &reply.OkReply{}
+    return reply.MakeIntReply(int64(deleted))
 }

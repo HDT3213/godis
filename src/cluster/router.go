@@ -10,6 +10,7 @@ func MakeRouter() map[string]CmdFunc {
     routerMap["rollback"] = Rollback
     routerMap["del"] = Del
     routerMap["preparedel"] = PrepareDel
+    routerMap["preparemset"] = PrepareMSet
 
     routerMap["expire"] = defaultFunc
     routerMap["expireat"] = defaultFunc

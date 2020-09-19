@@ -2,9 +2,13 @@ package cluster
 
 import (
     "context"
+    "fmt"
     "github.com/HDT3213/godis/src/db"
     "github.com/HDT3213/godis/src/interface/redis"
     "github.com/HDT3213/godis/src/lib/marshal/gob"
+    "github.com/HDT3213/godis/src/redis/reply"
+    "strconv"
+    "strings"
     "time"
 )
 
@@ -85,21 +89,100 @@ func (tx *Transaction) rollback() error {
             tx.cluster.db.Remove(key)
         }
     }
-    tx.cluster.db.UnLocks(tx.keys...)
+    if tx.status != CommitedStatus {
+        tx.cluster.db.UnLocks(tx.keys...)
+    }
     tx.status = RollbackedStatus
     return nil
 }
 
-//func (tx *Transaction) commit(cmd CmdFunc) error {
-//    finished := make(chan int)
-//    go func() {
-//        cmd(tx.cluster, tx.conn, tx.args)
-//        finished <- 1
-//    }()
-//    select {
-//    case <- tx.ctx.Done():
-//        return tx.rollback()
-//    case <- finished:
-//        tx.cluster.db.UnLocks(tx.keys...)
-//    }
-//}
+// rollback local transaction
+func Rollback(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
+    if len(args) != 2 {
+        return reply.MakeErrReply("ERR wrong number of arguments for 'rollback' command")
+    }
+    txId := string(args[1])
+    raw, ok := cluster.transactions.Get(txId)
+    if !ok {
+        return reply.MakeIntReply(0)
+    }
+    tx, _ := raw.(*Transaction)
+    err := tx.rollback()
+    if err != nil {
+        return reply.MakeErrReply(err.Error())
+    }
+    return reply.MakeIntReply(1)
+}
+
+// commit local transaction as a worker
+func Commit(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
+    if len(args) != 2 {
+        return reply.MakeErrReply("ERR wrong number of arguments for 'commit' command")
+    }
+    txId := string(args[1])
+    raw, ok := cluster.transactions.Get(txId)
+    if !ok {
+        return reply.MakeIntReply(0)
+    }
+    tx, _ := raw.(*Transaction)
+
+    // finish transaction
+    defer func() {
+        cluster.db.UnLocks(tx.keys...)
+        tx.status = CommitedStatus
+        //cluster.transactions.Remove(tx.id) // cannot remove, may rollback after commit
+    }()
+
+    cmd := strings.ToLower(string(tx.args[0]))
+    var result redis.Reply
+    if cmd == "del" {
+        result = CommitDel(cluster, c, tx)
+    } else if cmd == "mset" {
+        result = CommitMSet(cluster, c, tx)
+    }
+
+    if reply.IsErrorReply(result) {
+        // failed
+        err2 := tx.rollback()
+        return reply.MakeErrReply(fmt.Sprintf("err occurs when rollback:  %v, origin err: %s", err2, result))
+    }
+
+    return result
+}
+
+// request all node commit transaction as leader
+func RequestCommit(cluster *Cluster, c redis.Connection, txId int64, peers map[string][]string) ([]redis.Reply, reply.ErrorReply) {
+    var errReply reply.ErrorReply
+    txIdStr := strconv.FormatInt(txId, 10)
+    respList := make([]redis.Reply, 0, len(peers))
+    for peer := range peers {
+        var resp redis.Reply
+        if peer == cluster.self {
+            resp = Commit(cluster, c, makeArgs("commit", txIdStr))
+        } else {
+            resp = cluster.Relay(peer, c, makeArgs("commit", txIdStr))
+        }
+        if reply.IsErrorReply(resp) {
+            errReply = resp.(reply.ErrorReply)
+            break
+        }
+        respList = append(respList, resp)
+    }
+    if errReply != nil {
+        RequestRollback(cluster, c, txId, peers)
+        return nil, errReply
+    }
+    return respList, nil
+}
+
+// request all node rollback transaction as leader
+func RequestRollback(cluster *Cluster, c redis.Connection, txId int64, peers map[string][]string) {
+    txIdStr := strconv.FormatInt(txId, 10)
+    for peer := range peers {
+        if peer == cluster.self {
+            Rollback(cluster, c, makeArgs("rollback", txIdStr))
+        } else {
+            cluster.Relay(peer, c, makeArgs("rollback", txIdStr))
+        }
+    }
+}

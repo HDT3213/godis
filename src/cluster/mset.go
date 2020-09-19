@@ -2,9 +2,10 @@ package cluster
 
 import (
     "fmt"
+    "github.com/HDT3213/godis/src/db"
     "github.com/HDT3213/godis/src/interface/redis"
     "github.com/HDT3213/godis/src/redis/reply"
-    "strings"
+    "strconv"
 )
 
 func MGet(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
@@ -37,6 +38,48 @@ func MGet(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
     return reply.MakeMultiBulkReply(result)
 }
 
+// args: PrepareMSet id keys...
+func PrepareMSet(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
+    if len(args) < 3 {
+        return reply.MakeErrReply("ERR wrong number of arguments for 'preparemset' command")
+    }
+    txId := string(args[1])
+    size := (len(args) - 2) / 2
+    keys := make([]string, size)
+    for i := 0; i < size; i++ {
+        keys[i] = string(args[2*i+2])
+    }
+
+    txArgs := [][]byte{
+        []byte("MSet"),
+    } // actual args for cluster.db
+    txArgs = append(txArgs, args[2:]...)
+    tx := NewTransaction(cluster, c, txId, txArgs, keys)
+    cluster.transactions.Put(txId, tx)
+    err := tx.prepare()
+    if err != nil {
+        return reply.MakeErrReply(err.Error())
+    }
+    return &reply.OkReply{}
+}
+
+// invoker should provide lock
+func CommitMSet(cluster *Cluster, c redis.Connection, tx *Transaction) redis.Reply {
+    size := len(tx.args) / 2
+    keys := make([]string, size)
+    values := make([][]byte, size)
+    for i := 0; i < size; i++ {
+        keys[i] = string(tx.args[2*i+1])
+        values[i] = tx.args[2*i+2]
+    }
+    for i, key := range keys {
+        value := values[i]
+        cluster.db.Put(key, &db.DataEntity{Data: value})
+    }
+    cluster.db.AddAof(reply.MakeMultiBulkReply(tx.args))
+    return &reply.OkReply{}
+}
+
 func MSet(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
     argCount := len(args) - 1
     if argCount%2 != 0 || argCount < 1 {
@@ -47,29 +90,50 @@ func MSet(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
     keys := make([]string, size)
     valueMap := make(map[string]string)
     for i := 0; i < size; i++ {
-        keys[i] = string(args[2*i])
-        valueMap[keys[i]] = string(args[2*i+1])
+        keys[i] = string(args[2*i+1])
+        valueMap[keys[i]] = string(args[2*i+2])
     }
 
-    failedKeys := make([]string, 0)
     groupMap := cluster.groupBy(keys)
-    for peer, groupKeys := range groupMap {
-        peerArgs := make([][]byte, 2*len(groupKeys)+1)
-        peerArgs[0] = []byte("MSET")
-        for i, k := range groupKeys {
-            peerArgs[2*i+1] = []byte(k)
-            value := valueMap[k]
-            peerArgs[2*i+2] = []byte(value)
+    if len(groupMap) == 1 { // do fast
+        for peer := range groupMap {
+            return cluster.Relay(peer, c, args)
         }
-        resp := cluster.Relay(peer, c, peerArgs)
+    }
+
+    //prepare
+    var errReply redis.Reply
+    txId := cluster.idGenerator.NextId()
+    txIdStr := strconv.FormatInt(txId, 10)
+    rollback := false
+    for peer, group := range groupMap {
+        peerArgs := []string{txIdStr}
+        for _, k := range group {
+            peerArgs = append(peerArgs, k, valueMap[k])
+        }
+        var resp redis.Reply
+        if peer == cluster.self {
+            resp = PrepareMSet(cluster, c, makeArgs("PrepareMSet", peerArgs...))
+        } else {
+            resp = cluster.Relay(peer, c, makeArgs("PrepareMSet", peerArgs...))
+        }
         if reply.IsErrorReply(resp) {
-            failedKeys = append(failedKeys, groupKeys...)
+            errReply = resp
+            rollback = true
+            break
         }
     }
-    if len(failedKeys) > 0 {
-        return reply.MakeErrReply("ERR part failure: " + strings.Join(failedKeys, ","))
+    if rollback {
+        // rollback
+        RequestRollback(cluster, c, txId, groupMap)
+    } else {
+        _, errReply = RequestCommit(cluster, c, txId, groupMap)
+        rollback = errReply != nil
     }
-    return &reply.OkReply{}
+    if !rollback {
+        return &reply.OkReply{}
+    }
+    return errReply
 
 }
 
