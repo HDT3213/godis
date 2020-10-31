@@ -1,6 +1,8 @@
 package cluster
 
 import (
+    "context"
+    "errors"
     "fmt"
     "github.com/HDT3213/godis/src/cluster/idgenerator"
     "github.com/HDT3213/godis/src/config"
@@ -11,6 +13,7 @@ import (
     "github.com/HDT3213/godis/src/lib/logger"
     "github.com/HDT3213/godis/src/redis/client"
     "github.com/HDT3213/godis/src/redis/reply"
+    "github.com/jolestar/go-commons-pool/v2"
     "runtime/debug"
     "strings"
 )
@@ -18,8 +21,8 @@ import (
 type Cluster struct {
     self string
 
-    peerPicker *consistenthash.Map
-    peers      map[string]*client.Client
+    peerPicker     *consistenthash.Map
+    peerConnection map[string]*pool.ObjectPool
 
     db           *db.DB
     transactions *dict.SimpleDict // id -> Transaction
@@ -36,10 +39,10 @@ func MakeCluster() *Cluster {
     cluster := &Cluster{
         self: config.Properties.Self,
 
-        db:           db.MakeDB(),
-        transactions: dict.MakeSimple(),
-        peerPicker:   consistenthash.New(replicas, nil),
-        peers:        make(map[string]*client.Client),
+        db:             db.MakeDB(),
+        transactions:   dict.MakeSimple(),
+        peerPicker:     consistenthash.New(replicas, nil),
+        peerConnection: make(map[string]*pool.ObjectPool),
 
         idGenerator: idgenerator.MakeGenerator("godis", config.Properties.Self),
     }
@@ -55,6 +58,12 @@ func MakeCluster() *Cluster {
         }
         peers = append(peers, config.Properties.Self)
         cluster.peerPicker.Add(peers...)
+        ctx := context.Background()
+        for _, peer := range peers {
+            cluster.peerConnection[peer] = pool.NewObjectPoolWithDefaultConfig(ctx, &ConnectionFactory{
+                Peer: peer,
+            })
+        }
     }
     return cluster
 }
@@ -90,18 +99,27 @@ func (cluster *Cluster) AfterClientClose(c redis.Connection) {
 }
 
 func (cluster *Cluster) getPeerClient(peer string) (*client.Client, error) {
-    peerClient, ok := cluster.peers[peer]
-    // lazy init
+    connectionFactory, ok := cluster.peerConnection[peer]
     if !ok {
-        var err error
-        peerClient, err = client.MakeClient(peer)
-        if err != nil {
-            return nil, err
-        }
-        peerClient.Start()
-        cluster.peers[peer] = peerClient
+        return nil, errors.New("connection factory not found")
     }
-    return peerClient, nil
+    raw, err := connectionFactory.BorrowObject(context.Background())
+    if err != nil {
+        return nil, err
+    }
+    conn, ok := raw.(*client.Client)
+    if !ok {
+        return nil, errors.New("connection factory make wrong type")
+    }
+    return conn, nil
+}
+
+func (cluster *Cluster) returnPeerClient(peer string, peerClient *client.Client) error {
+    connectionFactory, ok := cluster.peerConnection[peer]
+    if !ok {
+        return errors.New("connection factory not found")
+    }
+    return connectionFactory.ReturnObject(context.Background(), peerClient)
 }
 
 func Ping(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
@@ -125,6 +143,9 @@ func (cluster *Cluster) Relay(peer string, c redis.Connection, args [][]byte) re
         if err != nil {
             return reply.MakeErrReply(err.Error())
         }
+        defer func() {
+            _ = cluster.returnPeerClient(peer, peerClient)
+        }()
         return peerClient.Send(args)
     }
 }

@@ -6,10 +6,15 @@ import (
 	"github.com/HDT3213/godis/src/lib/logger"
     RedisServer "github.com/HDT3213/godis/src/redis/server"
 	"github.com/HDT3213/godis/src/tcp"
+	"os"
 )
 
 func main() {
-	config.SetupConfig("redis.conf")
+	configFilename := os.Getenv("CONFIG")
+	if configFilename == "" {
+		configFilename = "redis.conf"
+	}
+	config.SetupConfig(configFilename)
 	logger.Setup(&logger.Settings{
 		Path:       "logs",
 		Name:       "godis",

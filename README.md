@@ -4,21 +4,27 @@
 
 Please be advised, NEVER think about using this in production environment.
 
+This repository implemented most features of redis, including 5 data structures, ttl, publish/subscribe and AOF persistence.
+
+If you could read Chinese, you can find more details in [My Blog](https://www.cnblogs.com/Finley/category/1598973.html).
+
 ## Running
 
 You can get runnable program in the releases of this repository, which supports Linux and Darwin system.
 
 ```bash
 ./godis-darwin
-```  
+```
 
-The program will try to read `redis.conf` in the working directory. If there is no such file, then the program will run with default config.
+You could use redis-cli or other redis client to connect godis server, which listens on 127.0.0.1:6379 on default mode.
+
+The program will try to read config file path from environment variable `CONFIG`.
+
+If environment variable is not set, then the program  try to read `redis.conf` in the working directory. 
+
+If there is no such file, then the program will run with default config.
 
 ## Commands
-
-This repository implemented most of features of redis, including 5 kind of data structures, ttl, publish/subscribe and AOF persistence.
-
-If you could read Chinese, you can find more details in [My Blog](https://www.cnblogs.com/Finley/category/1598973.html).
 
 Supported Commands:
 

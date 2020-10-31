@@ -10,7 +10,7 @@ import (
 
 func MGet(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
     if len(args) < 2 {
-        return reply.MakeErrReply("ERR wrong number of arguments for 'del' command")
+        return reply.MakeErrReply("ERR wrong number of arguments for 'mget' command")
     }
     keys := make([]string, len(args)-1)
     for i := 1; i < len(args); i++ {
