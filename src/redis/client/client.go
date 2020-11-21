@@ -34,6 +34,7 @@ type Request struct {
     reply     redis.Reply
     heartbeat bool
     waiting   *wait.Wait
+    err       error
 }
 
 const (
@@ -69,15 +70,15 @@ func (client *Client) Start() {
 }
 
 func (client *Client) Close() {
-    // send stop signal
-    client.cancelFunc()
+    // stop new request
+    close(client.sendingReqs)
 
     // wait stop process
     client.writing.Wait()
 
     // clean
+    client.cancelFunc()
     _ = client.conn.Close()
-    close(client.sendingReqs)
     close(client.waitingReqs)
 }
 
@@ -120,17 +121,16 @@ loop:
 }
 
 func (client *Client) handleWrite() {
-    client.writing.Add(1)
 loop:
     for {
         select {
         case req := <-client.sendingReqs:
+            client.writing.Add(1)
             client.doRequest(req)
         case <-client.ctx.Done():
             break loop
         }
     }
-    client.writing.Done()
 }
 
 // todo: wait with timeout
@@ -145,6 +145,9 @@ func (client *Client) Send(args [][]byte) redis.Reply {
     timeout := request.waiting.WaitWithTimeout(maxWait)
     if timeout {
         return reply.MakeErrReply("server time out")
+    }
+    if request.err != nil {
+        return reply.MakeErrReply("request failed")
     }
     return request.reply
 }
@@ -162,6 +165,10 @@ func (client *Client) doRequest(req *Request) {
     }
     if err == nil {
         client.waitingReqs <- req
+    } else {
+        req.err = err
+        req.waiting.Done()
+        client.writing.Done()
     }
 }
 
@@ -171,6 +178,7 @@ func (client *Client) finishRequest(reply redis.Reply) {
     if request.waiting != nil {
         request.waiting.Done()
     }
+    client.writing.Done()
 }
 
 func (client *Client) handleRead() error {
@@ -294,16 +302,14 @@ func (client *Client) handleRead() error {
             if receivedCount == expectedArgsCount {
                 downloading = false // finish downloading progress
 
-                request := <-client.waitingReqs
                 if msgType == '*' {
-                    request.reply = reply.MakeMultiBulkReply(args)
+                    reply := reply.MakeMultiBulkReply(args)
+                    client.finishRequest(reply)
                 } else if msgType == '$' {
-                    request.reply = reply.MakeBulkReply(args[0])
+                    reply := reply.MakeBulkReply(args[0])
+                    client.finishRequest(reply)
                 }
 
-                if request.waiting != nil {
-                    request.waiting.Done()
-                }
 
                 // finish reply
                 expectedArgsCount = 0
