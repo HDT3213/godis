@@ -55,7 +55,7 @@ func (h *EchoHandler)Handle(ctx context.Context, conn net.Conn) {
         if err != nil {
             if err == io.EOF {
                 logger.Info("connection close")
-                h.activeConn.Delete(conn)
+                h.activeConn.Delete(client)
             } else {
                 logger.Warn(err)
             }
