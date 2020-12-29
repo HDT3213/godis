@@ -1,10 +1,12 @@
 # Godis
 
+[中文版](https://github.com/HDT3213/godis/blob/master/README_CN.md)
+
 `Godis` is a simple implementation of Redis Server, which intents to provide an example of writing a high concurrent middleware using golang.
 
 Please be advised, NEVER think about using this in production environment.
 
-This repository implemented most features of redis, including 5 data structures, ttl, publish/subscribe and AOF persistence.
+This repository implemented most features of redis, including 5 data structures, ttl, publish/subscribe, AOF persistence and server side cluster mode.
 
 If you could read Chinese, you can find more details in [My Blog](https://www.cnblogs.com/Finley/category/1598973.html).
 
@@ -23,6 +25,29 @@ The program will try to read config file path from environment variable `CONFIG`
 If environment variable is not set, then the program  try to read `redis.conf` in the working directory. 
 
 If there is no such file, then the program will run with default config.
+
+### cluster mode
+
+Godis can work in cluster mode, please append following lines to redis.conf file
+
+```ini
+peers localhost:7379,localhost:7389 // other node in cluster
+self  localhost:6399 // self address
+```
+
+We provide node1.conf and node2.conf for demonstration. 
+use following command line to start a two-node-cluster:
+
+```bash
+CONFIG=node1.conf ./godis-darwin &
+CONFIG=node2.conf ./godis-darwin &
+``` 
+
+The cluster is transparent to client. You can connect to any node in the cluster to access all data in the cluster:
+
+```cmd
+redis-cli -p 6399
+```
 
 ## Commands
 
