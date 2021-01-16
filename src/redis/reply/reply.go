@@ -1,6 +1,7 @@
 package reply
 
 import (
+    "bytes"
     "github.com/HDT3213/godis/src/interface/redis"
     "strconv"
 )
@@ -43,15 +44,38 @@ func MakeMultiBulkReply(args [][]byte) *MultiBulkReply {
 
 func (r *MultiBulkReply) ToBytes() []byte {
     argLen := len(r.Args)
-    res := "*" + strconv.Itoa(argLen) + CRLF
+    var buf bytes.Buffer
+    buf.WriteString("*" + strconv.Itoa(argLen) + CRLF)
     for _, arg := range r.Args {
         if arg == nil {
-            res += "$-1" + CRLF
+            buf.WriteString("$-1" + CRLF)
         } else {
-            res += "$" + strconv.Itoa(len(arg)) + CRLF + string(arg) + CRLF
+            buf.WriteString("$" + strconv.Itoa(len(arg)) + CRLF + string(arg) + CRLF)
         }
     }
-    return []byte(res)
+    return buf.Bytes()
+}
+
+/* ---- Multi Raw Reply ---- */
+
+type MultiRawReply struct {
+    Args [][]byte
+}
+
+func MakeMultiRawReply(args [][]byte) *MultiRawReply {
+    return &MultiRawReply{
+        Args: args,
+    }
+}
+
+func (r *MultiRawReply) ToBytes() []byte {
+    argLen := len(r.Args)
+    var buf bytes.Buffer
+    buf.WriteString("*" + strconv.Itoa(argLen) + CRLF)
+    for _, arg := range r.Args {
+        buf.Write(arg)
+    }
+    return buf.Bytes()
 }
 
 /* ---- Status Reply ---- */
