@@ -121,21 +121,24 @@ func Set(db *DB, args [][]byte) redis.Reply {
     case updatePolicy:
         result = db.PutIfExists(key, entity)
     }
-    if result > 0 {
-        if ttl != unlimitedTTL {
-            expireTime := time.Now().Add(time.Duration(ttl) * time.Millisecond)
-            db.Expire(key, expireTime)
-            db.AddAof(reply.MakeMultiBulkReply([][]byte{
-                []byte("SET"),
-                args[0],
-                args[1],
-            }))
-            db.AddAof(makeExpireCmd(key, expireTime))
-        } else {
-            db.Persist(key) // override ttl
-            db.AddAof(makeAofCmd("set", args))
-        }
+    /*
+     *   如果设置了ttl 则以最新的ttl为准
+     *   如果没有设置ttl 且数据新增数据的，不设置过期时间。
+    */
+    if ttl != unlimitedTTL {
+        expireTime := time.Now().Add(time.Duration(ttl) * time.Millisecond)
+        db.Expire(key, expireTime)
+        db.AddAof(reply.MakeMultiBulkReply([][]byte{
+            []byte("SET"),
+            args[0],
+            args[1],
+        }))
+        db.AddAof(makeExpireCmd(key, expireTime))
+    } else if result > 0{
+        db.Persist(key) // override ttl
+        db.AddAof(makeAofCmd("set", args))
     }
+    
     if policy == upsertPolicy || result > 0 {
         return &reply.OkReply{}
     } else {
