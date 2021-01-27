@@ -123,7 +123,8 @@ func Set(db *DB, args [][]byte) redis.Reply {
     }
     /*
      *   如果设置了ttl 则以最新的ttl为准
-     *   如果没有设置ttl 且数据新增数据的，不设置过期时间。
+     *   如果没有设置ttl 是新增key的情况，不设置ttl。
+     *   如果没有设置ttl 且已存在key的 不修改ttl 但需要增加aof
     */
     if ttl != unlimitedTTL {
         expireTime := time.Now().Add(time.Duration(ttl) * time.Millisecond)
@@ -136,6 +137,8 @@ func Set(db *DB, args [][]byte) redis.Reply {
         db.AddAof(makeExpireCmd(key, expireTime))
     } else if result > 0{
         db.Persist(key) // override ttl
+        db.AddAof(makeAofCmd("set", args))
+    }else{
         db.AddAof(makeAofCmd("set", args))
     }
     
