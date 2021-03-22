@@ -188,14 +188,16 @@ func (dict *ConcurrentDict) ForEach(consumer Consumer) {
 	}
 
 	for _, shard := range dict.table {
-		for key, value := range shard.m {
-			shard.mutex.RLock()
-			continues := consumer(key, value)
-			shard.mutex.RUnlock()
-			if !continues {
-				return
+		shard.mutex.RLock()
+		func() {
+			defer shard.mutex.RUnlock()
+			for key, value := range shard.m {
+				continues := consumer(key, value)
+				if !continues {
+					return
+				}
 			}
-		}
+		}()
 	}
 }
 
