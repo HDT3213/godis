@@ -76,7 +76,7 @@ func Type(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeStatusReply("string")
 	case *list.LinkedList:
 		return reply.MakeStatusReply("list")
-	case *dict.Dict:
+	case dict.Dict:
 		return reply.MakeStatusReply("hash")
 	case *set.Set:
 		return reply.MakeStatusReply("set")
@@ -101,10 +101,11 @@ func Rename(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply("no such key")
 	}
 	rawTTL, hasTTL := db.TTLMap.Get(src)
-	db.Persist(src) // clean src and dest with their ttl
-	db.Persist(dest)
 	db.Put(dest, entity)
+	db.Remove(src)
 	if hasTTL {
+		db.Persist(src) // clean src and dest with their ttl
+		db.Persist(dest)
 		expireTime, _ := rawTTL.(time.Time)
 		db.Expire(dest, expireTime)
 	}
@@ -135,6 +136,8 @@ func RenameNx(db *DB, args [][]byte) redis.Reply {
 	db.Removes(src, dest) // clean src and dest with their ttl
 	db.Put(dest, entity)
 	if hasTTL {
+		db.Persist(src) // clean src and dest with their ttl
+		db.Persist(dest)
 		expireTime, _ := rawTTL.(time.Time)
 		db.Expire(dest, expireTime)
 	}
@@ -161,7 +164,7 @@ func Expire(db *DB, args [][]byte) redis.Reply {
 
 	expireAt := time.Now().Add(ttl)
 	db.Expire(key, expireAt)
-	db.AddAof(makeExpireCmd(key, expireAt), )
+	db.AddAof(makeExpireCmd(key, expireAt))
 	return reply.MakeIntReply(1)
 }
 
