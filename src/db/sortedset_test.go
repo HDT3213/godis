@@ -89,7 +89,7 @@ func TestZRange(t *testing.T) {
 		scores[i] = i
 		setArgs = append(setArgs, strconv.FormatInt(int64(scores[i]), 10), members[i])
 	}
-	result := ZAdd(testDB, toArgs(setArgs...))
+	ZAdd(testDB, toArgs(setArgs...))
 	reverseMembers := make([]string, size)
 	for i, v := range members {
 		reverseMembers[size-i-1] = v
@@ -97,7 +97,7 @@ func TestZRange(t *testing.T) {
 
 	start := "0"
 	end := "9"
-	result = ZRange(testDB, toArgs(key, start, end))
+	result := ZRange(testDB, toArgs(key, start, end))
 	asserts.AssertMultiBulkReply(t, result, members[0:10])
 	result = ZRevRange(testDB, toArgs(key, start, end))
 	asserts.AssertMultiBulkReply(t, result, reverseMembers[0:10])
@@ -263,11 +263,11 @@ func TestZCount(t *testing.T) {
 		scores[i] = i
 		setArgs = append(setArgs, strconv.FormatInt(int64(scores[i]), 10), members[i])
 	}
-	result := ZAdd(testDB, toArgs(setArgs...))
+	ZAdd(testDB, toArgs(setArgs...))
 
 	min := "20"
 	max := "30"
-	result = ZCount(testDB, toArgs(key, min, max))
+	result := ZCount(testDB, toArgs(key, min, max))
 	asserts.AssertIntReply(t, result, 11)
 
 	min = "-10"

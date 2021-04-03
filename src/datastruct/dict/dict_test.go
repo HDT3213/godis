@@ -96,7 +96,7 @@ func TestPutIfExists(t *testing.T) {
 			}
 
 			d.Put(key, i)
-			ret = d.PutIfExists(key, 10*i)
+			d.PutIfExists(key, 10*i)
 			val, ok := d.Get(key)
 			if ok {
 				intVal, _ := val.(int)
