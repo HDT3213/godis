@@ -1,13 +1,13 @@
 package tcp
 
 import (
-    "net"
-    "context"
+	"context"
+	"net"
 )
 
 type HandleFunc func(ctx context.Context, conn net.Conn)
 
 type Handler interface {
-    Handle(ctx context.Context, conn net.Conn)
-    Close()error
+	Handle(ctx context.Context, conn net.Conn)
+	Close() error
 }

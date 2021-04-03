@@ -2,8 +2,8 @@ Godis 是一个用 Go 语言实现的 Redis 服务器。本项目旨在为尝试
 
 **请注意：不要在生产环境使用使用此项目**
 
-Godis 实现了 Redis 的大多数功能，包括5种数据结构、TTL、发布订阅以及 AOF 持久化。可以在[我的博客](https://www.cnblogs.com/Finley/category/1598973.html)了解更多关于 Godis 的信息。
-
+Godis 实现了 Redis 的大多数功能，包括5种数据结构、TTL、发布订阅以及 AOF 持久化。可以在[我的博客](https://www.cnblogs.com/Finley/category/1598973.html)了解更多关于
+Godis 的信息。
 
 # 运行 Godis
 
@@ -149,19 +149,19 @@ redis-cli -p 6399
 - tcp: tcp 服务器实现
 - redis: redis 协议解析器
 - datastruct: redis 的各类数据结构实现
-  - dict: hash 表
-  - list: 链表
-  - lock: 用于锁定 key 的锁组件
-  - set： 基于hash表的集合
-  - sortedset: 基于跳表实现的有序集合
+    - dict: hash 表
+    - list: 链表
+    - lock: 用于锁定 key 的锁组件
+    - set： 基于hash表的集合
+    - sortedset: 基于跳表实现的有序集合
 - db: redis 存储引擎实现
-  - db.go: 引擎的基础功能
-  - router.go: 将命令路由给响应的处理函数
-  - keys.go: del、ttl、expire 等通用命令实现
-  - string.go: get、set 等字符串命令实现
-  - list.go: lpush、lindex 等列表命令实现
-  - hash.go: hget、hset 等哈希表命令实现
-  - set.go: sadd 等集合命令实现
-  - sortedset.go: zadd 等有序集合命令实现
-  - pubsub.go: 发布订阅命令实现
-  - aof.go: aof持久化实现
+    - db.go: 引擎的基础功能
+    - router.go: 将命令路由给响应的处理函数
+    - keys.go: del、ttl、expire 等通用命令实现
+    - string.go: get、set 等字符串命令实现
+    - list.go: lpush、lindex 等列表命令实现
+    - hash.go: hget、hset 等哈希表命令实现
+    - set.go: sadd 等集合命令实现
+    - sortedset.go: zadd 等有序集合命令实现
+    - pubsub.go: 发布订阅命令实现
+    - aof.go: aof持久化实现

@@ -2,7 +2,7 @@ package db
 
 import (
 	"bufio"
-    "github.com/HDT3213/godis/src/config"
+	"github.com/HDT3213/godis/src/config"
 	"github.com/HDT3213/godis/src/datastruct/dict"
 	List "github.com/HDT3213/godis/src/datastruct/list"
 	"github.com/HDT3213/godis/src/datastruct/lock"
@@ -29,18 +29,18 @@ func makeExpireCmd(key string, expireAt time.Time) *reply.MultiBulkReply {
 }
 
 func makeAofCmd(cmd string, args [][]byte) *reply.MultiBulkReply {
-    params := make([][]byte, len(args)+1)
-    copy(params[1:], args)
-    params[0] = []byte(cmd)
-    return reply.MakeMultiBulkReply(params)
+	params := make([][]byte, len(args)+1)
+	copy(params[1:], args)
+	params[0] = []byte(cmd)
+	return reply.MakeMultiBulkReply(params)
 }
 
 // send command to aof
 func (db *DB) AddAof(args *reply.MultiBulkReply) {
-    // aofChan == nil when loadAof
-    if config.Properties.AppendOnly && db.aofChan != nil {
-        db.aofChan <- args
-    }
+	// aofChan == nil when loadAof
+	if config.Properties.AppendOnly && db.aofChan != nil {
+		db.aofChan <- args
+	}
 }
 
 // listen aof channel and write into file
@@ -72,12 +72,12 @@ func trim(msg []byte) string {
 
 // read aof file
 func (db *DB) loadAof(maxBytes int) {
-    // delete aofChan to prevent write again
-    aofChan := db.aofChan
-    db.aofChan = nil
-    defer func(aofChan chan *reply.MultiBulkReply) {
-        db.aofChan = aofChan
-    }(aofChan)
+	// delete aofChan to prevent write again
+	aofChan := db.aofChan
+	db.aofChan = nil
+	defer func(aofChan chan *reply.MultiBulkReply) {
+		db.aofChan = aofChan
+	}(aofChan)
 
 	file, err := os.Open(db.aofFilename)
 	if err != nil {

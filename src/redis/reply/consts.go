@@ -1,42 +1,42 @@
 package reply
 
-type PongReply struct {}
+type PongReply struct{}
 
 var PongBytes = []byte("+PONG\r\n")
 
-func (r *PongReply)ToBytes()[]byte {
-    return PongBytes
+func (r *PongReply) ToBytes() []byte {
+	return PongBytes
 }
 
-type OkReply struct {}
+type OkReply struct{}
 
 var okBytes = []byte("+OK\r\n")
 
-func (r *OkReply)ToBytes()[]byte {
-    return okBytes
+func (r *OkReply) ToBytes() []byte {
+	return okBytes
 }
 
 var nullBulkBytes = []byte("$-1\r\n")
 
-type NullBulkReply struct {}
+type NullBulkReply struct{}
 
-func (r *NullBulkReply)ToBytes()[]byte {
-    return nullBulkBytes
+func (r *NullBulkReply) ToBytes() []byte {
+	return nullBulkBytes
 }
 
 var emptyMultiBulkBytes = []byte("*0\r\n")
 
-type EmptyMultiBulkReply struct {}
+type EmptyMultiBulkReply struct{}
 
-func (r *EmptyMultiBulkReply)ToBytes()[]byte {
-    return emptyMultiBulkBytes
+func (r *EmptyMultiBulkReply) ToBytes() []byte {
+	return emptyMultiBulkBytes
 }
 
 // reply nothing, for commands like subscribe
-type NoReply struct {}
+type NoReply struct{}
 
 var NoBytes = []byte("")
 
-func (r *NoReply)ToBytes()[]byte {
-    return NoBytes
+func (r *NoReply) ToBytes() []byte {
+	return NoBytes
 }
