@@ -32,8 +32,8 @@ const (
 
 	CreatedStatus    = 0
 	PreparedStatus   = 1
-	CommitedStatus   = 2
-	RollbackedStatus = 3
+	CommittedStatus  = 2
+	RolledBackStatus = 3
 )
 
 func NewTransaction(cluster *Cluster, c redis.Connection, id string, args [][]byte, keys []string) *Transaction {
@@ -89,10 +89,10 @@ func (tx *Transaction) rollback() error {
 			tx.cluster.db.Remove(key)
 		}
 	}
-	if tx.status != CommitedStatus {
+	if tx.status != CommittedStatus {
 		tx.cluster.db.UnLocks(tx.keys...)
 	}
-	tx.status = RollbackedStatus
+	tx.status = RolledBackStatus
 	return nil
 }
 
@@ -129,7 +129,7 @@ func Commit(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	// finish transaction
 	defer func() {
 		cluster.db.UnLocks(tx.keys...)
-		tx.status = CommitedStatus
+		tx.status = CommittedStatus
 		//cluster.transactions.Remove(tx.id) // cannot remove, may rollback after commit
 	}()
 
@@ -144,7 +144,7 @@ func Commit(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	if reply.IsErrorReply(result) {
 		// failed
 		err2 := tx.rollback()
-		return reply.MakeErrReply(fmt.Sprintf("err occurs when rollback:  %v, origin err: %s", err2, result))
+		return reply.MakeErrReply(fmt.Sprintf("err occurs when rollback: %v, origin err: %s", err2, result))
 	}
 
 	return result

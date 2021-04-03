@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"github.com/HDT3213/godis/src/config"
 	"github.com/HDT3213/godis/src/datastruct/dict"
-	List "github.com/HDT3213/godis/src/datastruct/list"
 	"github.com/HDT3213/godis/src/datastruct/lock"
 	"github.com/HDT3213/godis/src/interface/redis"
 	"github.com/HDT3213/godis/src/lib/logger"
+	"github.com/HDT3213/godis/src/lib/timewheel"
 	"github.com/HDT3213/godis/src/pubsub"
 	"github.com/HDT3213/godis/src/redis/reply"
 	"os"
@@ -239,14 +239,26 @@ func (db *DB) RUnLocks(keys ...string) {
 
 /* ---- TTL Functions ---- */
 
+func genExpireTask(key string) string {
+	return "expire:" + key
+}
+
 func (db *DB) Expire(key string, expireTime time.Time) {
 	db.stopWorld.Wait()
 	db.TTLMap.Put(key, expireTime)
+	taskKey := genExpireTask(key)
+	timewheel.At(expireTime, taskKey, func() {
+		logger.Info("expire " + key)
+		db.TTLMap.Remove(key)
+		db.Data.Remove(key)
+	})
 }
 
 func (db *DB) Persist(key string) {
 	db.stopWorld.Wait()
 	db.TTLMap.Remove(key)
+	taskKey := genExpireTask(key)
+	timewheel.Cancel(taskKey)
 }
 
 func (db *DB) IsExpired(key string) bool {
@@ -262,32 +274,7 @@ func (db *DB) IsExpired(key string) bool {
 	return expired
 }
 
-func (db *DB) CleanExpired() {
-	now := time.Now()
-	toRemove := &List.LinkedList{}
-	db.TTLMap.ForEach(func(key string, val interface{}) bool {
-		expireTime, _ := val.(time.Time)
-		if now.After(expireTime) {
-			// expired
-			db.Data.Remove(key)
-			toRemove.Add(key)
-		}
-		return true
-	})
-	toRemove.ForEach(func(i int, val interface{}) bool {
-		key, _ := val.(string)
-		db.TTLMap.Remove(key)
-		return true
-	})
-}
-
 func (db *DB) TimerTask() {
-	ticker := time.NewTicker(db.interval)
-	go func() {
-		for range ticker.C {
-			db.CleanExpired()
-		}
-	}()
 }
 
 /* ---- Subscribe Functions ---- */

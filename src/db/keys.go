@@ -289,7 +289,7 @@ func Persist(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeIntReply(0)
 	}
 
-	db.TTLMap.Remove(key)
+	db.Persist(key)
 	db.AddAof(makeAofCmd("persist", args))
 	return reply.MakeIntReply(1)
 }

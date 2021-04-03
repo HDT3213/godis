@@ -87,10 +87,7 @@ func TestRenameNx(t *testing.T) {
 	newKey := key + RandString(2)
 	Set(testDB, toArgs(key, value, "ex", "1000"))
 	result := RenameNx(testDB, toArgs(key, newKey))
-	if _, ok := result.(*reply.OkReply); !ok {
-		t.Error("expect ok")
-		return
-	}
+	asserts.AssertIntReply(t, result, 1)
 	result = Exists(testDB, toArgs(key))
 	asserts.AssertIntReply(t, result, 0)
 	result = Exists(testDB, toArgs(newKey))
