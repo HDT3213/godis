@@ -50,3 +50,13 @@ func (cluster *Cluster) Relay(peer string, c redis.Connection, args [][]byte) re
 		return peerClient.Send(args)
 	}
 }
+
+// broadcast command to all node in cluster
+func (cluster *Cluster) Broadcast(peer string, c redis.Connection, args [][]byte) map[string]redis.Reply {
+	result := make(map[string]redis.Reply)
+	for _, node := range cluster.peers {
+		reply := cluster.Relay(node, c, args)
+		result[node] = reply
+	}
+	return result
+}

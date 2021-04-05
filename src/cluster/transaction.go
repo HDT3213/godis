@@ -94,6 +94,9 @@ func (tx *Transaction) rollback() error {
 	if tx.status != curStatus { // ensure status not changed by other goroutine
 		return errors.New(fmt.Sprintf("tx %s status changed", tx.id))
 	}
+	if tx.status == RolledBackStatus { // no need to rollback a rolled-back transaction
+		return nil
+	}
 	for key, blob := range tx.undoLog {
 		if len(blob) > 0 {
 			entity := &db.DataEntity{}
@@ -106,8 +109,8 @@ func (tx *Transaction) rollback() error {
 			tx.cluster.db.Remove(key)
 		}
 	}
-	// a committed transaction has released locks, do not release again
-	if tx.status != CommittedStatus {
+	// only prepared transaction has locks, do not release lock twice
+	if tx.status == PreparedStatus {
 		tx.cluster.db.UnLocks(tx.keys...)
 	}
 	tx.status = RolledBackStatus

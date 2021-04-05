@@ -94,6 +94,18 @@ func MakeRouter() map[string]CmdFunc {
 	routerMap["zremrangebyscore"] = defaultFunc
 	routerMap["zremrangebyrank"] = defaultFunc
 
+	routerMap["geoadd"] = defaultFunc
+	routerMap["geopos"] = defaultFunc
+	routerMap["geodist"] = defaultFunc
+	routerMap["geohash"] = defaultFunc
+	routerMap["georadius"] = defaultFunc
+	routerMap["georadiusbymember"] = defaultFunc
+
+	routerMap["publish"] = Publish
+	routerMap[relayPublish] = OnRelayedPublish
+	routerMap["subscribe"] = Subscribe
+	routerMap["unsubscribe"] = UnSubscribe
+
 	//routerMap["flushdb"] = FlushDB
 	//routerMap["flushall"] = FlushAll
 	//routerMap["keys"] = Keys
@@ -101,6 +113,7 @@ func MakeRouter() map[string]CmdFunc {
 	return routerMap
 }
 
+// relay command to responsible peer, and return its reply to client
 func defaultFunc(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	key := string(args[1])
 	peer := cluster.peerPicker.Get(key)

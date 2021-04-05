@@ -19,6 +19,7 @@ import (
 type Cluster struct {
 	self string
 
+	peers          []string
 	peerPicker     *consistenthash.Map
 	peerConnection map[string]*pool.ObjectPool
 
@@ -33,6 +34,7 @@ const (
 	lockSize = 64
 )
 
+// start current processing as a node of cluster
 func MakeCluster() *Cluster {
 	cluster := &Cluster{
 		self: config.Properties.Self,
@@ -44,25 +46,24 @@ func MakeCluster() *Cluster {
 
 		idGenerator: idgenerator.MakeGenerator("godis", config.Properties.Self),
 	}
-	if config.Properties.Peers != nil && len(config.Properties.Peers) > 0 && config.Properties.Self != "" {
-		contains := make(map[string]bool)
-		peers := make([]string, 0, len(config.Properties.Peers)+1)
-		for _, peer := range config.Properties.Peers {
-			if _, ok := contains[peer]; ok {
-				continue
-			}
-			contains[peer] = true
-			peers = append(peers, peer)
+	contains := make(map[string]struct{})
+	nodes := make([]string, 0, len(config.Properties.Peers)+1)
+	for _, peer := range config.Properties.Peers {
+		if _, ok := contains[peer]; ok {
+			continue
 		}
-		peers = append(peers, config.Properties.Self)
-		cluster.peerPicker.Add(peers...)
-		ctx := context.Background()
-		for _, peer := range peers {
-			cluster.peerConnection[peer] = pool.NewObjectPoolWithDefaultConfig(ctx, &ConnectionFactory{
-				Peer: peer,
-			})
-		}
+		contains[peer] = struct{}{}
+		nodes = append(nodes, peer)
 	}
+	nodes = append(nodes, config.Properties.Self)
+	cluster.peerPicker.Add(nodes...)
+	ctx := context.Background()
+	for _, peer := range nodes {
+		cluster.peerConnection[peer] = pool.NewObjectPoolWithDefaultConfig(ctx, &ConnectionFactory{
+			Peer: peer,
+		})
+	}
+	cluster.peers = nodes
 	return cluster
 }
 

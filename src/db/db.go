@@ -100,6 +100,8 @@ func (db *DB) Close() {
 	}
 }
 
+// execute command,
+// parameter `args` is a RESP message including command and its params
 func (db *DB) Exec(c redis.Connection, args [][]byte) (result redis.Reply) {
 	defer func() {
 		if err := recover(); err != nil {

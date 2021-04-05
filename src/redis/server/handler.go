@@ -33,7 +33,7 @@ type Handler struct {
 
 func MakeHandler() *Handler {
 	var db db.DB
-	if config.Properties.Peers != nil &&
+	if config.Properties.Self != "" &&
 		len(config.Properties.Peers) > 0 {
 		db = cluster.MakeCluster()
 	} else {
