@@ -46,6 +46,7 @@ func (db *DB) AddAof(args *reply.MultiBulkReply) {
 // listen aof channel and write into file
 func (db *DB) handleAof() {
 	for cmd := range db.aofChan {
+		// todo: use switch and channels instead of mutex
 		db.pausingAof.RLock() // prevent other goroutines from pausing aof
 		if db.aofRewriteChan != nil {
 			// replica during rewrite
@@ -57,17 +58,18 @@ func (db *DB) handleAof() {
 		}
 		db.pausingAof.RUnlock()
 	}
+	db.aofFinished <- struct{}{}
 }
 
 func trim(msg []byte) string {
-	trimed := ""
+	trimmed := ""
 	for i := len(msg) - 1; i >= 0; i-- {
 		if msg[i] == '\r' || msg[i] == '\n' {
 			continue
 		}
 		return string(msg[:i+1])
 	}
-	return trimed
+	return trimmed
 }
 
 // read aof file
@@ -204,21 +206,8 @@ func (db *DB) aofRewrite() {
 
 	// rewrite aof file
 	tmpDB.Data.ForEach(func(key string, raw interface{}) bool {
-		var cmd *reply.MultiBulkReply
 		entity, _ := raw.(*DataEntity)
-		switch val := entity.Data.(type) {
-		case []byte:
-			cmd = persistString(key, val)
-		case *List.LinkedList:
-			cmd = persistList(key, val)
-		case *set.Set:
-			cmd = persistSet(key, val)
-		case dict.Dict:
-			cmd = persistHash(key, val)
-		case *SortedSet.SortedSet:
-			cmd = persistZSet(key, val)
-
-		}
+		cmd := EntityToCmd(key, entity)
 		if cmd != nil {
 			_, _ = file.Write(cmd.ToBytes())
 		}
@@ -238,7 +227,7 @@ func (db *DB) aofRewrite() {
 
 var setCmd = []byte("SET")
 
-func persistString(key string, bytes []byte) *reply.MultiBulkReply {
+func stringToCmd(key string, bytes []byte) *reply.MultiBulkReply {
 	args := make([][]byte, 3)
 	args[0] = setCmd
 	args[1] = []byte(key)
@@ -246,9 +235,9 @@ func persistString(key string, bytes []byte) *reply.MultiBulkReply {
 	return reply.MakeMultiBulkReply(args)
 }
 
-var rPushAllCmd = []byte("RPUSHALL")
+var rPushAllCmd = []byte("RPUSH")
 
-func persistList(key string, list *List.LinkedList) *reply.MultiBulkReply {
+func listToCmd(key string, list *List.LinkedList) *reply.MultiBulkReply {
 	args := make([][]byte, 2+list.Len())
 	args[0] = rPushAllCmd
 	args[1] = []byte(key)
@@ -262,7 +251,7 @@ func persistList(key string, list *List.LinkedList) *reply.MultiBulkReply {
 
 var sAddCmd = []byte("SADD")
 
-func persistSet(key string, set *set.Set) *reply.MultiBulkReply {
+func setToCmd(key string, set *set.Set) *reply.MultiBulkReply {
 	args := make([][]byte, 2+set.Len())
 	args[0] = sAddCmd
 	args[1] = []byte(key)
@@ -277,7 +266,7 @@ func persistSet(key string, set *set.Set) *reply.MultiBulkReply {
 
 var hMSetCmd = []byte("HMSET")
 
-func persistHash(key string, hash dict.Dict) *reply.MultiBulkReply {
+func hashToCmd(key string, hash dict.Dict) *reply.MultiBulkReply {
 	args := make([][]byte, 2+hash.Len()*2)
 	args[0] = hMSetCmd
 	args[1] = []byte(key)
@@ -294,7 +283,7 @@ func persistHash(key string, hash dict.Dict) *reply.MultiBulkReply {
 
 var zAddCmd = []byte("ZADD")
 
-func persistZSet(key string, zset *SortedSet.SortedSet) *reply.MultiBulkReply {
+func zSetToCmd(key string, zset *SortedSet.SortedSet) *reply.MultiBulkReply {
 	args := make([][]byte, 2+zset.Len()*2)
 	args[0] = zAddCmd
 	args[1] = []byte(key)
@@ -309,10 +298,36 @@ func persistZSet(key string, zset *SortedSet.SortedSet) *reply.MultiBulkReply {
 	return reply.MakeMultiBulkReply(args)
 }
 
+// serialize data entity to redis command
+func EntityToCmd(key string, entity *DataEntity) *reply.MultiBulkReply {
+	if entity == nil {
+		return nil
+	}
+	var cmd *reply.MultiBulkReply
+	switch val := entity.Data.(type) {
+	case []byte:
+		cmd = stringToCmd(key, val)
+	case *List.LinkedList:
+		cmd = listToCmd(key, val)
+	case *set.Set:
+		cmd = setToCmd(key, val)
+	case dict.Dict:
+		cmd = hashToCmd(key, val)
+	case *SortedSet.SortedSet:
+		cmd = zSetToCmd(key, val)
+	}
+	return cmd
+}
+
 func (db *DB) startRewrite() (*os.File, int64, error) {
 	db.pausingAof.Lock() // pausing aof
 	defer db.pausingAof.Unlock()
 
+	err := db.aofFile.Sync()
+	if err != nil {
+		logger.Warn("fsync failed")
+		return nil, 0, err
+	}
 	// create rewrite channel
 	db.aofRewriteChan = make(chan *reply.MultiBulkReply, aofQueueSize)
 

@@ -73,7 +73,7 @@ func ZAdd(db *DB, args [][]byte) redis.Reply {
 		}
 	}
 
-	db.AddAof(makeAofCmd("sdiffstore", args))
+	db.AddAof(makeAofCmd("zadd", args))
 
 	return reply.MakeIntReply(int64(i))
 }

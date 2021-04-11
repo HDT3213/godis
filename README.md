@@ -7,12 +7,13 @@ middleware using golang.
 
 Please be advised, NEVER think about using this in production environment.
 
-This repository implemented most features of redis, including 5 data structures, ttl, publish/subscribe, AOF persistence
-and server side cluster mode.
+Gods implemented most features of redis, including 5 data structures, ttl, publish/subscribe, geo and AOF persistence.
+
+Godis can run as a server side cluster which is transparent to client. You can connect to any node in the cluster to access all data in the cluster:
 
 If you could read Chinese, you can find more details in [My Blog](https://www.cnblogs.com/Finley/category/1598973.html).
 
-## Running
+## Get Started
 
 You can get runnable program in the releases of this repository, which supports Linux and Darwin system.
 
@@ -44,7 +45,7 @@ CONFIG=node1.conf ./godis-darwin &
 CONFIG=node2.conf ./godis-darwin &
 ``` 
 
-The cluster is transparent to client. You can connect to any node in the cluster to access all data in the cluster:
+Connect to a node in the cluster to access all data in the cluster:
 
 ```cmd
 redis-cli -p 6399
@@ -146,6 +147,13 @@ Supported Commands:
     - publish
     - subscribe
     - unsubscribe
+- Geo
+    - GeoAdd
+    - GeoPos
+    - GeoDist
+    - GeoHash
+    - GeoRadius
+    - GeoRadiusByMember
 
 # Read My Code
 

@@ -54,6 +54,7 @@ type DB struct {
 	aofChan     chan *reply.MultiBulkReply
 	aofFile     *os.File
 	aofFilename string
+	aofFinished chan struct{} // aof goroutine will send msg when aof finished
 
 	aofRewriteChan chan *reply.MultiBulkReply
 	pausingAof     sync.RWMutex
@@ -81,6 +82,7 @@ func MakeDB() *DB {
 			db.aofFile = aofFile
 			db.aofChan = make(chan *reply.MultiBulkReply, aofQueueSize)
 		}
+		db.aofFinished = make(chan struct{})
 		go func() {
 			db.handleAof()
 		}()
@@ -93,6 +95,8 @@ func MakeDB() *DB {
 
 func (db *DB) Close() {
 	if db.aofFile != nil {
+		close(db.aofChan)
+		<-db.aofFinished // wait for aof finished
 		err := db.aofFile.Close()
 		if err != nil {
 			logger.Warn(err)

@@ -2,7 +2,11 @@ Godis 是一个用 Go 语言实现的 Redis 服务器。本项目旨在为尝试
 
 **请注意：不要在生产环境使用使用此项目**
 
-Godis 实现了 Redis 的大多数功能，包括5种数据结构、TTL、发布订阅以及 AOF 持久化。可以在[我的博客](https://www.cnblogs.com/Finley/category/1598973.html)了解更多关于
+Godis 实现了 Redis 的大多数功能，包括5种数据结构、TTL、发布订阅、地理位置以及 AOF 持久化。
+
+Godis 支持集群模式，集群对客户端是透明的只要连接上集群中任意一个节点就可以访问集群中所有数据
+
+可以在[我的博客](https://www.cnblogs.com/Finley/category/1598973.html)了解更多关于
 Godis 的信息。
 
 # 运行 Godis
@@ -134,6 +138,13 @@ redis-cli -p 6399
     - publish
     - subscribe
     - unsubscribe
+- Geo
+    - GeoAdd
+    - GeoPos
+    - GeoDist
+    - GeoHash
+    - GeoRadius
+    - GeoRadiusByMember
 
 ## 如何阅读源码
 
