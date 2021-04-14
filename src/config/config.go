@@ -2,7 +2,7 @@ package config
 
 import (
 	"bufio"
-	"github.com/HDT3213/godis/src/lib/logger"
+	"github.com/hdt3213/godis/src/lib/logger"
 	"log"
 	"os"
 	"reflect"

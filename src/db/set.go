@@ -1,9 +1,9 @@
 package db
 
 import (
-	HashSet "github.com/HDT3213/godis/src/datastruct/set"
-	"github.com/HDT3213/godis/src/interface/redis"
-	"github.com/HDT3213/godis/src/redis/reply"
+	HashSet "github.com/hdt3213/godis/src/datastruct/set"
+	"github.com/hdt3213/godis/src/interface/redis"
+	"github.com/hdt3213/godis/src/redis/reply"
 	"strconv"
 )
 

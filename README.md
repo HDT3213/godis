@@ -1,6 +1,6 @@
 # Godis
 
-[中文版](https://github.com/HDT3213/godis/blob/master/README_CN.md)
+[中文版](https://github.com/hdt3213/godis/blob/master/README_CN.md)
 
 `Godis` is a simple implementation of Redis Server, which intents to provide an example of writing a high concurrent
 middleware using golang.
@@ -188,4 +188,4 @@ I suggest focusing on the following directories:
 
 # License
 
-This project is licensed under the [GPL license](https://github.com/HDT3213/godis/blob/master/LICENSE).
+This project is licensed under the [GPL license](https://github.com/hdt3213/godis/blob/master/LICENSE).

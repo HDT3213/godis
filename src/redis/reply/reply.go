@@ -2,7 +2,7 @@ package reply
 
 import (
 	"bytes"
-	"github.com/HDT3213/godis/src/interface/redis"
+	"github.com/hdt3213/godis/src/interface/redis"
 	"strconv"
 )
 

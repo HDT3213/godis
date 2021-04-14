@@ -2,9 +2,9 @@ package asserts
 
 import (
 	"fmt"
-	"github.com/HDT3213/godis/src/datastruct/utils"
-	"github.com/HDT3213/godis/src/interface/redis"
-	"github.com/HDT3213/godis/src/redis/reply"
+	"github.com/hdt3213/godis/src/datastruct/utils"
+	"github.com/hdt3213/godis/src/interface/redis"
+	"github.com/hdt3213/godis/src/redis/reply"
 	"runtime"
 	"testing"
 )

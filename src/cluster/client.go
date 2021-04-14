@@ -3,7 +3,7 @@ package cluster
 import (
 	"context"
 	"errors"
-	"github.com/HDT3213/godis/src/redis/client"
+	"github.com/hdt3213/godis/src/redis/client"
 	"github.com/jolestar/go-commons-pool/v2"
 )
 

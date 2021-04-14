@@ -1,6 +1,6 @@
 package list
 
-import "github.com/HDT3213/godis/src/datastruct/utils"
+import "github.com/hdt3213/godis/src/datastruct/utils"
 
 type LinkedList struct {
 	first *node

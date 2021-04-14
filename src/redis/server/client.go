@@ -1,8 +1,8 @@
 package server
 
 import (
-	"github.com/HDT3213/godis/src/lib/sync/atomic"
-	"github.com/HDT3213/godis/src/lib/sync/wait"
+	"github.com/hdt3213/godis/src/lib/sync/atomic"
+	"github.com/hdt3213/godis/src/lib/sync/wait"
 	"net"
 	"sync"
 	"time"

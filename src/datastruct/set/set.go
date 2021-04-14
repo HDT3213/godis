@@ -1,6 +1,6 @@
 package set
 
-import "github.com/HDT3213/godis/src/datastruct/dict"
+import "github.com/hdt3213/godis/src/datastruct/dict"
 
 type Set struct {
 	dict dict.Dict

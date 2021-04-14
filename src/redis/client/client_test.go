@@ -1,8 +1,8 @@
 package client
 
 import (
-	"github.com/HDT3213/godis/src/lib/logger"
-	"github.com/HDT3213/godis/src/redis/reply"
+	"github.com/hdt3213/godis/src/lib/logger"
+	"github.com/hdt3213/godis/src/redis/reply"
 	"testing"
 )
 

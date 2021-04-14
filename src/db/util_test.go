@@ -1,8 +1,8 @@
 package db
 
 import (
-	"github.com/HDT3213/godis/src/datastruct/dict"
-	"github.com/HDT3213/godis/src/datastruct/lock"
+	"github.com/hdt3213/godis/src/datastruct/dict"
+	"github.com/hdt3213/godis/src/datastruct/lock"
 	"math/rand"
 	"time"
 )

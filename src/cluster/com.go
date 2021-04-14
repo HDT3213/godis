@@ -4,9 +4,9 @@ package cluster
 import (
 	"context"
 	"errors"
-	"github.com/HDT3213/godis/src/interface/redis"
-	"github.com/HDT3213/godis/src/redis/client"
-	"github.com/HDT3213/godis/src/redis/reply"
+	"github.com/hdt3213/godis/src/interface/redis"
+	"github.com/hdt3213/godis/src/redis/client"
+	"github.com/hdt3213/godis/src/redis/reply"
 )
 
 func (cluster *Cluster) getPeerClient(peer string) (*client.Client, error) {

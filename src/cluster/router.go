@@ -1,6 +1,6 @@
 package cluster
 
-import "github.com/HDT3213/godis/src/interface/redis"
+import "github.com/hdt3213/godis/src/interface/redis"
 
 func MakeRouter() map[string]CmdFunc {
 	routerMap := make(map[string]CmdFunc)

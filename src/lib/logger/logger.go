@@ -2,7 +2,7 @@ package logger
 
 import (
 	"fmt"
-	"github.com/HDT3213/godis/src/lib/files"
+	"github.com/hdt3213/godis/src/lib/files"
 	"io"
 	"log"
 	"os"

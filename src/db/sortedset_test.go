@@ -1,7 +1,7 @@
 package db
 
 import (
-	"github.com/HDT3213/godis/src/redis/reply/asserts"
+	"github.com/hdt3213/godis/src/redis/reply/asserts"
 	"math/rand"
 	"strconv"
 	"testing"

@@ -2,10 +2,10 @@ package db
 
 import (
 	"fmt"
-	"github.com/HDT3213/godis/src/datastruct/sortedset"
-	"github.com/HDT3213/godis/src/interface/redis"
-	"github.com/HDT3213/godis/src/lib/geohash"
-	"github.com/HDT3213/godis/src/redis/reply"
+	"github.com/hdt3213/godis/src/datastruct/sortedset"
+	"github.com/hdt3213/godis/src/interface/redis"
+	"github.com/hdt3213/godis/src/lib/geohash"
+	"github.com/hdt3213/godis/src/redis/reply"
 	"strconv"
 	"strings"
 )

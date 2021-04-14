@@ -1,9 +1,9 @@
 package db
 
 import (
-	SortedSet "github.com/HDT3213/godis/src/datastruct/sortedset"
-	"github.com/HDT3213/godis/src/interface/redis"
-	"github.com/HDT3213/godis/src/redis/reply"
+	SortedSet "github.com/hdt3213/godis/src/datastruct/sortedset"
+	"github.com/hdt3213/godis/src/interface/redis"
+	"github.com/hdt3213/godis/src/redis/reply"
 	"strconv"
 	"strings"
 )

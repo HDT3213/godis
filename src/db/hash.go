@@ -1,9 +1,9 @@
 package db
 
 import (
-	Dict "github.com/HDT3213/godis/src/datastruct/dict"
-	"github.com/HDT3213/godis/src/interface/redis"
-	"github.com/HDT3213/godis/src/redis/reply"
+	Dict "github.com/hdt3213/godis/src/datastruct/dict"
+	"github.com/hdt3213/godis/src/interface/redis"
+	"github.com/hdt3213/godis/src/redis/reply"
 	"github.com/shopspring/decimal"
 	"strconv"
 )

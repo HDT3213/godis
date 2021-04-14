@@ -2,9 +2,9 @@ package cluster
 
 import (
 	"fmt"
-	"github.com/HDT3213/godis/src/db"
-	"github.com/HDT3213/godis/src/interface/redis"
-	"github.com/HDT3213/godis/src/redis/reply"
+	"github.com/hdt3213/godis/src/db"
+	"github.com/hdt3213/godis/src/interface/redis"
+	"github.com/hdt3213/godis/src/redis/reply"
 	"strconv"
 )
 

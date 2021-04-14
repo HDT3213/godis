@@ -7,9 +7,9 @@ package tcp
 import (
 	"context"
 	"fmt"
-	"github.com/HDT3213/godis/src/interface/tcp"
-	"github.com/HDT3213/godis/src/lib/logger"
-	"github.com/HDT3213/godis/src/lib/sync/atomic"
+	"github.com/hdt3213/godis/src/interface/tcp"
+	"github.com/hdt3213/godis/src/lib/logger"
+	"github.com/hdt3213/godis/src/lib/sync/atomic"
 	"net"
 	"os"
 	"os/signal"

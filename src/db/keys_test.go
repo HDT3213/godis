@@ -2,8 +2,8 @@ package db
 
 import (
 	"fmt"
-	"github.com/HDT3213/godis/src/redis/reply"
-	"github.com/HDT3213/godis/src/redis/reply/asserts"
+	"github.com/hdt3213/godis/src/redis/reply"
+	"github.com/hdt3213/godis/src/redis/reply/asserts"
 	"strconv"
 	"testing"
 	"time"

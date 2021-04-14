@@ -1,4 +1,4 @@
-module github.com/HDT3213/godis
+module github.com/hdt3213/godis
 
 go 1.12
 

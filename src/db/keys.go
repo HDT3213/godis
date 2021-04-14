@@ -1,13 +1,13 @@
 package db
 
 import (
-	"github.com/HDT3213/godis/src/datastruct/dict"
-	"github.com/HDT3213/godis/src/datastruct/list"
-	"github.com/HDT3213/godis/src/datastruct/set"
-	"github.com/HDT3213/godis/src/datastruct/sortedset"
-	"github.com/HDT3213/godis/src/interface/redis"
-	"github.com/HDT3213/godis/src/lib/wildcard"
-	"github.com/HDT3213/godis/src/redis/reply"
+	"github.com/hdt3213/godis/src/datastruct/dict"
+	"github.com/hdt3213/godis/src/datastruct/list"
+	"github.com/hdt3213/godis/src/datastruct/set"
+	"github.com/hdt3213/godis/src/datastruct/sortedset"
+	"github.com/hdt3213/godis/src/interface/redis"
+	"github.com/hdt3213/godis/src/lib/wildcard"
+	"github.com/hdt3213/godis/src/redis/reply"
 	"strconv"
 	"time"
 )

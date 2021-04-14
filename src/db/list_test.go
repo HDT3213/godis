@@ -2,8 +2,8 @@ package db
 
 import (
 	"fmt"
-	"github.com/HDT3213/godis/src/datastruct/utils"
-	"github.com/HDT3213/godis/src/redis/reply"
+	"github.com/hdt3213/godis/src/datastruct/utils"
+	"github.com/hdt3213/godis/src/redis/reply"
 	"strconv"
 	"testing"
 )
