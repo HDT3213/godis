@@ -37,6 +37,12 @@ const (
 	FATAL
 )
 
+const flags = log.LstdFlags
+
+func init() {
+	logger = log.New(os.Stdout, DefaultPrefix, flags)
+}
+
 func Setup(settings *Settings) {
 	var err error
 	dir := settings.Path
@@ -51,7 +57,7 @@ func Setup(settings *Settings) {
 	}
 
 	mw := io.MultiWriter(os.Stdout, logFile)
-	logger = log.New(mw, DefaultPrefix, log.LstdFlags)
+	logger = log.New(mw, DefaultPrefix, flags)
 }
 
 func setPrefix(level Level) {

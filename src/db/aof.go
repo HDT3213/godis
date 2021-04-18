@@ -1,7 +1,6 @@
 package db
 
 import (
-	"bufio"
 	"github.com/hdt3213/godis/src/config"
 	"github.com/hdt3213/godis/src/datastruct/dict"
 	List "github.com/hdt3213/godis/src/datastruct/list"
@@ -9,6 +8,8 @@ import (
 	"github.com/hdt3213/godis/src/datastruct/set"
 	SortedSet "github.com/hdt3213/godis/src/datastruct/sortedset"
 	"github.com/hdt3213/godis/src/lib/logger"
+	"github.com/hdt3213/godis/src/lib/utils"
+	"github.com/hdt3213/godis/src/redis/parser"
 	"github.com/hdt3213/godis/src/redis/reply"
 	"io"
 	"io/ioutil"
@@ -72,6 +73,7 @@ func trim(msg []byte) string {
 	return trimmed
 }
 
+
 // read aof file
 func (db *DB) loadAof(maxBytes int) {
 	// delete aofChan to prevent write again
@@ -91,96 +93,29 @@ func (db *DB) loadAof(maxBytes int) {
 	}
 	defer file.Close()
 
-	reader := bufio.NewReader(file)
-	var fixedLen int64 = 0
-	var expectedArgsCount uint32
-	var receivedCount uint32
-	var args [][]byte
-	processing := false
-	var msg []byte
-	readBytes := 0
-	for {
-		if maxBytes != 0 && readBytes >= maxBytes {
-			break
+	reader := utils.NewLimitedReader(file, maxBytes)
+	ch := parser.Parse(reader)
+	for p := range ch {
+		if p.Err != nil {
+			if p.Err == io.EOF {
+				break
+			}
+			logger.Error("parse error: " + p.Err.Error())
+			continue
 		}
-		if fixedLen == 0 {
-			msg, err = reader.ReadBytes('\n')
-			if err == io.EOF {
-				return
-			}
-			if len(msg) == 0 {
-				logger.Warn("invalid format: line should end with \\r\\n")
-				return
-			}
-			readBytes += len(msg)
-		} else {
-			msg = make([]byte, fixedLen+2)
-			n, err := io.ReadFull(reader, msg)
-			if err == io.EOF {
-				return
-			}
-			if len(msg) == 0 {
-				logger.Warn("invalid multibulk length")
-				return
-			}
-			fixedLen = 0
-			readBytes += n
+		if p.Data == nil {
+			logger.Error("empty payload")
+			continue
 		}
-		if err != nil {
-			logger.Warn(err)
-			return
+		r, ok := p.Data.(*reply.MultiBulkReply)
+		if !ok {
+			logger.Error("require multi bulk reply")
+			continue
 		}
-
-		if !processing {
-			// new request
-			if msg[0] == '*' {
-				// bulk multi msg
-				expectedLine, err := strconv.ParseUint(trim(msg[1:]), 10, 32)
-				if err != nil {
-					logger.Warn(err)
-					return
-				}
-				expectedArgsCount = uint32(expectedLine)
-				receivedCount = 0
-				processing = true
-				args = make([][]byte, expectedLine)
-			} else {
-				logger.Warn("msg should start with '*'")
-				return
-			}
-		} else {
-			// receive following part of a request
-			line := msg[0 : len(msg)-2]
-			if line[0] == '$' {
-				fixedLen, err = strconv.ParseInt(trim(line[1:]), 10, 64)
-				if err != nil {
-					logger.Warn(err)
-					return
-				}
-				if fixedLen <= 0 {
-					logger.Warn("invalid multibulk length")
-					return
-				}
-			} else {
-				args[receivedCount] = line
-				receivedCount++
-			}
-
-			// if sending finished
-			if receivedCount == expectedArgsCount {
-				processing = false
-
-				cmd := strings.ToLower(string(args[0]))
-				cmdFunc, ok := router[cmd]
-				if ok {
-					cmdFunc(db, args[1:])
-				}
-
-				// finish
-				expectedArgsCount = 0
-				receivedCount = 0
-				args = nil
-			}
+		cmd := strings.ToLower(string(r.Args[0]))
+		cmdFunc, ok := router[cmd]
+		if ok {
+			cmdFunc(db, r.Args[1:])
 		}
 	}
 }

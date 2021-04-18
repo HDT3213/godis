@@ -1,7 +1,6 @@
 package server
 
 import (
-	"github.com/hdt3213/godis/src/lib/sync/atomic"
 	"github.com/hdt3213/godis/src/lib/sync/wait"
 	"net"
 	"sync"
@@ -14,15 +13,6 @@ type Client struct {
 
 	// waiting util reply finished
 	waitingReply wait.Wait
-
-	// is sending request in progress
-	uploading atomic.AtomicBool
-	// multi bulk msg lineCount - 1(first line)
-	expectedArgsCount uint32
-	// sent line count, exclude first line
-	receivedCount uint32
-	// sent lines, exclude first line
-	args [][]byte
 
 	// lock while server sending response
 	mu sync.Mutex
