@@ -36,6 +36,7 @@ func (db *DB) getOrInitDict(key string) (dict Dict.Dict, inited bool, errReply r
 	return dict, inited, nil
 }
 
+// HSet sets field in hash table
 func HSet(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 3 {
@@ -60,6 +61,7 @@ func HSet(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(result))
 }
 
+// HSetNX sets field in hash table only if field not exists
 func HSetNX(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 3 {
@@ -85,6 +87,7 @@ func HSetNX(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(result))
 }
 
+// HGet gets field value of hash table
 func HGet(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 2 {
@@ -110,6 +113,7 @@ func HGet(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeBulkReply(value)
 }
 
+// HExists checks if a hash field exists
 func HExists(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 2 {
@@ -134,6 +138,7 @@ func HExists(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(0)
 }
 
+// HDel deletes a hash field
 func HDel(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) < 2 {
@@ -173,6 +178,7 @@ func HDel(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(deleted))
 }
 
+// HLen gets number of fields in hash table
 func HLen(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 1 {
@@ -190,6 +196,7 @@ func HLen(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(dict.Len()))
 }
 
+// HMSet sets multi fields in hash table
 func HMSet(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) < 3 || len(args)%2 != 1 {
@@ -205,8 +212,8 @@ func HMSet(db *DB, args [][]byte) redis.Reply {
 	}
 
 	// lock key
-	db.Locker.Lock(key)
-	defer db.Locker.UnLock(key)
+	db.locker.Lock(key)
+	defer db.locker.UnLock(key)
 
 	// get or init entity
 	dict, _, errReply := db.getOrInitDict(key)
@@ -223,6 +230,7 @@ func HMSet(db *DB, args [][]byte) redis.Reply {
 	return &reply.OkReply{}
 }
 
+// HMGet gets multi fields in hash table
 func HMGet(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'hmget' command")
@@ -259,6 +267,7 @@ func HMGet(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(result)
 }
 
+// HKeys gets all field names in hash table
 func HKeys(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'hkeys' command")
@@ -286,6 +295,7 @@ func HKeys(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(fields[:i])
 }
 
+// HVals gets all field value in hash table
 func HVals(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'hvals' command")
@@ -314,6 +324,7 @@ func HVals(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(values[:i])
 }
 
+// HGetAll gets all key-value entries in hash table
 func HGetAll(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'hgetAll' command")
@@ -345,6 +356,7 @@ func HGetAll(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(result[:i])
 }
 
+// HIncrBy increments the integer value of a hash field by the given number
 func HIncrBy(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 3 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'hincrby' command")
@@ -357,8 +369,8 @@ func HIncrBy(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply("ERR value is not an integer or out of range")
 	}
 
-	db.Locker.Lock(key)
-	defer db.Locker.UnLock(key)
+	db.locker.Lock(key)
+	defer db.locker.UnLock(key)
 
 	dict, _, errReply := db.getOrInitDict(key)
 	if errReply != nil {
@@ -370,19 +382,19 @@ func HIncrBy(db *DB, args [][]byte) redis.Reply {
 		dict.Put(field, args[2])
 		db.AddAof(makeAofCmd("hincrby", args))
 		return reply.MakeBulkReply(args[2])
-	} else {
-		val, err := strconv.ParseInt(string(value.([]byte)), 10, 64)
-		if err != nil {
-			return reply.MakeErrReply("ERR hash value is not an integer")
-		}
-		val += delta
-		bytes := []byte(strconv.FormatInt(val, 10))
-		dict.Put(field, bytes)
-		db.AddAof(makeAofCmd("hincrby", args))
-		return reply.MakeBulkReply(bytes)
 	}
+	val, err := strconv.ParseInt(string(value.([]byte)), 10, 64)
+	if err != nil {
+		return reply.MakeErrReply("ERR hash value is not an integer")
+	}
+	val += delta
+	bytes := []byte(strconv.FormatInt(val, 10))
+	dict.Put(field, bytes)
+	db.AddAof(makeAofCmd("hincrby", args))
+	return reply.MakeBulkReply(bytes)
 }
 
+// HIncrByFloat increments the float value of a hash field by the given number
 func HIncrByFloat(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 3 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'hincrbyfloat' command")
@@ -408,15 +420,14 @@ func HIncrByFloat(db *DB, args [][]byte) redis.Reply {
 	if !exists {
 		dict.Put(field, args[2])
 		return reply.MakeBulkReply(args[2])
-	} else {
-		val, err := decimal.NewFromString(string(value.([]byte)))
-		if err != nil {
-			return reply.MakeErrReply("ERR hash value is not a float")
-		}
-		result := val.Add(delta)
-		resultBytes := []byte(result.String())
-		dict.Put(field, resultBytes)
-		db.AddAof(makeAofCmd("hincrbyfloat", args))
-		return reply.MakeBulkReply(resultBytes)
 	}
+	val, err := decimal.NewFromString(string(value.([]byte)))
+	if err != nil {
+		return reply.MakeErrReply("ERR hash value is not a float")
+	}
+	result := val.Add(delta)
+	resultBytes := []byte(result.String())
+	dict.Put(field, resultBytes)
+	db.AddAof(makeAofCmd("hincrbyfloat", args))
+	return reply.MakeBulkReply(resultBytes)
 }

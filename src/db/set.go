@@ -35,6 +35,7 @@ func (db *DB) getOrInitSet(key string) (set *HashSet.Set, inited bool, errReply 
 	return set, inited, nil
 }
 
+// SAdd adds members into set
 func SAdd(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'sadd' command")
@@ -59,6 +60,7 @@ func SAdd(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(counter))
 }
 
+// SIsMember checks if the given value is member of set
 func SIsMember(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'sismember' command")
@@ -78,11 +80,11 @@ func SIsMember(db *DB, args [][]byte) redis.Reply {
 	has := set.Has(member)
 	if has {
 		return reply.MakeIntReply(1)
-	} else {
-		return reply.MakeIntReply(0)
 	}
+	return reply.MakeIntReply(0)
 }
 
+// SRem removes a member from set
 func SRem(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'srem' command")
@@ -114,6 +116,7 @@ func SRem(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(counter))
 }
 
+// SCard gets the number of members in a set
 func SCard(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'scard' command")
@@ -131,6 +134,7 @@ func SCard(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(set.Len()))
 }
 
+// SMembers gets all members in a set
 func SMembers(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'smembers' command")
@@ -138,8 +142,8 @@ func SMembers(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 
 	// lock
-	db.Locker.RLock(key)
-	defer db.Locker.RUnLock(key)
+	db.locker.RLock(key)
+	defer db.locker.RUnLock(key)
 
 	// get or init entity
 	set, errReply := db.getAsSet(key)
@@ -160,6 +164,7 @@ func SMembers(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(arr)
 }
 
+// SInter intersect multiple sets
 func SInter(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'sinter' command")
@@ -170,8 +175,8 @@ func SInter(db *DB, args [][]byte) redis.Reply {
 	}
 
 	// lock
-	db.Locker.RLocks(keys...)
-	defer db.Locker.RUnLocks(keys...)
+	db.locker.RLocks(keys...)
+	defer db.locker.RUnLocks(keys...)
 
 	var result *HashSet.Set
 	for _, key := range keys {
@@ -205,6 +210,7 @@ func SInter(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(arr)
 }
 
+// SInterStore intersects multiple sets and store the result in a key
 func SInterStore(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'sinterstore' command")
@@ -254,6 +260,7 @@ func SInterStore(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(set.Len()))
 }
 
+// SUnion adds multiple sets
 func SUnion(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'sunion' command")
@@ -299,6 +306,7 @@ func SUnion(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(arr)
 }
 
+// SUnionStore adds multiple sets and store the result in a key
 func SUnionStore(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'sunionstore' command")
@@ -348,6 +356,7 @@ func SUnionStore(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(set.Len()))
 }
 
+// SDiff subtracts multiple sets
 func SDiff(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'sdiff' command")
@@ -371,9 +380,8 @@ func SDiff(db *DB, args [][]byte) redis.Reply {
 			if i == 0 {
 				// early termination
 				return &reply.EmptyMultiBulkReply{}
-			} else {
-				continue
 			}
+			continue
 		}
 		if result == nil {
 			// init
@@ -401,6 +409,7 @@ func SDiff(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(arr)
 }
 
+// SDiffStore subtracts multiple sets and store the result in a key
 func SDiffStore(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'sdiffstore' command")
@@ -416,7 +425,7 @@ func SDiffStore(db *DB, args [][]byte) redis.Reply {
 	db.RLocks(keys...)
 	defer db.RUnLocks(keys...)
 	db.Lock(dest)
-	defer db.Locker.UnLock(dest)
+	defer db.locker.UnLock(dest)
 
 	var result *HashSet.Set
 	for i, key := range keys {
@@ -429,9 +438,8 @@ func SDiffStore(db *DB, args [][]byte) redis.Reply {
 				// early termination
 				db.Remove(dest)
 				return &reply.EmptyMultiBulkReply{}
-			} else {
-				continue
 			}
+			continue
 		}
 		if result == nil {
 			// init
@@ -460,6 +468,7 @@ func SDiffStore(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(set.Len()))
 }
 
+// SRandMember gets random members from set
 func SRandMember(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 1 && len(args) != 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'srandmember' command")
@@ -478,32 +487,29 @@ func SRandMember(db *DB, args [][]byte) redis.Reply {
 		return &reply.NullBulkReply{}
 	}
 	if len(args) == 1 {
+		// get a random member
 		members := set.RandomMembers(1)
 		return reply.MakeBulkReply([]byte(members[0]))
-	} else {
-		count64, err := strconv.ParseInt(string(args[1]), 10, 64)
-		if err != nil {
-			return reply.MakeErrReply("ERR value is not an integer or out of range")
-		}
-		count := int(count64)
-
-		if count > 0 {
-			members := set.RandomDistinctMembers(count)
-
-			result := make([][]byte, len(members))
-			for i, v := range members {
-				result[i] = []byte(v)
-			}
-			return reply.MakeMultiBulkReply(result)
-		} else if count < 0 {
-			members := set.RandomMembers(-count)
-			result := make([][]byte, len(members))
-			for i, v := range members {
-				result[i] = []byte(v)
-			}
-			return reply.MakeMultiBulkReply(result)
-		} else {
-			return &reply.EmptyMultiBulkReply{}
-		}
 	}
+	count64, err := strconv.ParseInt(string(args[1]), 10, 64)
+	if err != nil {
+		return reply.MakeErrReply("ERR value is not an integer or out of range")
+	}
+	count := int(count64)
+	if count > 0 {
+		members := set.RandomDistinctMembers(count)
+		result := make([][]byte, len(members))
+		for i, v := range members {
+			result[i] = []byte(v)
+		}
+		return reply.MakeMultiBulkReply(result)
+	} else if count < 0 {
+		members := set.RandomMembers(-count)
+		result := make([][]byte, len(members))
+		for i, v := range members {
+			result[i] = []byte(v)
+		}
+		return reply.MakeMultiBulkReply(result)
+	}
+	return &reply.EmptyMultiBulkReply{}
 }

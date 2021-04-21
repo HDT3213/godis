@@ -36,7 +36,7 @@ func makeAofCmd(cmd string, args [][]byte) *reply.MultiBulkReply {
 	return reply.MakeMultiBulkReply(params)
 }
 
-// send command to aof
+// AddAof send command to aof goroutine through channel
 func (db *DB) AddAof(args *reply.MultiBulkReply) {
 	// aofChan == nil when loadAof
 	if config.Properties.AppendOnly && db.aofChan != nil {
@@ -44,14 +44,14 @@ func (db *DB) AddAof(args *reply.MultiBulkReply) {
 	}
 }
 
-// listen aof channel and write into file
+// handleAof listen aof channel and write into file
 func (db *DB) handleAof() {
 	for cmd := range db.aofChan {
 		// todo: use switch and channels instead of mutex
 		db.pausingAof.RLock() // prevent other goroutines from pausing aof
-		if db.aofRewriteChan != nil {
+		if db.aofRewriteBuffer != nil {
 			// replica during rewrite
-			db.aofRewriteChan <- cmd
+			db.aofRewriteBuffer <- cmd
 		}
 		_, err := db.aofFile.Write(cmd.ToBytes())
 		if err != nil {
@@ -62,19 +62,7 @@ func (db *DB) handleAof() {
 	db.aofFinished <- struct{}{}
 }
 
-func trim(msg []byte) string {
-	trimmed := ""
-	for i := len(msg) - 1; i >= 0; i-- {
-		if msg[i] == '\r' || msg[i] == '\n' {
-			continue
-		}
-		return string(msg[:i+1])
-	}
-	return trimmed
-}
-
-
-// read aof file
+// loadAof read aof file
 func (db *DB) loadAof(maxBytes int) {
 	// delete aofChan to prevent write again
 	aofChan := db.aofChan
@@ -130,17 +118,16 @@ func (db *DB) aofRewrite() {
 
 	// load aof file
 	tmpDB := &DB{
-		Data:     dict.MakeSimple(),
-		TTLMap:   dict.MakeSimple(),
-		Locker:   lock.Make(lockerSize),
-		interval: 5 * time.Second,
+		data:   dict.MakeSimple(),
+		ttlMap: dict.MakeSimple(),
+		locker: lock.Make(lockerSize),
 
 		aofFilename: db.aofFilename,
 	}
 	tmpDB.loadAof(int(fileSize))
 
 	// rewrite aof file
-	tmpDB.Data.ForEach(func(key string, raw interface{}) bool {
+	tmpDB.data.ForEach(func(key string, raw interface{}) bool {
 		entity, _ := raw.(*DataEntity)
 		cmd := EntityToCmd(key, entity)
 		if cmd != nil {
@@ -148,7 +135,7 @@ func (db *DB) aofRewrite() {
 		}
 		return true
 	})
-	tmpDB.TTLMap.ForEach(func(key string, raw interface{}) bool {
+	tmpDB.ttlMap.ForEach(func(key string, raw interface{}) bool {
 		expireTime, _ := raw.(time.Time)
 		cmd := makeExpireCmd(key, expireTime)
 		if cmd != nil {
@@ -233,7 +220,7 @@ func zSetToCmd(key string, zset *SortedSet.SortedSet) *reply.MultiBulkReply {
 	return reply.MakeMultiBulkReply(args)
 }
 
-// serialize data entity to redis command
+// EntityToCmd serialize data entity to redis command
 func EntityToCmd(key string, entity *DataEntity) *reply.MultiBulkReply {
 	if entity == nil {
 		return nil
@@ -264,7 +251,7 @@ func (db *DB) startRewrite() (*os.File, int64, error) {
 		return nil, 0, err
 	}
 	// create rewrite channel
-	db.aofRewriteChan = make(chan *reply.MultiBulkReply, aofQueueSize)
+	db.aofRewriteBuffer = make(chan *reply.MultiBulkReply, aofQueueSize)
 
 	// get current aof file size
 	fileInfo, _ := os.Stat(db.aofFilename)
@@ -286,9 +273,9 @@ func (db *DB) finishRewrite(tmpFile *os.File) {
 	// write commands created during rewriting to tmp file
 loop:
 	for {
-		// aof is pausing, there won't be any new commands in aofRewriteChan
+		// aof is pausing, there won't be any new commands in aofRewriteBuffer
 		select {
-		case cmd := <-db.aofRewriteChan:
+		case cmd := <-db.aofRewriteBuffer:
 			_, err := tmpFile.Write(cmd.ToBytes())
 			if err != nil {
 				logger.Warn(err)
@@ -298,8 +285,8 @@ loop:
 			break loop
 		}
 	}
-	close(db.aofRewriteChan)
-	db.aofRewriteChan = nil
+	close(db.aofRewriteBuffer)
+	db.aofRewriteBuffer = nil
 
 	// replace current aof file by tmp file
 	_ = db.aofFile.Close()

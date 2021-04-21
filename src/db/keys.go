@@ -12,6 +12,7 @@ import (
 	"time"
 )
 
+// Del removes a key from db
 func Del(db *DB, args [][]byte) redis.Reply {
 	if len(args) == 0 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'del' command")
@@ -31,6 +32,7 @@ func Del(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(deleted))
 }
 
+// Exists checks if a is existed in db
 func Exists(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'exists' command")
@@ -39,11 +41,11 @@ func Exists(db *DB, args [][]byte) redis.Reply {
 	_, exists := db.Get(key)
 	if exists {
 		return reply.MakeIntReply(1)
-	} else {
-		return reply.MakeIntReply(0)
 	}
+	return reply.MakeIntReply(0)
 }
 
+// FlushDB removes all data in current db
 func FlushDB(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 0 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'flushdb' command")
@@ -53,6 +55,7 @@ func FlushDB(db *DB, args [][]byte) redis.Reply {
 	return &reply.OkReply{}
 }
 
+// FlushAll removes all data in all db
 func FlushAll(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 0 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'flushall' command")
@@ -62,6 +65,7 @@ func FlushAll(db *DB, args [][]byte) redis.Reply {
 	return &reply.OkReply{}
 }
 
+// Type returns the type of entity, including: string, list, hash, set and zset
 func Type(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'type' command")
@@ -86,6 +90,7 @@ func Type(db *DB, args [][]byte) redis.Reply {
 	return &reply.UnknownErrReply{}
 }
 
+// Rename a key
 func Rename(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'rename' command")
@@ -100,7 +105,7 @@ func Rename(db *DB, args [][]byte) redis.Reply {
 	if !ok {
 		return reply.MakeErrReply("no such key")
 	}
-	rawTTL, hasTTL := db.TTLMap.Get(src)
+	rawTTL, hasTTL := db.ttlMap.Get(src)
 	db.Put(dest, entity)
 	db.Remove(src)
 	if hasTTL {
@@ -113,6 +118,7 @@ func Rename(db *DB, args [][]byte) redis.Reply {
 	return &reply.OkReply{}
 }
 
+// RenameNx a key, only if the new key does not exist
 func RenameNx(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'renamenx' command")
@@ -132,7 +138,7 @@ func RenameNx(db *DB, args [][]byte) redis.Reply {
 	if !ok {
 		return reply.MakeErrReply("no such key")
 	}
-	rawTTL, hasTTL := db.TTLMap.Get(src)
+	rawTTL, hasTTL := db.ttlMap.Get(src)
 	db.Removes(src, dest) // clean src and dest with their ttl
 	db.Put(dest, entity)
 	if hasTTL {
@@ -145,6 +151,7 @@ func RenameNx(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(1)
 }
 
+// Expire sets a key's time to live in seconds
 func Expire(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'expire' command")
@@ -168,6 +175,7 @@ func Expire(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(1)
 }
 
+// ExpireAt sets a key's expiration in unix timestamp
 func ExpireAt(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'expireat' command")
@@ -190,6 +198,7 @@ func ExpireAt(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(1)
 }
 
+// PExpire sets a key's time to live in milliseconds
 func PExpire(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'pexpire' command")
@@ -213,6 +222,7 @@ func PExpire(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(1)
 }
 
+// PExpireAt sets a key's expiration in unix timestamp specified in milliseconds
 func PExpireAt(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'pexpireat' command")
@@ -236,6 +246,7 @@ func PExpireAt(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(1)
 }
 
+// TTL returns a key's time to live in seconds
 func TTL(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'ttl' command")
@@ -246,7 +257,7 @@ func TTL(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeIntReply(-2)
 	}
 
-	raw, exists := db.TTLMap.Get(key)
+	raw, exists := db.ttlMap.Get(key)
 	if !exists {
 		return reply.MakeIntReply(-1)
 	}
@@ -255,6 +266,7 @@ func TTL(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(ttl / time.Second))
 }
 
+// PTTL returns a key's time to live in milliseconds
 func PTTL(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'pttl' command")
@@ -265,7 +277,7 @@ func PTTL(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeIntReply(-2)
 	}
 
-	raw, exists := db.TTLMap.Get(key)
+	raw, exists := db.ttlMap.Get(key)
 	if !exists {
 		return reply.MakeIntReply(-1)
 	}
@@ -274,6 +286,7 @@ func PTTL(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(ttl / time.Millisecond))
 }
 
+// Persist removes expiration from a key
 func Persist(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'persist' command")
@@ -284,7 +297,7 @@ func Persist(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeIntReply(0)
 	}
 
-	_, exists = db.TTLMap.Get(key)
+	_, exists = db.ttlMap.Get(key)
 	if !exists {
 		return reply.MakeIntReply(0)
 	}
@@ -294,6 +307,7 @@ func Persist(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(1)
 }
 
+// BGRewriteAOF asynchronously rewrites Append-Only-File
 func BGRewriteAOF(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 0 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'bgrewriteaof' command")
@@ -302,13 +316,14 @@ func BGRewriteAOF(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeStatusReply("Background append only file rewriting started")
 }
 
+// Keys returns all keys matching the given pattern
 func Keys(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'keys' command")
 	}
 	pattern := wildcard.CompilePattern(string(args[0]))
 	result := make([][]byte, 0)
-	db.Data.ForEach(func(key string, val interface{}) bool {
+	db.data.ForEach(func(key string, val interface{}) bool {
 		if pattern.IsMatch(key) {
 			result = append(result, []byte(key))
 		}

@@ -10,6 +10,7 @@ import (
 	"strings"
 )
 
+// GeoAdd add a location into SortedSet
 func GeoAdd(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 4 || len(args)%3 != 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'geoadd' command")
@@ -17,7 +18,7 @@ func GeoAdd(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	size := (len(args) - 1) / 3
 	elements := make([]*sortedset.Element, size)
-	for i := 0; i < size; i += 1 {
+	for i := 0; i < size; i++ {
 		lngStr := string(args[3*i+1])
 		latStr := string(args[3*i+2])
 		lng, err := strconv.ParseFloat(lngStr, 64)
@@ -60,6 +61,7 @@ func GeoAdd(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(i))
 }
 
+// GeoPos returns location of a member
 func GeoPos(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) < 1 {
@@ -92,6 +94,7 @@ func GeoPos(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiRawReply(positions)
 }
 
+// GeoDist returns the distance between two locations
 func GeoDist(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 3 && len(args) != 4 {
@@ -132,6 +135,7 @@ func GeoDist(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeErrReply("ERR unsupported unit provided. please use m, km")
 }
 
+// GeoHash return geo-hash-code of given position
 func GeoHash(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) < 1 {
@@ -161,6 +165,7 @@ func GeoHash(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(strs)
 }
 
+// GeoRadius returns members within max distance of given point
 func GeoRadius(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) < 5 {
@@ -198,6 +203,7 @@ func GeoRadius(db *DB, args [][]byte) redis.Reply {
 	return geoRadius0(sortedSet, lat, lng, radius)
 }
 
+// GeoRadiusByMember returns members within max distance of given member's location
 func GeoRadiusByMember(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) < 3 {

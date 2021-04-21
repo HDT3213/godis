@@ -21,6 +21,7 @@ func (db *DB) getAsString(key string) ([]byte, reply.ErrorReply) {
 	return bytes, nil
 }
 
+// Get returns string value bound to the given key
 func Get(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'get' command")
@@ -44,7 +45,7 @@ const (
 
 const unlimitedTTL int64 = 0
 
-// SET key value [EX seconds] [PX milliseconds] [NX|XX]
+// Set sets string value and time to live to the given key
 func Set(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'set' command")
@@ -144,11 +145,11 @@ func Set(db *DB, args [][]byte) redis.Reply {
 
 	if policy == upsertPolicy || result > 0 {
 		return &reply.OkReply{}
-	} else {
-		return &reply.NullBulkReply{}
 	}
+	return &reply.NullBulkReply{}
 }
 
+// SetNX sets string if not exists
 func SetNX(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'setnx' command")
@@ -163,6 +164,7 @@ func SetNX(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(result))
 }
 
+// SetEX sets string and its ttl
 func SetEX(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 3 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'setex' command")
@@ -194,6 +196,7 @@ func SetEX(db *DB, args [][]byte) redis.Reply {
 	return &reply.OkReply{}
 }
 
+// PSetEX set a key's time to live in  milliseconds
 func PSetEX(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 3 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'setex' command")
@@ -225,6 +228,7 @@ func PSetEX(db *DB, args [][]byte) redis.Reply {
 	return &reply.OkReply{}
 }
 
+// MSet sets multi key-value in database
 func MSet(db *DB, args [][]byte) redis.Reply {
 	if len(args)%2 != 0 || len(args) == 0 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'mset' command")
@@ -249,6 +253,7 @@ func MSet(db *DB, args [][]byte) redis.Reply {
 	return &reply.OkReply{}
 }
 
+// MGet get multi key-value from database
 func MGet(db *DB, args [][]byte) redis.Reply {
 	if len(args) == 0 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'mget' command")
@@ -276,6 +281,7 @@ func MGet(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(result)
 }
 
+// MSetNX sets multi key-value in database, only if none of the given keys exist
 func MSetNX(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args)%2 != 0 || len(args) == 0 {
@@ -308,6 +314,7 @@ func MSetNX(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(1)
 }
 
+// GetSet sets value of a string-type key and returns its old value
 func GetSet(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'getset' command")
@@ -329,6 +336,7 @@ func GetSet(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeBulkReply(old)
 }
 
+// Incr increments the integer value of a key by one
 func Incr(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'incr' command")
@@ -352,15 +360,15 @@ func Incr(db *DB, args [][]byte) redis.Reply {
 		})
 		db.AddAof(makeAofCmd("incr", args))
 		return reply.MakeIntReply(val + 1)
-	} else {
-		db.Put(key, &DataEntity{
-			Data: []byte("1"),
-		})
-		db.AddAof(makeAofCmd("incr", args))
-		return reply.MakeIntReply(1)
 	}
+	db.Put(key, &DataEntity{
+		Data: []byte("1"),
+	})
+	db.AddAof(makeAofCmd("incr", args))
+	return reply.MakeIntReply(1)
 }
 
+// IncrBy increments the integer value of a key by given value
 func IncrBy(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'incrby' command")
@@ -380,6 +388,7 @@ func IncrBy(db *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if bytes != nil {
+		// existed value
 		val, err := strconv.ParseInt(string(bytes), 10, 64)
 		if err != nil {
 			return reply.MakeErrReply("ERR value is not an integer or out of range")
@@ -389,15 +398,15 @@ func IncrBy(db *DB, args [][]byte) redis.Reply {
 		})
 		db.AddAof(makeAofCmd("incrby", args))
 		return reply.MakeIntReply(val + delta)
-	} else {
-		db.Put(key, &DataEntity{
-			Data: args[1],
-		})
-		db.AddAof(makeAofCmd("incrby", args))
-		return reply.MakeIntReply(delta)
 	}
+	db.Put(key, &DataEntity{
+		Data: args[1],
+	})
+	db.AddAof(makeAofCmd("incrby", args))
+	return reply.MakeIntReply(delta)
 }
 
+// IncrByFloat increments the float value of a key by given value
 func IncrByFloat(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'incrbyfloat' command")
@@ -427,15 +436,15 @@ func IncrByFloat(db *DB, args [][]byte) redis.Reply {
 		})
 		db.AddAof(makeAofCmd("incrbyfloat", args))
 		return reply.MakeBulkReply(resultBytes)
-	} else {
-		db.Put(key, &DataEntity{
-			Data: args[1],
-		})
-		db.AddAof(makeAofCmd("incrbyfloat", args))
-		return reply.MakeBulkReply(args[1])
 	}
+	db.Put(key, &DataEntity{
+		Data: args[1],
+	})
+	db.AddAof(makeAofCmd("incrbyfloat", args))
+	return reply.MakeBulkReply(args[1])
 }
 
+// Decr decrements the integer value of a key by one
 func Decr(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'decr' command")
@@ -459,16 +468,16 @@ func Decr(db *DB, args [][]byte) redis.Reply {
 		})
 		db.AddAof(makeAofCmd("decr", args))
 		return reply.MakeIntReply(val - 1)
-	} else {
-		entity := &DataEntity{
-			Data: []byte("-1"),
-		}
-		db.Put(key, entity)
-		db.AddAof(makeAofCmd("decr", args))
-		return reply.MakeIntReply(-1)
 	}
+	entity := &DataEntity{
+		Data: []byte("-1"),
+	}
+	db.Put(key, entity)
+	db.AddAof(makeAofCmd("decr", args))
+	return reply.MakeIntReply(-1)
 }
 
+// DecrBy decrements the integer value of a key by onedecrement
 func DecrBy(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'decrby' command")
@@ -497,12 +506,11 @@ func DecrBy(db *DB, args [][]byte) redis.Reply {
 		})
 		db.AddAof(makeAofCmd("decrby", args))
 		return reply.MakeIntReply(val - delta)
-	} else {
-		valueStr := strconv.FormatInt(-delta, 10)
-		db.Put(key, &DataEntity{
-			Data: []byte(valueStr),
-		})
-		db.AddAof(makeAofCmd("decrby", args))
-		return reply.MakeIntReply(-delta)
 	}
+	valueStr := strconv.FormatInt(-delta, 10)
+	db.Put(key, &DataEntity{
+		Data: []byte(valueStr),
+	})
+	db.AddAof(makeAofCmd("decrby", args))
+	return reply.MakeIntReply(-delta)
 }

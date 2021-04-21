@@ -4,15 +4,13 @@ import (
 	"github.com/hdt3213/godis/src/datastruct/dict"
 	"github.com/hdt3213/godis/src/datastruct/lock"
 	"math/rand"
-	"time"
 )
 
 func makeTestDB() *DB {
 	return &DB{
-		Data:     dict.MakeConcurrent(1),
-		TTLMap:   dict.MakeConcurrent(ttlDictSize),
-		Locker:   lock.Make(lockerSize),
-		interval: 5 * time.Second,
+		data:   dict.MakeConcurrent(1),
+		ttlMap: dict.MakeConcurrent(ttlDictSize),
+		locker: lock.Make(lockerSize),
 	}
 }
 

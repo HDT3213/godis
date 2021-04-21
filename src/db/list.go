@@ -19,22 +19,23 @@ func (db *DB) getAsList(key string) (*List.LinkedList, reply.ErrorReply) {
 	return bytes, nil
 }
 
-func (db *DB) getOrInitList(key string) (list *List.LinkedList, inited bool, errReply reply.ErrorReply) {
+func (db *DB) getOrInitList(key string) (list *List.LinkedList, isNew bool, errReply reply.ErrorReply) {
 	list, errReply = db.getAsList(key)
 	if errReply != nil {
 		return nil, false, errReply
 	}
-	inited = false
+	isNew = false
 	if list == nil {
 		list = &List.LinkedList{}
 		db.Put(key, &DataEntity{
 			Data: list,
 		})
-		inited = true
+		isNew = true
 	}
-	return list, inited, nil
+	return list, isNew, nil
 }
 
+// LIndex gets element of list at given list
 func LIndex(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 2 {
@@ -69,6 +70,7 @@ func LIndex(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeBulkReply(val)
 }
 
+// LLen gets length of list
 func LLen(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 1 {
@@ -88,6 +90,7 @@ func LLen(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(size)
 }
 
+// LPop removes the first element of list, and return it
 func LPop(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 1 {
@@ -116,6 +119,7 @@ func LPop(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeBulkReply(val)
 }
 
+// LPush inserts element at head of list
 func LPush(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'lpush' command")
@@ -124,8 +128,8 @@ func LPush(db *DB, args [][]byte) redis.Reply {
 	values := args[1:]
 
 	// lock
-	db.Locker.Lock(key)
-	defer db.Locker.UnLock(key)
+	db.locker.Lock(key)
+	defer db.locker.UnLock(key)
 
 	// get or init entity
 	list, _, errReply := db.getOrInitList(key)
@@ -142,6 +146,7 @@ func LPush(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(list.Len()))
 }
 
+// LPushX inserts element at head of list, only if list exists
 func LPushX(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'lpushx' command")
@@ -150,8 +155,8 @@ func LPushX(db *DB, args [][]byte) redis.Reply {
 	values := args[1:]
 
 	// lock
-	db.Locker.Lock(key)
-	defer db.Locker.UnLock(key)
+	db.locker.Lock(key)
+	defer db.locker.UnLock(key)
 
 	// get or init entity
 	list, errReply := db.getAsList(key)
@@ -170,6 +175,7 @@ func LPushX(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(list.Len()))
 }
 
+// LRange gets elements of list in given range
 func LRange(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 3 {
@@ -232,6 +238,7 @@ func LRange(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(result)
 }
 
+// LRem removes element of list at specified index
 func LRem(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 3 {
@@ -277,6 +284,7 @@ func LRem(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(removed))
 }
 
+// LSet puts element at specified index of list
 func LSet(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 3 {
@@ -291,8 +299,8 @@ func LSet(db *DB, args [][]byte) redis.Reply {
 	value := args[2]
 
 	// lock
-	db.Locker.Lock(key)
-	defer db.Locker.UnLock(key)
+	db.locker.Lock(key)
+	defer db.locker.UnLock(key)
 
 	// get data
 	list, errReply := db.getAsList(key)
@@ -317,6 +325,7 @@ func LSet(db *DB, args [][]byte) redis.Reply {
 	return &reply.OkReply{}
 }
 
+// RPop removes last element of list then return it
 func RPop(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 1 {
@@ -345,6 +354,7 @@ func RPop(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeBulkReply(val)
 }
 
+// RPopLPush pops last element of list-A then insert it to the head of list-B
 func RPopLPush(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'rpoplpush' command")
@@ -383,6 +393,7 @@ func RPopLPush(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeBulkReply(val)
 }
 
+// RPush inserts element at last of list
 func RPush(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) < 2 {
@@ -409,6 +420,7 @@ func RPush(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(list.Len()))
 }
 
+// RPushX inserts element at last of list only if list exists
 func RPushX(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'rpush' command")

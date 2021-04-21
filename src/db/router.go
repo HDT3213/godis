@@ -1,7 +1,7 @@
 package db
 
-func MakeRouter() map[string]CmdFunc {
-	routerMap := make(map[string]CmdFunc)
+func makeRouter() map[string]cmdFunc {
+	routerMap := make(map[string]cmdFunc)
 	routerMap["ping"] = Ping
 
 	routerMap["del"] = Del

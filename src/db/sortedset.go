@@ -36,6 +36,7 @@ func (db *DB) getOrInitSortedSet(key string) (sortedSet *SortedSet.SortedSet, in
 	return sortedSet, inited, nil
 }
 
+// ZAdd adds member into sorted set
 func ZAdd(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 3 || len(args)%2 != 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'zadd' command")
@@ -78,6 +79,7 @@ func ZAdd(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(i))
 }
 
+// ZScore gets score of a member in sortedset
 func ZScore(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 2 {
@@ -102,6 +104,7 @@ func ZScore(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeBulkReply([]byte(value))
 }
 
+// ZRank gets index of a member in sortedset, ascending order, start from 0
 func ZRank(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 2 {
@@ -126,6 +129,7 @@ func ZRank(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(rank)
 }
 
+// ZRevRank gets index of a member in sortedset, descending order, start from 0
 func ZRevRank(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 2 {
@@ -150,6 +154,7 @@ func ZRevRank(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(rank)
 }
 
+// ZCard gets number of members in sortedset
 func ZCard(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 1 {
@@ -169,6 +174,7 @@ func ZCard(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(sortedSet.Len()))
 }
 
+// ZRange gets members in range, sort by score in ascending order
 func ZRange(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 3 && len(args) != 4 {
@@ -178,9 +184,8 @@ func ZRange(db *DB, args [][]byte) redis.Reply {
 	if len(args) == 4 {
 		if strings.ToUpper(string(args[3])) != "WITHSCORES" {
 			return reply.MakeErrReply("syntax error")
-		} else {
-			withScores = true
 		}
+		withScores = true
 	}
 	key := string(args[0])
 	start, err := strconv.ParseInt(string(args[1]), 10, 64)
@@ -194,6 +199,7 @@ func ZRange(db *DB, args [][]byte) redis.Reply {
 	return range0(db, key, start, stop, withScores, false)
 }
 
+// ZRevRange gets members in range, sort by score in descending order
 func ZRevRange(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 3 && len(args) != 4 {
@@ -203,9 +209,8 @@ func ZRevRange(db *DB, args [][]byte) redis.Reply {
 	if len(args) == 4 {
 		if string(args[3]) != "WITHSCORES" {
 			return reply.MakeErrReply("syntax error")
-		} else {
-			withScores = true
 		}
+		withScores = true
 	}
 	key := string(args[0])
 	start, err := strconv.ParseInt(string(args[1]), 10, 64)
@@ -221,8 +226,8 @@ func ZRevRange(db *DB, args [][]byte) redis.Reply {
 
 func range0(db *DB, key string, start int64, stop int64, withScores bool, desc bool) redis.Reply {
 	// lock key
-	db.Locker.RLock(key)
-	defer db.Locker.RUnLock(key)
+	db.locker.RLock(key)
+	defer db.locker.RUnLock(key)
 
 	// get data
 	sortedSet, errReply := db.getAsSortedSet(key)
@@ -268,17 +273,17 @@ func range0(db *DB, key string, start int64, stop int64, withScores bool, desc b
 			i++
 		}
 		return reply.MakeMultiBulkReply(result)
-	} else {
-		result := make([][]byte, len(slice))
-		i := 0
-		for _, element := range slice {
-			result[i] = []byte(element.Member)
-			i++
-		}
-		return reply.MakeMultiBulkReply(result)
 	}
+	result := make([][]byte, len(slice))
+	i := 0
+	for _, element := range slice {
+		result[i] = []byte(element.Member)
+		i++
+	}
+	return reply.MakeMultiBulkReply(result)
 }
 
+// ZCount gets number of members which score within given range
 func ZCount(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 3 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'zcount' command")
@@ -295,8 +300,8 @@ func ZCount(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply(err.Error())
 	}
 
-	db.Locker.RLock(key)
-	defer db.Locker.RUnLock(key)
+	db.locker.RLock(key)
+	defer db.locker.RUnLock(key)
 
 	// get data
 	sortedSet, errReply := db.getAsSortedSet(key)
@@ -315,8 +320,8 @@ func ZCount(db *DB, args [][]byte) redis.Reply {
  */
 func rangeByScore0(db *DB, key string, min *SortedSet.ScoreBorder, max *SortedSet.ScoreBorder, offset int64, limit int64, withScores bool, desc bool) redis.Reply {
 	// lock key
-	db.Locker.RLock(key)
-	defer db.Locker.RUnLock(key)
+	db.locker.RLock(key)
+	defer db.locker.RUnLock(key)
 
 	// get data
 	sortedSet, errReply := db.getAsSortedSet(key)
@@ -339,17 +344,17 @@ func rangeByScore0(db *DB, key string, min *SortedSet.ScoreBorder, max *SortedSe
 			i++
 		}
 		return reply.MakeMultiBulkReply(result)
-	} else {
-		result := make([][]byte, len(slice))
-		i := 0
-		for _, element := range slice {
-			result[i] = []byte(element.Member)
-			i++
-		}
-		return reply.MakeMultiBulkReply(result)
 	}
+	result := make([][]byte, len(slice))
+	i := 0
+	for _, element := range slice {
+		result[i] = []byte(element.Member)
+		i++
+	}
+	return reply.MakeMultiBulkReply(result)
 }
 
+// ZRangeByScore gets members which score within given range, in ascending order
 func ZRangeByScore(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 3 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'zrangebyscore' command")
@@ -396,6 +401,7 @@ func ZRangeByScore(db *DB, args [][]byte) redis.Reply {
 	return rangeByScore0(db, key, min, max, offset, limit, withScores, false)
 }
 
+// ZRevRangeByScore gets number of members which score within given range, in descending order
 func ZRevRangeByScore(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 3 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'zrangebyscore' command")
@@ -442,6 +448,7 @@ func ZRevRangeByScore(db *DB, args [][]byte) redis.Reply {
 	return rangeByScore0(db, key, min, max, offset, limit, withScores, true)
 }
 
+// ZRemRangeByScore removes members which score within given range
 func ZRemRangeByScore(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 3 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'zremrangebyscore' command")
@@ -458,8 +465,8 @@ func ZRemRangeByScore(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply(err.Error())
 	}
 
-	db.Locker.Lock(key)
-	defer db.Locker.UnLock(key)
+	db.locker.Lock(key)
+	defer db.locker.UnLock(key)
 
 	// get data
 	sortedSet, errReply := db.getAsSortedSet(key)
@@ -477,6 +484,7 @@ func ZRemRangeByScore(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(removed)
 }
 
+// ZRemRangeByRank removes members within given indexes
 func ZRemRangeByRank(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 3 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'zremrangebyrank' command")
@@ -491,8 +499,8 @@ func ZRemRangeByRank(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply("ERR value is not an integer or out of range")
 	}
 
-	db.Locker.Lock(key)
-	defer db.Locker.UnLock(key)
+	db.locker.Lock(key)
+	defer db.locker.UnLock(key)
 
 	// get data
 	sortedSet, errReply := db.getAsSortedSet(key)
@@ -533,6 +541,7 @@ func ZRemRangeByRank(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(removed)
 }
 
+// ZRem removes given members
 func ZRem(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) < 2 {
@@ -569,6 +578,7 @@ func ZRem(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(deleted)
 }
 
+// ZIncrBy increments the score of a member
 func ZIncrBy(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 3 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'zincrby' command")
@@ -581,8 +591,8 @@ func ZIncrBy(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply("ERR value is not a valid float")
 	}
 
-	db.Locker.Lock(key)
-	defer db.Locker.UnLock(key)
+	db.locker.Lock(key)
+	defer db.locker.UnLock(key)
 
 	// get or init entity
 	sortedSet, _, errReply := db.getOrInitSortedSet(key)
@@ -595,11 +605,10 @@ func ZIncrBy(db *DB, args [][]byte) redis.Reply {
 		sortedSet.Add(field, delta)
 		db.AddAof(makeAofCmd("zincrby", args))
 		return reply.MakeBulkReply(args[1])
-	} else {
-		score := element.Score + delta
-		sortedSet.Add(field, score)
-		bytes := []byte(strconv.FormatFloat(score, 'f', -1, 64))
-		db.AddAof(makeAofCmd("zincrby", args))
-		return reply.MakeBulkReply(bytes)
 	}
+	score := element.Score + delta
+	sortedSet.Add(field, score)
+	bytes := []byte(strconv.FormatFloat(score, 'f', -1, 64))
+	db.AddAof(makeAofCmd("zincrby", args))
+	return reply.MakeBulkReply(bytes)
 }

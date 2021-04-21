@@ -17,6 +17,7 @@ import (
 	"time"
 )
 
+// DataEntity stores data bound to a key, may be a string, list, hash, set and so on
 type DataEntity struct {
 	Data interface{}
 }
@@ -29,46 +30,44 @@ const (
 )
 
 // args don't include cmd line
-type CmdFunc func(db *DB, args [][]byte) redis.Reply
+type cmdFunc func(db *DB, args [][]byte) redis.Reply
 
+// DB stores data and execute user's commands
 type DB struct {
 	// key -> DataEntity
-	Data dict.Dict
+	data dict.Dict
 	// key -> expireTime (time.Time)
-	TTLMap dict.Dict
-	// channel -> list<*client>
-	SubMap dict.Dict
+	ttlMap dict.Dict
 
-	// dict will ensure thread safety of its method
+	// dict.Dict will ensure concurrent-safety of its method
 	// use this mutex for complicated command only, eg. rpush, incr ...
-	Locker *lock.Locks
-
-	// TimerTask interval
-	interval time.Duration
-
+	locker *lock.Locks
+	// stop all data access for FlushDB
 	stopWorld sync.WaitGroup
-
+	// handle publish/subscribe
 	hub *pubsub.Hub
 
 	// main goroutine send commands to aof goroutine through aofChan
 	aofChan     chan *reply.MultiBulkReply
 	aofFile     *os.File
 	aofFilename string
-	aofFinished chan struct{} // aof goroutine will send msg when aof finished
-
-	aofRewriteChan chan *reply.MultiBulkReply
-	pausingAof     sync.RWMutex
+	// aof goroutine will send msg to main goroutine through this channel when aof tasks finished and ready to shutdown
+	aofFinished chan struct{}
+	// buffer commands received during aof rewrite progress
+	aofRewriteBuffer chan *reply.MultiBulkReply
+	// pause aof for start/finish aof rewrite progress
+	pausingAof sync.RWMutex
 }
 
-var router = MakeRouter()
+var router = makeRouter()
 
+// MakeDB create DB instance and start it
 func MakeDB() *DB {
 	db := &DB{
-		Data:     dict.MakeConcurrent(dataDictSize),
-		TTLMap:   dict.MakeConcurrent(ttlDictSize),
-		Locker:   lock.Make(lockerSize),
-		interval: 5 * time.Second,
-		hub:      pubsub.MakeHub(),
+		data:   dict.MakeConcurrent(dataDictSize),
+		ttlMap: dict.MakeConcurrent(ttlDictSize),
+		locker: lock.Make(lockerSize),
+		hub:    pubsub.MakeHub(),
 	}
 
 	// aof
@@ -87,12 +86,10 @@ func MakeDB() *DB {
 			db.handleAof()
 		}()
 	}
-
-	// start timer
-	db.TimerTask()
 	return db
 }
 
+// Close graceful shutdown database
 func (db *DB) Close() {
 	if db.aofFile != nil {
 		close(db.aofChan)
@@ -104,7 +101,7 @@ func (db *DB) Close() {
 	}
 }
 
-// execute command,
+// Exec execute command
 // parameter `args` is a RESP message including command and its params
 func (db *DB) Exec(c redis.Connection, args [][]byte) (result redis.Reply) {
 	defer func() {
@@ -128,32 +125,29 @@ func (db *DB) Exec(c redis.Connection, args [][]byte) (result redis.Reply) {
 		return pubsub.UnSubscribe(db.hub, c, args[1:])
 	} else if cmd == "bgrewriteaof" {
 		// aof.go imports router.go, router.go cannot import BGRewriteAOF from aof.go
-		reply := BGRewriteAOF(db, args[1:])
-		return reply
+		return BGRewriteAOF(db, args[1:])
 	}
 
 	// normal commands
-	cmdFunc, ok := router[cmd]
+	fun, ok := router[cmd]
 	if !ok {
 		return reply.MakeErrReply("ERR unknown command '" + cmd + "'")
 	}
 	if len(args) > 1 {
-		result = cmdFunc(db, args[1:])
+		result = fun(db, args[1:])
 	} else {
-		result = cmdFunc(db, [][]byte{})
+		result = fun(db, [][]byte{})
 	}
-
-	// aof
-
 	return
 }
 
 /* ---- Data Access ----- */
 
+// Get returns DataEntity bind to given key
 func (db *DB) Get(key string) (*DataEntity, bool) {
 	db.stopWorld.Wait()
 
-	raw, ok := db.Data.Get(key)
+	raw, ok := db.data.Get(key)
 	if !ok {
 		return nil, false
 	}
@@ -164,83 +158,97 @@ func (db *DB) Get(key string) (*DataEntity, bool) {
 	return entity, true
 }
 
+// Put a DataEntity into DB
 func (db *DB) Put(key string, entity *DataEntity) int {
 	db.stopWorld.Wait()
-	return db.Data.Put(key, entity)
+	return db.data.Put(key, entity)
 }
 
+// PutIfExists edit an existing DataEntity
 func (db *DB) PutIfExists(key string, entity *DataEntity) int {
 	db.stopWorld.Wait()
-	return db.Data.PutIfExists(key, entity)
+	return db.data.PutIfExists(key, entity)
 }
 
+// PutIfAbsent insert an DataEntity only if the key not exists
 func (db *DB) PutIfAbsent(key string, entity *DataEntity) int {
 	db.stopWorld.Wait()
-	return db.Data.PutIfAbsent(key, entity)
+	return db.data.PutIfAbsent(key, entity)
 }
 
+// Remove the given key from db
 func (db *DB) Remove(key string) {
 	db.stopWorld.Wait()
-	db.Data.Remove(key)
-	db.TTLMap.Remove(key)
+	db.data.Remove(key)
+	db.ttlMap.Remove(key)
 }
 
+// Removes the given keys from db
 func (db *DB) Removes(keys ...string) (deleted int) {
 	db.stopWorld.Wait()
 	deleted = 0
 	for _, key := range keys {
-		_, exists := db.Data.Get(key)
+		_, exists := db.data.Get(key)
 		if exists {
-			db.Data.Remove(key)
-			db.TTLMap.Remove(key)
+			db.data.Remove(key)
+			db.ttlMap.Remove(key)
 			deleted++
 		}
 	}
 	return deleted
 }
 
+// Flush clean database
 func (db *DB) Flush() {
 	db.stopWorld.Add(1)
 	defer db.stopWorld.Done()
 
-	db.Data = dict.MakeConcurrent(dataDictSize)
-	db.TTLMap = dict.MakeConcurrent(ttlDictSize)
-	db.Locker = lock.Make(lockerSize)
+	db.data = dict.MakeConcurrent(dataDictSize)
+	db.ttlMap = dict.MakeConcurrent(ttlDictSize)
+	db.locker = lock.Make(lockerSize)
 
 }
 
 /* ---- Lock Function ----- */
 
+// Lock locks key for writing (exclusive lock)
 func (db *DB) Lock(key string) {
-	db.Locker.Lock(key)
+	db.locker.Lock(key)
 }
 
+// RLock locks key for read (shared lock)
 func (db *DB) RLock(key string) {
-	db.Locker.RLock(key)
+	db.locker.RLock(key)
 }
 
+// UnLock release exclusive lock
 func (db *DB) UnLock(key string) {
-	db.Locker.UnLock(key)
+	db.locker.UnLock(key)
 }
 
+// RUnLock release shared lock
 func (db *DB) RUnLock(key string) {
-	db.Locker.RUnLock(key)
+	db.locker.RUnLock(key)
 }
 
+// Locks lock keys for writing (exclusive lock)
 func (db *DB) Locks(keys ...string) {
-	db.Locker.Locks(keys...)
+	db.locker.Locks(keys...)
 }
 
+// RLocks lock keys for read (shared lock)
 func (db *DB) RLocks(keys ...string) {
-	db.Locker.RLocks(keys...)
+	db.locker.RLocks(keys...)
 }
 
+// UnLocks release exclusive locks
 func (db *DB) UnLocks(keys ...string) {
-	db.Locker.UnLocks(keys...)
+	db.locker.UnLocks(keys...)
 }
 
+// RUnLocks release shared locks
 func (db *DB) RUnLocks(keys ...string) {
-	db.Locker.RUnLocks(keys...)
+	db.locker.RUnLocks(keys...)
 }
 
 /* ---- TTL Functions ---- */
@@ -249,26 +257,29 @@ func genExpireTask(key string) string {
 	return "expire:" + key
 }
 
+// Expire sets TTL of key
 func (db *DB) Expire(key string, expireTime time.Time) {
 	db.stopWorld.Wait()
-	db.TTLMap.Put(key, expireTime)
+	db.ttlMap.Put(key, expireTime)
 	taskKey := genExpireTask(key)
 	timewheel.At(expireTime, taskKey, func() {
 		logger.Info("expire " + key)
-		db.TTLMap.Remove(key)
-		db.Data.Remove(key)
+		db.ttlMap.Remove(key)
+		db.data.Remove(key)
 	})
 }
 
+// Persist cancel TTL of key
 func (db *DB) Persist(key string) {
 	db.stopWorld.Wait()
-	db.TTLMap.Remove(key)
+	db.ttlMap.Remove(key)
 	taskKey := genExpireTask(key)
 	timewheel.Cancel(taskKey)
 }
 
+// IsExpired check whether a key is expired
 func (db *DB) IsExpired(key string) bool {
-	rawExpireTime, ok := db.TTLMap.Get(key)
+	rawExpireTime, ok := db.ttlMap.Get(key)
 	if !ok {
 		return false
 	}
@@ -280,11 +291,9 @@ func (db *DB) IsExpired(key string) bool {
 	return expired
 }
 
-func (db *DB) TimerTask() {
-}
-
 /* ---- Subscribe Functions ---- */
 
+// AfterClientClose does some clean after client close connection
 func (db *DB) AfterClientClose(c redis.Connection) {
 	pubsub.UnsubscribeAll(db.hub, c)
 }

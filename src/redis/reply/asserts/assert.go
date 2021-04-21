@@ -34,10 +34,30 @@ func AssertBulkReply(t *testing.T, actual redis.Reply, expected string) {
 func AssertStatusReply(t *testing.T, actual redis.Reply, expected string) {
 	statusReply, ok := actual.(*reply.StatusReply)
 	if !ok {
+		// may be a reply.OkReply e.g.
+		expectBytes := reply.MakeStatusReply(expected).ToBytes()
+		if utils.BytesEquals(actual.ToBytes(), expectBytes) {
+			return
+		}
 		t.Errorf("expected bulk reply, actually %s, %s", actual.ToBytes(), printStack())
 		return
 	}
 	if statusReply.Status != expected {
+		t.Errorf("expected %s, actually %s, %s", expected, actual.ToBytes(), printStack())
+	}
+}
+
+func AssertErrReply(t *testing.T, actual redis.Reply, expected string) {
+	errReply, ok := actual.(reply.ErrorReply)
+	if !ok {
+		expectBytes := reply.MakeErrReply(expected).ToBytes()
+		if utils.BytesEquals(actual.ToBytes(), expectBytes) {
+			return
+		}
+		t.Errorf("expected err reply, actually %s, %s", actual.ToBytes(), printStack())
+		return
+	}
+	if errReply.Error() != expected {
 		t.Errorf("expected %s, actually %s, %s", expected, actual.ToBytes(), printStack())
 	}
 }

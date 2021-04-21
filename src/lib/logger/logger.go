@@ -65,7 +65,7 @@ func setPrefix(level Level) {
 	if ok {
 		logPrefix = fmt.Sprintf("[%s][%s:%d] ", levelFlags[level], filepath.Base(file), line)
 	} else {
-		logPrefix = fmt.Sprint("[%s] ", levelFlags[level])
+		logPrefix = fmt.Sprintf("[%s] ", levelFlags[level])
 	}
 
 	logger.SetPrefix(logPrefix)
@@ -73,25 +73,25 @@ func setPrefix(level Level) {
 
 func Debug(v ...interface{}) {
 	setPrefix(DEBUG)
-	logger.Println(v)
+	logger.Println(v...)
 }
 
 func Info(v ...interface{}) {
 	setPrefix(INFO)
-	logger.Println(v)
+	logger.Println(v...)
 }
 
 func Warn(v ...interface{}) {
 	setPrefix(WARNING)
-	logger.Println(v)
+	logger.Println(v...)
 }
 
 func Error(v ...interface{}) {
 	setPrefix(ERROR)
-	logger.Println(v)
+	logger.Println(v...)
 }
 
 func Fatal(v ...interface{}) {
 	setPrefix(FATAL)
-	logger.Fatalln(v)
+	logger.Fatalln(v...)
 }
