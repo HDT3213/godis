@@ -24,25 +24,34 @@ type Config struct {
 	Timeout    time.Duration `yaml:"timeout"`
 }
 
-func ListenAndServe(cfg *Config, handler tcp.Handler) {
-	listener, err := net.Listen("tcp", cfg.Address)
-	if err != nil {
-		logger.Fatal(fmt.Sprintf("listen err: %v", err))
-	}
-
-	// listen signal
-	var closing atomic.AtomicBool
-	sigCh := make(chan os.Signal, 1)
+func ListenAndServeWithSignal(cfg *Config, handler tcp.Handler) error {
+	closeChan := make(chan struct{})
+	sigCh := make(chan os.Signal)
 	signal.Notify(sigCh, syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT)
 	go func() {
 		sig := <-sigCh
 		switch sig {
 		case syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT:
-			logger.Info("shuting down...")
-			closing.Set(true)
-			_ = listener.Close() // listener.Accept() will return err immediately
-			_ = handler.Close()  // close connections
+			closeChan <- struct{}{}
 		}
+	}()
+	return ListenAndServe(cfg, handler, closeChan)
+}
+
+func ListenAndServe(cfg *Config, handler tcp.Handler, closeChan <-chan struct{}) error {
+	listener, err := net.Listen("tcp", cfg.Address)
+	if err != nil {
+		return fmt.Errorf("listen err: %v", err)
+	}
+
+	// listen signal
+	var closing atomic.AtomicBool
+	go func() {
+		<-closeChan
+		logger.Info("shutting down...")
+		closing.Set(true)
+		_ = listener.Close() // listener.Accept() will return err immediately
+		_ = handler.Close()  // close connections
 	}()
 
 	// listen port
@@ -52,7 +61,7 @@ func ListenAndServe(cfg *Config, handler tcp.Handler) {
 		_ = listener.Close()
 		_ = handler.Close()
 	}()
-	ctx, _ := context.WithCancel(context.Background())
+	ctx := context.Background()
 	var waitDone sync.WaitGroup
 	for {
 		conn, err := listener.Accept()
@@ -60,7 +69,7 @@ func ListenAndServe(cfg *Config, handler tcp.Handler) {
 			if closing.Get() {
 				logger.Info("waiting disconnect...")
 				waitDone.Wait()
-				return // handler will be closed by defer
+				return nil // handler will be closed by defer
 			}
 			logger.Error(fmt.Sprintf("accept err: %v", err))
 			continue
