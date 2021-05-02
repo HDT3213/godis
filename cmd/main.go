@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"fmt"
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/lib/logger"
@@ -9,7 +10,11 @@ import (
 	"os"
 )
 
+//go:embed banner.txt
+var banner string
+
 func main() {
+	print(banner)
 	configFilename := os.Getenv("CONFIG")
 	if configFilename == "" {
 		configFilename = "redis.conf"

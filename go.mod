@@ -1,6 +1,6 @@
 module github.com/hdt3213/godis
 
-go 1.12
+go 1.16
 
 require (
 	github.com/jolestar/go-commons-pool/v2 v2.1.1

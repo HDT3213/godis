@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 
-go build -i -o target/godis-darwin ./src/cmd
+go build -o target/godis-darwin ./cmd
