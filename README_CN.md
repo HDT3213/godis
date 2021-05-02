@@ -1,3 +1,10 @@
+# Godis 
+
+![license](https://img.shields.io/github/license/HDT3213/godis)
+[![Build Status](https://travis-ci.org/HDT3213/godis.svg?branch=master)](https://travis-ci.org/HDT3213/godis)
+[![Coverage Status](https://coveralls.io/repos/github/HDT3213/godis/badge.svg?branch=master)](https://coveralls.io/github/HDT3213/godis?branch=master)
+[![Go Report Card](https://goreportcard.com/badge/github.com/HDT3213/godis)](https://goreportcard.com/report/github.com/HDT3213/godis)
+
 Godis 是一个用 Go 语言实现的 Redis 服务器。本项目旨在为尝试使用 Go 语言开发高并发中间件的朋友提供一些参考。
 
 **请注意：不要在生产环境使用使用此项目**
