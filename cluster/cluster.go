@@ -3,12 +3,12 @@ package cluster
 import (
 	"context"
 	"fmt"
-	"github.com/hdt3213/godis/cluster/idgenerator"
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/datastruct/dict"
 	"github.com/hdt3213/godis/db"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/consistenthash"
+	"github.com/hdt3213/godis/lib/idgenerator"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/redis/reply"
 	"github.com/jolestar/go-commons-pool/v2"
@@ -44,7 +44,7 @@ func MakeCluster() *Cluster {
 		peerPicker:     consistenthash.New(replicas, nil),
 		peerConnection: make(map[string]*pool.ObjectPool),
 
-		idGenerator: idgenerator.MakeGenerator("godis", config.Properties.Self),
+		idGenerator: idgenerator.MakeGenerator(config.Properties.Self),
 	}
 	contains := make(map[string]struct{})
 	nodes := make([]string, 0, len(config.Properties.Peers)+1)
@@ -56,7 +56,7 @@ func MakeCluster() *Cluster {
 		nodes = append(nodes, peer)
 	}
 	nodes = append(nodes, config.Properties.Self)
-	cluster.peerPicker.Add(nodes...)
+	cluster.peerPicker.AddNode(nodes...)
 	ctx := context.Background()
 	for _, peer := range nodes {
 		cluster.peerConnection[peer] = pool.NewObjectPoolWithDefaultConfig(ctx, &ConnectionFactory{
@@ -122,7 +122,7 @@ func makeArgs(cmd string, args ...string) [][]byte {
 func (cluster *Cluster) groupBy(keys []string) map[string][]string {
 	result := make(map[string][]string)
 	for _, key := range keys {
-		peer := cluster.peerPicker.Get(key)
+		peer := cluster.peerPicker.PickNode(key)
 		group, ok := result[peer]
 		if !ok {
 			group = make([]string, 0)

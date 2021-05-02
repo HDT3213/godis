@@ -2,21 +2,8 @@ package files
 
 import (
 	"fmt"
-	"io/ioutil"
-	"mime/multipart"
 	"os"
-	"path"
 )
-
-func GetSize(f multipart.File) (int, error) {
-	content, err := ioutil.ReadAll(f)
-
-	return len(content), err
-}
-
-func GetExt(fileName string) string {
-	return path.Ext(fileName)
-}
 
 func CheckNotExist(src string) bool {
 	_, err := os.Stat(src)
@@ -26,7 +13,6 @@ func CheckNotExist(src string) bool {
 
 func CheckPermission(src string) bool {
 	_, err := os.Stat(src)
-
 	return os.IsPermission(err)
 }
 
@@ -36,7 +22,6 @@ func IsNotExistMkDir(src string) error {
 			return err
 		}
 	}
-
 	return nil
 }
 

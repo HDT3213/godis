@@ -25,7 +25,7 @@ func makeMsg(t string, channel string, code int64) []byte {
  * return: is new subscribed
  */
 func subscribe0(hub *Hub, channel string, client redis.Connection) bool {
-	client.SubsChannel(channel)
+	client.Subscribe(channel)
 
 	// add into hub.subs
 	raw, ok := hub.subs.Get(channel)
@@ -48,7 +48,7 @@ func subscribe0(hub *Hub, channel string, client redis.Connection) bool {
  * return: is actually un-subscribe
  */
 func unsubscribe0(hub *Hub, channel string, client redis.Connection) bool {
-	client.UnSubsChannel(channel)
+	client.UnSubscribe(channel)
 
 	// remove from hub.subs
 	raw, ok := hub.subs.Get(channel)

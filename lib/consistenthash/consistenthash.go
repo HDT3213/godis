@@ -32,7 +32,7 @@ func (m *Map) IsEmpty() bool {
 	return len(m.keys) == 0
 }
 
-func (m *Map) Add(keys ...string) {
+func (m *Map) AddNode(keys ...string) {
 	for _, key := range keys {
 		if key == "" {
 			continue
@@ -59,8 +59,8 @@ func getPartitionKey(key string) string {
 	return key[beg+1 : end]
 }
 
-// Get gets the closest item in the hash to the provided key.
-func (m *Map) Get(key string) string {
+// PickNode gets the closest item in the hash to the provided key.
+func (m *Map) PickNode(key string) string {
 	if m.IsEmpty() {
 		return ""
 	}

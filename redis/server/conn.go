@@ -7,8 +7,8 @@ import (
 	"time"
 )
 
-// abstract of active client
-type Client struct {
+// Connection represents a connection with a redis-cli
+type Connection struct {
 	conn net.Conn
 
 	// waiting util reply finished
@@ -21,20 +21,23 @@ type Client struct {
 	subs map[string]bool
 }
 
-func (c *Client) Close() error {
+// Close disconnect with the client
+func (c *Connection) Close() error {
 	c.waitingReply.WaitWithTimeout(10 * time.Second)
 	_ = c.conn.Close()
 	return nil
 }
 
-func MakeClient(conn net.Conn) *Client {
-	return &Client{
+// NewConn creates Connection instance
+func NewConn(conn net.Conn) *Connection {
+	return &Connection{
 		conn: conn,
 	}
 }
 
-func (c *Client) Write(b []byte) error {
-	if b == nil || len(b) == 0 {
+// Write sends response to client over tcp connection
+func (c *Connection) Write(b []byte) error {
+	if len(b) == 0 {
 		return nil
 	}
 	c.mu.Lock()
@@ -44,7 +47,8 @@ func (c *Client) Write(b []byte) error {
 	return err
 }
 
-func (c *Client) SubsChannel(channel string) {
+// Subscribe add current connection into subscribers of the given channel
+func (c *Connection) Subscribe(channel string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -54,7 +58,8 @@ func (c *Client) SubsChannel(channel string) {
 	c.subs[channel] = true
 }
 
-func (c *Client) UnSubsChannel(channel string) {
+// UnSubscribe removes current connection into subscribers of the given channel
+func (c *Connection) UnSubscribe(channel string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -64,14 +69,16 @@ func (c *Client) UnSubsChannel(channel string) {
 	delete(c.subs, channel)
 }
 
-func (c *Client) SubsCount() int {
+// SubsCount returns the number of subscribing channels
+func (c *Connection) SubsCount() int {
 	if c.subs == nil {
 		return 0
 	}
 	return len(c.subs)
 }
 
-func (c *Client) GetChannels() []string {
+// GetChannels returns all subscribing channels
+func (c *Connection) GetChannels() []string {
 	if c.subs == nil {
 		return make([]string, 0)
 	}

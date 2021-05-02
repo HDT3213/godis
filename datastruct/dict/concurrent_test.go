@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestPut(t *testing.T) {
+func TestConcurrentPut(t *testing.T) {
 	d := MakeConcurrent(0)
 	count := 100
 	var wg sync.WaitGroup
@@ -35,7 +35,7 @@ func TestPut(t *testing.T) {
 	wg.Wait()
 }
 
-func TestPutIfAbsent(t *testing.T) {
+func TestConcurrentPutIfAbsent(t *testing.T) {
 	d := MakeConcurrent(0)
 	count := 100
 	var wg sync.WaitGroup
@@ -80,7 +80,7 @@ func TestPutIfAbsent(t *testing.T) {
 	wg.Wait()
 }
 
-func TestPutIfExists(t *testing.T) {
+func TestConcurrentPutIfExists(t *testing.T) {
 	d := MakeConcurrent(0)
 	count := 100
 	var wg sync.WaitGroup
@@ -113,7 +113,7 @@ func TestPutIfExists(t *testing.T) {
 	wg.Wait()
 }
 
-func TestRemove(t *testing.T) {
+func TestConcurrentRemove(t *testing.T) {
 	d := MakeConcurrent(0)
 
 	// remove head node
@@ -220,7 +220,7 @@ func TestRemove(t *testing.T) {
 	}
 }
 
-func TestForEach(t *testing.T) {
+func TestConcurrentForEach(t *testing.T) {
 	d := MakeConcurrent(0)
 	size := 100
 	for i := 0; i < size; i++ {
@@ -240,5 +240,30 @@ func TestForEach(t *testing.T) {
 	})
 	if i != size {
 		t.Error("remove test failed: expected " + strconv.Itoa(size) + ", actual: " + strconv.Itoa(i))
+	}
+}
+
+func TestConcurrentRandomKey(t *testing.T) {
+	d := MakeConcurrent(0)
+	count := 100
+	for i := 0; i < count; i++ {
+		key := "k" + strconv.Itoa(i)
+		d.Put(key, i)
+	}
+	fetchSize := 10
+	result := d.RandomKeys(fetchSize)
+	if len(result) != fetchSize {
+		t.Errorf("expect %d random keys acturally %d", fetchSize, len(result))
+	}
+	result = d.RandomDistinctKeys(fetchSize)
+	distinct := make(map[string]struct{})
+	for _, key := range result {
+		distinct[key] = struct{}{}
+	}
+	if len(result) != fetchSize {
+		t.Errorf("expect %d random keys acturally %d", fetchSize, len(result))
+	}
+	if len(result) > len(distinct) {
+		t.Errorf("get duplicated keys in result")
 	}
 }

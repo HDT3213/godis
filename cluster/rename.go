@@ -13,8 +13,8 @@ func Rename(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	src := string(args[1])
 	dest := string(args[2])
 
-	srcPeer := cluster.peerPicker.Get(src)
-	destPeer := cluster.peerPicker.Get(dest)
+	srcPeer := cluster.peerPicker.PickNode(src)
+	destPeer := cluster.peerPicker.PickNode(dest)
 
 	if srcPeer != destPeer {
 		return reply.MakeErrReply("ERR rename must within one slot in cluster mode")
@@ -29,8 +29,8 @@ func RenameNx(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	src := string(args[1])
 	dest := string(args[2])
 
-	srcPeer := cluster.peerPicker.Get(src)
-	destPeer := cluster.peerPicker.Get(dest)
+	srcPeer := cluster.peerPicker.PickNode(src)
+	destPeer := cluster.peerPicker.PickNode(dest)
 
 	if srcPeer != destPeer {
 		return reply.MakeErrReply("ERR rename must within one slot in cluster mode")

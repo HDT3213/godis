@@ -24,12 +24,14 @@ var (
 	UnknownErrReplyBytes = []byte("-ERR unknown\r\n")
 )
 
+// Handler implements tcp.Handler and serves as a redis server
 type Handler struct {
 	activeConn sync.Map // *client -> placeholder
 	db         db.DB
 	closing    atomic.AtomicBool // refusing new client and new request
 }
 
+// MakeHandler creates a Handler instance
 func MakeHandler() *Handler {
 	var db db.DB
 	if config.Properties.Self != "" &&
@@ -43,19 +45,20 @@ func MakeHandler() *Handler {
 	}
 }
 
-func (h *Handler) closeClient(client *Client) {
+func (h *Handler) closeClient(client *Connection) {
 	_ = client.Close()
 	h.db.AfterClientClose(client)
 	h.activeConn.Delete(client)
 }
 
+// Handle receives and executes redis commands
 func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 	if h.closing.Get() {
 		// closing handler refuse new connection
 		_ = conn.Close()
 	}
 
-	client := MakeClient(conn)
+	client := NewConn(conn)
 	h.activeConn.Store(client, 1)
 
 	ch := parser.Parse(conn)
@@ -98,12 +101,13 @@ func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 	}
 }
 
+// Close stops handler
 func (h *Handler) Close() error {
 	logger.Info("handler shuting down...")
 	h.closing.Set(true)
 	// TODO: concurrent wait
 	h.activeConn.Range(func(key interface{}, val interface{}) bool {
-		client := key.(*Client)
+		client := key.(*Connection)
 		_ = client.Close()
 		return true
 	})

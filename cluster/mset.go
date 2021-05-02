@@ -146,7 +146,7 @@ func MSetNX(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	size := argCount / 2
 	for i := 0; i < size; i++ {
 		key := string(args[2*i])
-		currentPeer := cluster.peerPicker.Get(key)
+		currentPeer := cluster.peerPicker.PickNode(key)
 		if peer == "" {
 			peer = currentPeer
 		} else {

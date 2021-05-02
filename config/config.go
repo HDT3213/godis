@@ -3,6 +3,7 @@ package config
 import (
 	"bufio"
 	"github.com/hdt3213/godis/lib/logger"
+	"io"
 	"log"
 	"os"
 	"reflect"
@@ -31,18 +32,12 @@ func init() {
 	}
 }
 
-func LoadConfig(configFilename string) *PropertyHolder {
-	config := Properties
-	file, err := os.Open(configFilename)
-	if err != nil {
-		log.Print(err)
-		return config
-	}
-	defer file.Close()
+func parse(src io.Reader) *PropertyHolder {
+	config := &PropertyHolder{}
 
 	// read config file
 	rawMap := make(map[string]string)
-	scanner := bufio.NewScanner(file)
+	scanner := bufio.NewScanner(src)
 	for scanner.Scan() {
 		line := scanner.Text()
 		if len(line) > 0 && line[0] == '#' {
@@ -96,5 +91,10 @@ func LoadConfig(configFilename string) *PropertyHolder {
 }
 
 func SetupConfig(configFilename string) {
-	Properties = LoadConfig(configFilename)
+	file, err := os.Open(configFilename)
+	if err != nil {
+		log.Print(err)
+	}
+	defer file.Close()
+	Properties = parse(file)
 }
