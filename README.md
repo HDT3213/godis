@@ -1,4 +1,4 @@
-# Godis
+![](https://img.shields.io/github/license/HDT3213/godis) &nbsp; ![](https://goreportcard.com/badge/github.com/HDT3213/godis)
 
 [中文版](https://github.com/hdt3213/godis/blob/master/README_CN.md)
 

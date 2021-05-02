@@ -1,0 +1,14 @@
+language: go
+
+go:
+  - 1.16
+
+before_install:
+  - go get -t -v ./...
+  - sudo apt-get install redis-server
+
+script:
+  - go test -coverprofile=coverage.txt -covermode=atomic ./...
+
+after_success:
+  - bash <(curl -s https://codecov.io/bash)
