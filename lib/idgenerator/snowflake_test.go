@@ -5,7 +5,7 @@ import "testing"
 func TestMGenerator(t *testing.T) {
 	gen := MakeGenerator("a")
 	ids := make(map[int64]struct{})
-	size := int(maxSequence) - 1
+	size := int(1e6)
 	for i := 0; i < size; i++ {
 		id := gen.NextId()
 		_, ok := ids[id]

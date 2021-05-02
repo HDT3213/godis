@@ -60,6 +60,7 @@ func TestClient(t *testing.T) {
 		}
 	}
 
+	client.doHeartbeat() // random do heartbeat
 	result = client.Send([][]byte{
 		[]byte("GET"),
 		[]byte("a"),

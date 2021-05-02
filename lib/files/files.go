@@ -7,7 +7,6 @@ import (
 
 func CheckNotExist(src string) bool {
 	_, err := os.Stat(src)
-
 	return os.IsNotExist(err)
 }
 

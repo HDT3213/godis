@@ -134,6 +134,7 @@ func (client *Client) doHeartbeat() {
 	request := &Request{
 		args:      [][]byte{[]byte("PING")},
 		heartbeat: true,
+		waiting:   &wait.Wait{},
 	}
 	request.waiting.Add(1)
 	client.working.Add(1)
