@@ -2,7 +2,6 @@ package tcp
 
 import (
 	"bufio"
-	"fmt"
 	"math/rand"
 	"net"
 	"strconv"
@@ -11,15 +10,14 @@ import (
 
 func TestListenAndServe(t *testing.T) {
 	var err error
-	var addr string
 	closeChan := make(chan struct{})
-	port := rand.Intn(60000) + 1024
-	addr = fmt.Sprintf("localhost:%d", port)
-	go func() {
-		err = ListenAndServe(&Config{
-			Address: addr,
-		}, MakeEchoHandler(), closeChan)
-	}()
+	listener, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	addr := listener.Addr().String()
+	go ListenAndServe(listener, MakeEchoHandler(), closeChan)
 
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {

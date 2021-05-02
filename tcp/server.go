@@ -35,15 +35,17 @@ func ListenAndServeWithSignal(cfg *Config, handler tcp.Handler) error {
 			closeChan <- struct{}{}
 		}
 	}()
-	return ListenAndServe(cfg, handler, closeChan)
-}
-
-func ListenAndServe(cfg *Config, handler tcp.Handler, closeChan <-chan struct{}) error {
 	listener, err := net.Listen("tcp", cfg.Address)
 	if err != nil {
-		return fmt.Errorf("listen err: %v", err)
+		return err
 	}
+	//cfg.Address = listener.Addr().String()
+	logger.Info(fmt.Sprintf("bind: %s, start listening...", cfg.Address))
+	ListenAndServe(listener, handler, closeChan)
+	return nil
+}
 
+func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan struct{}) {
 	// listen signal
 	var closing atomic.AtomicBool
 	go func() {
@@ -55,7 +57,6 @@ func ListenAndServe(cfg *Config, handler tcp.Handler, closeChan <-chan struct{})
 	}()
 
 	// listen port
-	logger.Info(fmt.Sprintf("bind: %s, start listening...", cfg.Address))
 	defer func() {
 		// close during unexpected error
 		_ = listener.Close()
@@ -69,7 +70,7 @@ func ListenAndServe(cfg *Config, handler tcp.Handler, closeChan <-chan struct{})
 			if closing.Get() {
 				logger.Info("waiting disconnect...")
 				waitDone.Wait()
-				return nil // handler will be closed by defer
+				return // handler will be closed by defer
 			}
 			logger.Error(fmt.Sprintf("accept err: %v", err))
 			continue
