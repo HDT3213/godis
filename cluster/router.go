@@ -106,8 +106,8 @@ func MakeRouter() map[string]CmdFunc {
 	routerMap["subscribe"] = Subscribe
 	routerMap["unsubscribe"] = UnSubscribe
 
-	//routerMap["flushdb"] = FlushDB
-	//routerMap["flushall"] = FlushAll
+	routerMap["flushdb"] = FlushDB
+	routerMap["flushall"] = FlushAll
 	//routerMap["keys"] = Keys
 
 	return routerMap

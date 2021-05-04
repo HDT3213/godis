@@ -1,14 +1,8 @@
 package lock
 
 import (
-	"fmt"
-	"runtime"
 	"sort"
-	"strconv"
-	"strings"
 	"sync"
-	"testing"
-	"time"
 )
 
 const (
@@ -120,33 +114,4 @@ func (locks *Locks) RUnLocks(keys ...string) {
 		mu := locks.table[index]
 		mu.RUnlock()
 	}
-}
-
-func GoID() int {
-	var buf [64]byte
-	n := runtime.Stack(buf[:], false)
-	idField := strings.Fields(strings.TrimPrefix(string(buf[:n]), "goroutine "))[0]
-	id, err := strconv.Atoi(idField)
-	if err != nil {
-		panic(fmt.Sprintf("cannot get goroutine id: %v", err))
-	}
-	return id
-}
-
-func debug(testing.T) {
-	lm := Locks{}
-	size := 10
-	var wg sync.WaitGroup
-	wg.Add(size)
-	for i := 0; i < size; i++ {
-		go func(i int) {
-			lm.Locks("1", "2")
-			println("go: " + strconv.Itoa(GoID()))
-			time.Sleep(time.Second)
-			println("go: " + strconv.Itoa(GoID()))
-			lm.UnLocks("1", "2")
-			wg.Done()
-		}(i)
-	}
-	wg.Wait()
 }

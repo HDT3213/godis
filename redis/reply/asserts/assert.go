@@ -62,6 +62,37 @@ func AssertErrReply(t *testing.T, actual redis.Reply, expected string) {
 	}
 }
 
+func AssertNotError(t *testing.T, result redis.Reply) {
+	if result == nil {
+		t.Errorf("result is nil %s", printStack())
+		return
+	}
+	bytes := result.ToBytes()
+	if len(bytes) == 0 {
+		t.Errorf("result is empty %s", printStack())
+		return
+	}
+	if bytes[0] == '-' {
+		t.Errorf("result is err reply %s", printStack())
+	}
+}
+
+func AssertNullBulk(t *testing.T, result redis.Reply) {
+	if result == nil {
+		t.Errorf("result is nil %s", printStack())
+		return
+	}
+	bytes := result.ToBytes()
+	if len(bytes) == 0 {
+		t.Errorf("result is empty %s", printStack())
+		return
+	}
+	expect := (&reply.NullBulkReply{}).ToBytes()
+	if !utils.BytesEquals(expect, bytes) {
+		t.Errorf("result is not null-bulk-reply %s", printStack())
+	}
+}
+
 func AssertMultiBulkReply(t *testing.T, actual redis.Reply, expected []string) {
 	multiBulk, ok := actual.(*reply.MultiBulkReply)
 	if !ok {

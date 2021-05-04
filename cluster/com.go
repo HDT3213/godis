@@ -52,9 +52,9 @@ func (cluster *Cluster) Relay(peer string, c redis.Connection, args [][]byte) re
 }
 
 // broadcast command to all node in cluster
-func (cluster *Cluster) Broadcast(peer string, c redis.Connection, args [][]byte) map[string]redis.Reply {
+func (cluster *Cluster) Broadcast(c redis.Connection, args [][]byte) map[string]redis.Reply {
 	result := make(map[string]redis.Reply)
-	for _, node := range cluster.peers {
+	for _, node := range cluster.nodes {
 		reply := cluster.Relay(node, c, args)
 		result[node] = reply
 	}

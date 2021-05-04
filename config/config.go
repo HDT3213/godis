@@ -4,7 +4,6 @@ import (
 	"bufio"
 	"github.com/hdt3213/godis/lib/logger"
 	"io"
-	"log"
 	"os"
 	"reflect"
 	"strconv"
@@ -93,7 +92,7 @@ func parse(src io.Reader) *PropertyHolder {
 func SetupConfig(configFilename string) {
 	file, err := os.Open(configFilename)
 	if err != nil {
-		log.Print(err)
+		panic(err)
 	}
 	defer file.Close()
 	Properties = parse(file)

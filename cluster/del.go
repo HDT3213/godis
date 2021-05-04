@@ -15,7 +15,7 @@ func Del(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 		keys[i-1] = string(args[i])
 	}
 	groupMap := cluster.groupBy(keys)
-	if len(groupMap) == 1 { // do fast
+	if len(groupMap) == 1 && allowFastTransaction { // do fast
 		for peer, group := range groupMap { // only one group
 			return cluster.Relay(peer, c, makeArgs("DEL", group...))
 		}

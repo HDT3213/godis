@@ -19,7 +19,7 @@ import (
 type Cluster struct {
 	self string
 
-	peers          []string
+	nodes          []string
 	peerPicker     *consistenthash.Map
 	peerConnection map[string]*pool.ObjectPool
 
@@ -33,6 +33,9 @@ const (
 	replicas = 4
 	lockSize = 64
 )
+
+// if only one node involved in a transaction, just execute the command don't apply tcc procedure
+var allowFastTransaction = true
 
 // start current processing as a node of cluster
 func MakeCluster() *Cluster {
@@ -58,12 +61,12 @@ func MakeCluster() *Cluster {
 	nodes = append(nodes, config.Properties.Self)
 	cluster.peerPicker.AddNode(nodes...)
 	ctx := context.Background()
-	for _, peer := range nodes {
+	for _, peer := range config.Properties.Peers {
 		cluster.peerConnection[peer] = pool.NewObjectPoolWithDefaultConfig(ctx, &ConnectionFactory{
 			Peer: peer,
 		})
 	}
-	cluster.peers = nodes
+	cluster.nodes = nodes
 	return cluster
 }
 
@@ -94,17 +97,10 @@ func (cluster *Cluster) Exec(c redis.Connection, args [][]byte) (result redis.Re
 }
 
 func (cluster *Cluster) AfterClientClose(c redis.Connection) {
-
 }
 
 func Ping(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
-	if len(args) == 1 {
-		return &reply.PongReply{}
-	} else if len(args) == 2 {
-		return reply.MakeStatusReply("\"" + string(args[1]) + "\"")
-	} else {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'ping' command")
-	}
+	return db.Ping(cluster.db, args[1:])
 }
 
 /*----- utils -------*/

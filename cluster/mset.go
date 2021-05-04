@@ -95,7 +95,7 @@ func MSet(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	}
 
 	groupMap := cluster.groupBy(keys)
-	if len(groupMap) == 1 { // do fast
+	if len(groupMap) == 1 && allowFastTransaction { // do fast
 		for peer := range groupMap {
 			return cluster.Relay(peer, c, args)
 		}

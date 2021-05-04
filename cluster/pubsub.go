@@ -19,7 +19,7 @@ var (
 // broadcast msg to all peers in cluster when receive publish command from client
 func Publish(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	var count int64 = 0
-	for _, peer := range cluster.peers {
+	for _, peer := range cluster.nodes {
 		var re redis.Reply
 		if peer == cluster.self {
 			args0 := make([][]byte, len(args))
