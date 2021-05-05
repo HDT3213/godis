@@ -115,6 +115,10 @@ func AssertMultiBulkReply(t *testing.T, actual redis.Reply, expected []string) {
 func AssertMultiBulkReplySize(t *testing.T, actual redis.Reply, expected int) {
 	multiBulk, ok := actual.(*reply.MultiBulkReply)
 	if !ok {
+		if expected == 0 &&
+			utils.BytesEquals(actual.ToBytes(), reply.MakeEmptyMultiBulkReply().ToBytes()) {
+			return
+		}
 		t.Errorf("expected bulk reply, actually %s, %s", actual.ToBytes(), printStack())
 		return
 	}

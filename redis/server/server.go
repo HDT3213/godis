@@ -12,6 +12,7 @@ import (
 	"github.com/hdt3213/godis/interface/db"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/sync/atomic"
+	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/parser"
 	"github.com/hdt3213/godis/redis/reply"
 	"io"
@@ -45,7 +46,7 @@ func MakeHandler() *Handler {
 	}
 }
 
-func (h *Handler) closeClient(client *Connection) {
+func (h *Handler) closeClient(client *connection.Connection) {
 	_ = client.Close()
 	h.db.AfterClientClose(client)
 	h.activeConn.Delete(client)
@@ -58,10 +59,10 @@ func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 		_ = conn.Close()
 	}
 
-	client := NewConn(conn)
+	client := connection.NewConn(conn)
 	h.activeConn.Store(client, 1)
 
-	ch := parser.Parse(conn)
+	ch := parser.ParseStream(conn)
 	for payload := range ch {
 		if payload.Err != nil {
 			if payload.Err == io.EOF ||
@@ -69,7 +70,7 @@ func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 				strings.Contains(payload.Err.Error(), "use of closed network connection") {
 				// connection closed
 				h.closeClient(client)
-				logger.Info("connection closed: " + client.conn.RemoteAddr().String())
+				logger.Info("connection closed: " + client.RemoteAddr().String())
 				return
 			} else {
 				// protocol err
@@ -77,7 +78,7 @@ func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 				err := client.Write(errReply.ToBytes())
 				if err != nil {
 					h.closeClient(client)
-					logger.Info("connection closed: " + client.conn.RemoteAddr().String())
+					logger.Info("connection closed: " + client.RemoteAddr().String())
 					return
 				}
 				continue
@@ -107,7 +108,7 @@ func (h *Handler) Close() error {
 	h.closing.Set(true)
 	// TODO: concurrent wait
 	h.activeConn.Range(func(key interface{}, val interface{}) bool {
-		client := key.(*Connection)
+		client := key.(*connection.Connection)
 		_ = client.Close()
 		return true
 	})

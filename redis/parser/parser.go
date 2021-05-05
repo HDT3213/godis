@@ -2,6 +2,7 @@ package parser
 
 import (
 	"bufio"
+	"bytes"
 	"errors"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
@@ -17,17 +18,23 @@ type Payload struct {
 	Err  error
 }
 
-func Parse(reader io.Reader) <-chan *Payload {
+// ParseStream reads data from io.Reader and send payloads through channel
+func ParseStream(reader io.Reader) <-chan *Payload {
 	ch := make(chan *Payload)
-	go func() {
-		defer func() {
-			if err := recover(); err != nil {
-				logger.Error(debug.Stack())
-			}
-		}()
-		parse0(reader, ch)
-	}()
+	go parse0(reader, ch)
 	return ch
+}
+
+// ParseOne reads data from []byte and return the first payload
+func ParseOne(data []byte) (redis.Reply, error) {
+	ch := make(chan *Payload)
+	reader := bytes.NewReader(data)
+	go parse0(reader, ch)
+	payload := <-ch // parse0 will close the channel
+	if payload == nil {
+		return nil, errors.New("no reply")
+	}
+	return payload.Data, payload.Err
 }
 
 type readState struct {
@@ -44,6 +51,11 @@ func (s *readState) finished() bool {
 }
 
 func parse0(reader io.Reader, ch chan<- *Payload) {
+	defer func() {
+		if err := recover(); err != nil {
+			logger.Error(string(debug.Stack()))
+		}
+	}()
 	bufReader := bufio.NewReader(reader)
 	var state readState
 	var err error

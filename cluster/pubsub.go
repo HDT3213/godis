@@ -19,20 +19,11 @@ var (
 // broadcast msg to all peers in cluster when receive publish command from client
 func Publish(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	var count int64 = 0
-	for _, peer := range cluster.nodes {
-		var re redis.Reply
-		if peer == cluster.self {
-			args0 := make([][]byte, len(args))
-			copy(args0, args)
-			args0[0] = publishCmd
-			re = cluster.db.Exec(c, args0) // let local db.hub handle publish
-		} else {
-			args[0] = publishRelayCmd
-			re = cluster.Relay(peer, c, args)
-		}
-		if errReply, ok := re.(reply.ErrorReply); ok {
+	results := cluster.Broadcast(c, args)
+	for _, val := range results {
+		if errReply, ok := val.(reply.ErrorReply); ok {
 			logger.Error("publish occurs error: " + errReply.Error())
-		} else if intReply, ok := re.(*reply.IntReply); ok {
+		} else if intReply, ok := val.(*reply.IntReply); ok {
 			count += intReply.Code
 		}
 	}

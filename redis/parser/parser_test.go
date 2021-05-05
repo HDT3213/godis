@@ -9,7 +9,7 @@ import (
 	"testing"
 )
 
-func TestParse(t *testing.T) {
+func TestParseStream(t *testing.T) {
 	replies := []redis.Reply{
 		reply.MakeIntReply(1),
 		reply.MakeStatusReply("OK"),
@@ -33,7 +33,7 @@ func TestParse(t *testing.T) {
 		[]byte("set"), []byte("a"), []byte("a"),
 	}))
 
-	ch := Parse(bytes.NewReader(reqs.Bytes()))
+	ch := ParseStream(bytes.NewReader(reqs.Bytes()))
 	i := 0
 	for payload := range ch {
 		if payload.Err != nil {
@@ -51,6 +51,31 @@ func TestParse(t *testing.T) {
 		i++
 		if !utils.BytesEquals(exp.ToBytes(), payload.Data.ToBytes()) {
 			t.Error("parse failed: " + string(exp.ToBytes()))
+		}
+	}
+}
+
+func TestParseOne(t *testing.T) {
+	replies := []redis.Reply{
+		reply.MakeIntReply(1),
+		reply.MakeStatusReply("OK"),
+		reply.MakeErrReply("ERR unknown"),
+		reply.MakeBulkReply([]byte("a\r\nb")), // test binary safe
+		reply.MakeNullBulkReply(),
+		reply.MakeMultiBulkReply([][]byte{
+			[]byte("a"),
+			[]byte("\r\n"),
+		}),
+		reply.MakeEmptyMultiBulkReply(),
+	}
+	for _, re := range replies {
+		result, err := ParseOne(re.ToBytes())
+		if err != nil {
+			t.Error(err)
+			continue
+		}
+		if !utils.BytesEquals(result.ToBytes(), re.ToBytes()) {
+			t.Error("parse failed: " + string(re.ToBytes()))
 		}
 	}
 }

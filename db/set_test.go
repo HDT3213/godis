@@ -2,6 +2,7 @@ package db
 
 import (
 	"fmt"
+	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/reply"
 	"github.com/hdt3213/godis/redis/reply/asserts"
 	"strconv"
@@ -14,25 +15,25 @@ func TestSAdd(t *testing.T) {
 	size := 100
 
 	// test sadd
-	key := RandString(10)
+	key := utils.RandString(10)
 	for i := 0; i < size; i++ {
 		member := strconv.Itoa(i)
-		result := SAdd(testDB, toArgs(key, member))
+		result := SAdd(testDB, utils.ToBytesList(key, member))
 		asserts.AssertIntReply(t, result, 1)
 	}
 	// test scard
-	result := SCard(testDB, toArgs(key))
+	result := SCard(testDB, utils.ToBytesList(key))
 	asserts.AssertIntReply(t, result, size)
 
 	// test is member
 	for i := 0; i < size; i++ {
 		member := strconv.Itoa(i)
-		result := SIsMember(testDB, toArgs(key, member))
+		result := SIsMember(testDB, utils.ToBytesList(key, member))
 		asserts.AssertIntReply(t, result, 1)
 	}
 
 	// test members
-	result = SMembers(testDB, toArgs(key))
+	result = SMembers(testDB, utils.ToBytesList(key))
 	multiBulk, ok := result.(*reply.MultiBulkReply)
 	if !ok {
 		t.Error(fmt.Sprintf("expected bulk reply, actually %s", result.ToBytes()))
@@ -49,15 +50,15 @@ func TestSRem(t *testing.T) {
 	size := 100
 
 	// mock data
-	key := RandString(10)
+	key := utils.RandString(10)
 	for i := 0; i < size; i++ {
 		member := strconv.Itoa(i)
-		SAdd(testDB, toArgs(key, member))
+		SAdd(testDB, utils.ToBytesList(key, member))
 	}
 	for i := 0; i < size; i++ {
 		member := strconv.Itoa(i)
-		SRem(testDB, toArgs(key, member))
-		result := SIsMember(testDB, toArgs(key, member))
+		SRem(testDB, utils.ToBytesList(key, member))
+		result := SIsMember(testDB, utils.ToBytesList(key, member))
 		asserts.AssertIntReply(t, result, 0)
 	}
 }
@@ -70,22 +71,39 @@ func TestSInter(t *testing.T) {
 	keys := make([]string, 0)
 	start := 0
 	for i := 0; i < 4; i++ {
-		key := RandString(10)
+		key := utils.RandString(10)
 		keys = append(keys, key)
 		for j := start; j < size+start; j++ {
 			member := strconv.Itoa(j)
-			SAdd(testDB, toArgs(key, member))
+			SAdd(testDB, utils.ToBytesList(key, member))
 		}
 		start += step
 	}
-	result := SInter(testDB, toArgs(keys...))
+	result := SInter(testDB, utils.ToBytesList(keys...))
 	asserts.AssertMultiBulkReplySize(t, result, 70)
 
-	destKey := RandString(10)
+	destKey := utils.RandString(10)
 	keysWithDest := []string{destKey}
 	keysWithDest = append(keysWithDest, keys...)
-	result = SInterStore(testDB, toArgs(keysWithDest...))
+	result = SInterStore(testDB, utils.ToBytesList(keysWithDest...))
 	asserts.AssertIntReply(t, result, 70)
+
+	// test empty set
+	FlushAll(testDB, [][]byte{})
+	key0 := utils.RandString(10)
+	Del(testDB, utils.ToBytesList(key0))
+	key1 := utils.RandString(10)
+	SAdd(testDB, utils.ToBytesList(key1, "a", "b"))
+	key2 := utils.RandString(10)
+	SAdd(testDB, utils.ToBytesList(key2, "1", "2"))
+	result = SInter(testDB, utils.ToBytesList(key0, key1, key2))
+	asserts.AssertMultiBulkReplySize(t, result, 0)
+	result = SInter(testDB, utils.ToBytesList(key1, key2))
+	asserts.AssertMultiBulkReplySize(t, result, 0)
+	result = SInterStore(testDB, utils.ToBytesList(utils.RandString(10), key0, key1, key2))
+	asserts.AssertIntReply(t, result, 0)
+	result = SInterStore(testDB, utils.ToBytesList(utils.RandString(10), key1, key2))
+	asserts.AssertIntReply(t, result, 0)
 }
 
 func TestSUnion(t *testing.T) {
@@ -96,21 +114,21 @@ func TestSUnion(t *testing.T) {
 	keys := make([]string, 0)
 	start := 0
 	for i := 0; i < 4; i++ {
-		key := RandString(10)
+		key := utils.RandString(10)
 		keys = append(keys, key)
 		for j := start; j < size+start; j++ {
 			member := strconv.Itoa(j)
-			SAdd(testDB, toArgs(key, member))
+			SAdd(testDB, utils.ToBytesList(key, member))
 		}
 		start += step
 	}
-	result := SUnion(testDB, toArgs(keys...))
+	result := SUnion(testDB, utils.ToBytesList(keys...))
 	asserts.AssertMultiBulkReplySize(t, result, 130)
 
-	destKey := RandString(10)
+	destKey := utils.RandString(10)
 	keysWithDest := []string{destKey}
 	keysWithDest = append(keysWithDest, keys...)
-	result = SUnionStore(testDB, toArgs(keysWithDest...))
+	result = SUnionStore(testDB, utils.ToBytesList(keysWithDest...))
 	asserts.AssertIntReply(t, result, 130)
 }
 
@@ -122,39 +140,56 @@ func TestSDiff(t *testing.T) {
 	keys := make([]string, 0)
 	start := 0
 	for i := 0; i < 3; i++ {
-		key := RandString(10)
+		key := utils.RandString(10)
 		keys = append(keys, key)
 		for j := start; j < size+start; j++ {
 			member := strconv.Itoa(j)
-			SAdd(testDB, toArgs(key, member))
+			SAdd(testDB, utils.ToBytesList(key, member))
 		}
 		start += step
 	}
-	result := SDiff(testDB, toArgs(keys...))
+	result := SDiff(testDB, utils.ToBytesList(keys...))
 	asserts.AssertMultiBulkReplySize(t, result, step)
 
-	destKey := RandString(10)
+	destKey := utils.RandString(10)
 	keysWithDest := []string{destKey}
 	keysWithDest = append(keysWithDest, keys...)
-	result = SDiffStore(testDB, toArgs(keysWithDest...))
+	result = SDiffStore(testDB, utils.ToBytesList(keysWithDest...))
 	asserts.AssertIntReply(t, result, step)
+
+	// test empty set
+	FlushAll(testDB, [][]byte{})
+	key0 := utils.RandString(10)
+	Del(testDB, utils.ToBytesList(key0))
+	key1 := utils.RandString(10)
+	SAdd(testDB, utils.ToBytesList(key1, "a", "b"))
+	key2 := utils.RandString(10)
+	SAdd(testDB, utils.ToBytesList(key2, "a", "b"))
+	result = SDiff(testDB, utils.ToBytesList(key0, key1, key2))
+	asserts.AssertMultiBulkReplySize(t, result, 0)
+	result = SDiff(testDB, utils.ToBytesList(key1, key2))
+	asserts.AssertMultiBulkReplySize(t, result, 0)
+	result = SDiffStore(testDB, utils.ToBytesList(utils.RandString(10), key0, key1, key2))
+	asserts.AssertIntReply(t, result, 0)
+	result = SDiffStore(testDB, utils.ToBytesList(utils.RandString(10), key1, key2))
+	asserts.AssertIntReply(t, result, 0)
 }
 
 func TestSRandMember(t *testing.T) {
 	FlushAll(testDB, [][]byte{})
-	key := RandString(10)
+	key := utils.RandString(10)
 	for j := 0; j < 100; j++ {
 		member := strconv.Itoa(j)
-		SAdd(testDB, toArgs(key, member))
+		SAdd(testDB, utils.ToBytesList(key, member))
 	}
-	result := SRandMember(testDB, toArgs(key))
+	result := SRandMember(testDB, utils.ToBytesList(key))
 	br, ok := result.(*reply.BulkReply)
 	if !ok && len(br.Arg) > 0 {
 		t.Error(fmt.Sprintf("expected bulk reply, actually %s", result.ToBytes()))
 		return
 	}
 
-	result = SRandMember(testDB, toArgs(key, "10"))
+	result = SRandMember(testDB, utils.ToBytesList(key, "10"))
 	asserts.AssertMultiBulkReplySize(t, result, 10)
 	multiBulk, ok := result.(*reply.MultiBulkReply)
 	if !ok {
@@ -170,12 +205,12 @@ func TestSRandMember(t *testing.T) {
 		return
 	}
 
-	result = SRandMember(testDB, toArgs(key, "110"))
+	result = SRandMember(testDB, utils.ToBytesList(key, "110"))
 	asserts.AssertMultiBulkReplySize(t, result, 100)
 
-	result = SRandMember(testDB, toArgs(key, "-10"))
+	result = SRandMember(testDB, utils.ToBytesList(key, "-10"))
 	asserts.AssertMultiBulkReplySize(t, result, 10)
 
-	result = SRandMember(testDB, toArgs(key, "-110"))
+	result = SRandMember(testDB, utils.ToBytesList(key, "-110"))
 	asserts.AssertMultiBulkReplySize(t, result, 110)
 }

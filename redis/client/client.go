@@ -184,7 +184,7 @@ func (client *Client) finishRequest(reply redis.Reply) {
 }
 
 func (client *Client) handleRead() error {
-	ch := parser.Parse(client.conn)
+	ch := parser.ParseStream(client.conn)
 	for payload := range ch {
 		if payload.Err != nil {
 			client.finishRequest(reply.MakeErrReply(payload.Err.Error()))

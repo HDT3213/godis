@@ -70,8 +70,8 @@ func MakeCluster() *Cluster {
 	return cluster
 }
 
-// args contains all
-type CmdFunc func(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply
+// CmdFunc represents the handler of a redis command
+type CmdFunc func(cluster *Cluster, c redis.Connection, cmdAndArgs [][]byte) redis.Reply
 
 func (cluster *Cluster) Close() {
 	cluster.db.Close()

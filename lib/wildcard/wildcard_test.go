@@ -3,7 +3,11 @@ package wildcard
 import "testing"
 
 func TestWildCard(t *testing.T) {
-	p := CompilePattern("a")
+	p := CompilePattern("")
+	if !p.IsMatch("") {
+		t.Error("expect true actually false")
+	}
+	p = CompilePattern("a")
 	if !p.IsMatch("a") {
 		t.Error("expect true actually false")
 	}

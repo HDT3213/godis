@@ -5,6 +5,7 @@ import (
 	"github.com/hdt3213/godis/tcp"
 	"net"
 	"testing"
+	"time"
 )
 
 func TestListenAndServe(t *testing.T) {
@@ -39,4 +40,5 @@ func TestListenAndServe(t *testing.T) {
 		return
 	}
 	closeChan <- struct{}{}
+	time.Sleep(time.Second)
 }

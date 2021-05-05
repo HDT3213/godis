@@ -82,7 +82,7 @@ func (db *DB) loadAof(maxBytes int) {
 	defer file.Close()
 
 	reader := utils.NewLimitedReader(file, maxBytes)
-	ch := parser.Parse(reader)
+	ch := parser.ParseStream(reader)
 	for p := range ch {
 		if p.Err != nil {
 			if p.Err == io.EOF {

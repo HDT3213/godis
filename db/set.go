@@ -236,7 +236,7 @@ func SInterStore(db *DB, args [][]byte) redis.Reply {
 		}
 		if set == nil {
 			db.Remove(dest) // clean ttl and old value
-			return &reply.EmptyMultiBulkReply{}
+			return reply.MakeIntReply(0)
 		}
 
 		if result == nil {
@@ -437,7 +437,7 @@ func SDiffStore(db *DB, args [][]byte) redis.Reply {
 			if i == 0 {
 				// early termination
 				db.Remove(dest)
-				return &reply.EmptyMultiBulkReply{}
+				return reply.MakeIntReply(0)
 			}
 			continue
 		}
@@ -449,7 +449,7 @@ func SDiffStore(db *DB, args [][]byte) redis.Reply {
 			if result.Len() == 0 {
 				// early termination
 				db.Remove(dest)
-				return &reply.EmptyMultiBulkReply{}
+				return reply.MakeIntReply(0)
 			}
 		}
 	}

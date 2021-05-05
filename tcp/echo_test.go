@@ -6,6 +6,7 @@ import (
 	"net"
 	"strconv"
 	"testing"
+	"time"
 )
 
 func TestListenAndServe(t *testing.T) {
@@ -42,5 +43,11 @@ func TestListenAndServe(t *testing.T) {
 			return
 		}
 	}
+	_ = conn.Close()
+	for i := 0; i < 5; i++ {
+		// create idle connection
+		_, _ = net.Dial("tcp", addr)
+	}
 	closeChan <- struct{}{}
+	time.Sleep(time.Second)
 }

@@ -1,6 +1,7 @@
-package server
+package connection
 
 import (
+	"bytes"
 	"github.com/hdt3213/godis/lib/sync/wait"
 	"net"
 	"sync"
@@ -19,6 +20,11 @@ type Connection struct {
 
 	// subscribing channels
 	subs map[string]bool
+}
+
+// RemoteAddr returns the remote network address
+func (c *Connection) RemoteAddr() net.Addr {
+	return c.conn.RemoteAddr()
 }
 
 // Close disconnect with the client
@@ -89,4 +95,22 @@ func (c *Connection) GetChannels() []string {
 		i++
 	}
 	return channels
+}
+
+type FakeConn struct {
+	Connection
+	buf bytes.Buffer
+}
+
+func (c *FakeConn) Write(b []byte) error {
+	c.buf.Write(b)
+	return nil
+}
+
+func (c *FakeConn) Clean() {
+	c.buf.Reset()
+}
+
+func (c *FakeConn) Bytes() []byte {
+	return c.buf.Bytes()
 }
