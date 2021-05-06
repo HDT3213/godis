@@ -5,7 +5,7 @@ import (
 	"github.com/hdt3213/godis/redis/reply"
 )
 
-// TODO: support multiplex slots
+// Rename renames a key, the origin and the destination must within the same slot
 func Rename(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	if len(args) != 3 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'rename' command")

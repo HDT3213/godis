@@ -85,4 +85,19 @@ func TestGeoDist(t *testing.T) {
 	if dist < 166.274 || dist > 166.275 {
 		t.Errorf("expected 166.274, actual: %f", dist)
 	}
+
+	result = GeoDist(testDB, utils.ToBytesList(key, pos1, pos2, "m"))
+	bulkReply, ok = result.(*reply.BulkReply)
+	if !ok {
+		t.Error(fmt.Sprintf("expected bulk reply, actually %s", result.ToBytes()))
+		return
+	}
+	dist, err = strconv.ParseFloat(string(bulkReply.Arg), 10)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if dist < 166274 || dist > 166275 {
+		t.Errorf("expected 166274, actual: %f", dist)
+	}
 }

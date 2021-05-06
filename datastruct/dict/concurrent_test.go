@@ -1,6 +1,7 @@
 package dict
 
 import (
+	"github.com/hdt3213/godis/lib/utils"
 	"strconv"
 	"sync"
 	"testing"
@@ -265,5 +266,16 @@ func TestConcurrentRandomKey(t *testing.T) {
 	}
 	if len(result) > len(distinct) {
 		t.Errorf("get duplicated keys in result")
+	}
+}
+
+func TestConcurrentDict_Keys(t *testing.T) {
+	d := MakeConcurrent(0)
+	size := 10
+	for i := 0; i < size; i++ {
+		d.Put(utils.RandString(5), utils.RandString(5))
+	}
+	if len(d.Keys()) != size {
+		t.Errorf("expect %d keys, actual: %d", size, len(d.Keys()))
 	}
 }
