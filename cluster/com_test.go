@@ -38,9 +38,9 @@ func TestRelay(t *testing.T) {
 	testCluster2 := MakeTestCluster([]string{"127.0.0.1:6379"})
 	key := RandString(4)
 	value := RandString(4)
-	ret := testCluster2.Relay("127.0.0.1:6379", nil, toArgs("SET", key, value))
+	ret := testCluster2.relay("127.0.0.1:6379", nil, toArgs("SET", key, value))
 	asserts.AssertNotError(t, ret)
-	ret = testCluster2.Relay("127.0.0.1:6379", nil, toArgs("GET", key))
+	ret = testCluster2.relay("127.0.0.1:6379", nil, toArgs("GET", key))
 	asserts.AssertBulkReply(t, ret, value)
 }
 
@@ -48,7 +48,7 @@ func TestBroadcast(t *testing.T) {
 	testCluster2 := MakeTestCluster([]string{"127.0.0.1:6379"})
 	key := RandString(4)
 	value := RandString(4)
-	rets := testCluster2.Broadcast(nil, toArgs("SET", key, value))
+	rets := testCluster2.broadcast(nil, toArgs("SET", key, value))
 	for _, v := range rets {
 		asserts.AssertNotError(t, v)
 	}

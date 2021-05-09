@@ -1,4 +1,3 @@
-// communicate with peers within cluster
 package cluster
 
 import (
@@ -33,29 +32,28 @@ func (cluster *Cluster) returnPeerClient(peer string, peerClient *client.Client)
 	return connectionFactory.ReturnObject(context.Background(), peerClient)
 }
 
-// relay command to peer
+// relay relays command to peer
 // cannot call Prepare, Commit, Rollback of self node
-func (cluster *Cluster) Relay(peer string, c redis.Connection, args [][]byte) redis.Reply {
+func (cluster *Cluster) relay(peer string, c redis.Connection, args [][]byte) redis.Reply {
 	if peer == cluster.self {
 		// to self db
 		return cluster.db.Exec(c, args)
-	} else {
-		peerClient, err := cluster.getPeerClient(peer)
-		if err != nil {
-			return reply.MakeErrReply(err.Error())
-		}
-		defer func() {
-			_ = cluster.returnPeerClient(peer, peerClient)
-		}()
-		return peerClient.Send(args)
 	}
+	peerClient, err := cluster.getPeerClient(peer)
+	if err != nil {
+		return reply.MakeErrReply(err.Error())
+	}
+	defer func() {
+		_ = cluster.returnPeerClient(peer, peerClient)
+	}()
+	return peerClient.Send(args)
 }
 
-// broadcast command to all node in cluster
-func (cluster *Cluster) Broadcast(c redis.Connection, args [][]byte) map[string]redis.Reply {
+// broadcast broadcasts command to all node in cluster
+func (cluster *Cluster) broadcast(c redis.Connection, args [][]byte) map[string]redis.Reply {
 	result := make(map[string]redis.Reply)
 	for _, node := range cluster.nodes {
-		reply := cluster.Relay(node, c, args)
+		reply := cluster.relay(node, c, args)
 		result[node] = reply
 	}
 	return result

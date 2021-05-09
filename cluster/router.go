@@ -2,15 +2,15 @@ package cluster
 
 import "github.com/hdt3213/godis/interface/redis"
 
-func MakeRouter() map[string]CmdFunc {
+func makeRouter() map[string]CmdFunc {
 	routerMap := make(map[string]CmdFunc)
-	routerMap["ping"] = Ping
+	routerMap["ping"] = ping
 
-	routerMap["commit"] = Commit
+	routerMap["commit"] = commit
 	routerMap["rollback"] = Rollback
 	routerMap["del"] = Del
-	routerMap["preparedel"] = PrepareDel
-	routerMap["preparemset"] = PrepareMSet
+	routerMap["preparedel"] = prepareDel
+	routerMap["preparemset"] = prepareMSet
 
 	routerMap["expire"] = defaultFunc
 	routerMap["expireat"] = defaultFunc
@@ -102,7 +102,7 @@ func MakeRouter() map[string]CmdFunc {
 	routerMap["georadiusbymember"] = defaultFunc
 
 	routerMap["publish"] = Publish
-	routerMap[relayPublish] = OnRelayedPublish
+	routerMap[relayPublish] = onRelayedPublish
 	routerMap["subscribe"] = Subscribe
 	routerMap["unsubscribe"] = UnSubscribe
 
@@ -117,5 +117,5 @@ func MakeRouter() map[string]CmdFunc {
 func defaultFunc(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	key := string(args[1])
 	peer := cluster.peerPicker.PickNode(key)
-	return cluster.Relay(peer, c, args)
+	return cluster.relay(peer, c, args)
 }

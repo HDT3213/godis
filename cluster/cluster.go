@@ -1,3 +1,4 @@
+// Package cluster provides a server side cluster which is transparent to client. You can connect to any node in the cluster to access all data in the cluster
 package cluster
 
 import (
@@ -16,6 +17,8 @@ import (
 	"strings"
 )
 
+// Cluster represents a node of godis cluster
+// it holds part of data and coordinates other nodes to finish transactions
 type Cluster struct {
 	self string
 
@@ -37,7 +40,7 @@ const (
 // if only one node involved in a transaction, just execute the command don't apply tcc procedure
 var allowFastTransaction = true
 
-// start current processing as a node of cluster
+// MakeCluster creates and starts a node of cluster
 func MakeCluster() *Cluster {
 	cluster := &Cluster{
 		self: config.Properties.Self,
@@ -62,7 +65,7 @@ func MakeCluster() *Cluster {
 	cluster.peerPicker.AddNode(nodes...)
 	ctx := context.Background()
 	for _, peer := range config.Properties.Peers {
-		cluster.peerConnection[peer] = pool.NewObjectPoolWithDefaultConfig(ctx, &ConnectionFactory{
+		cluster.peerConnection[peer] = pool.NewObjectPoolWithDefaultConfig(ctx, &connectionFactory{
 			Peer: peer,
 		})
 	}
@@ -73,11 +76,12 @@ func MakeCluster() *Cluster {
 // CmdFunc represents the handler of a redis command
 type CmdFunc func(cluster *Cluster, c redis.Connection, cmdAndArgs [][]byte) redis.Reply
 
+// Close stops current node of cluster
 func (cluster *Cluster) Close() {
 	cluster.db.Close()
 }
 
-var router = MakeRouter()
+var router = makeRouter()
 
 func isAuthenticated(c redis.Connection) bool {
 	if config.Properties.RequirePass == "" {
@@ -86,16 +90,17 @@ func isAuthenticated(c redis.Connection) bool {
 	return c.GetPassword() == config.Properties.RequirePass
 }
 
-func (cluster *Cluster) Exec(c redis.Connection, args [][]byte) (result redis.Reply) {
+// Exec executes command on cluster
+func (cluster *Cluster) Exec(c redis.Connection, cmdArgs [][]byte) (result redis.Reply) {
 	defer func() {
 		if err := recover(); err != nil {
 			logger.Warn(fmt.Sprintf("error occurs: %v\n%s", err, string(debug.Stack())))
 			result = &reply.UnknownErrReply{}
 		}
 	}()
-	cmd := strings.ToLower(string(args[0]))
+	cmd := strings.ToLower(string(cmdArgs[0]))
 	if cmd == "auth" {
-		return godis.Auth(cluster.db, c, args[1:])
+		return godis.Auth(cluster.db, c, cmdArgs[1:])
 	}
 	if !isAuthenticated(c) {
 		return reply.MakeErrReply("NOAUTH Authentication required")
@@ -104,14 +109,16 @@ func (cluster *Cluster) Exec(c redis.Connection, args [][]byte) (result redis.Re
 	if !ok {
 		return reply.MakeErrReply("ERR unknown command '" + cmd + "', or not supported in cluster mode")
 	}
-	result = cmdFunc(cluster, c, args)
+	result = cmdFunc(cluster, c, cmdArgs)
 	return
 }
 
+// AfterClientClose does some clean after client close connection
 func (cluster *Cluster) AfterClientClose(c redis.Connection) {
+	cluster.db.AfterClientClose(c)
 }
 
-func Ping(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
+func ping(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	return godis.Ping(cluster.db, args[1:])
 }
 

@@ -65,6 +65,7 @@ func unsubscribe0(hub *Hub, channel string, client redis.Connection) bool {
 	return false
 }
 
+// Subscribe puts the given connection into the given channel
 func Subscribe(hub *Hub, c redis.Connection, args [][]byte) redis.Reply {
 	channels := make([]string, len(args))
 	for i, b := range args {

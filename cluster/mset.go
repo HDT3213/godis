@@ -8,6 +8,7 @@ import (
 	"strconv"
 )
 
+// MGet atomically get multi key-value from cluster, keys can be distributed on any node
 func MGet(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	if len(args) < 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'mget' command")
@@ -20,7 +21,7 @@ func MGet(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	resultMap := make(map[string][]byte)
 	groupMap := cluster.groupBy(keys)
 	for peer, group := range groupMap {
-		resp := cluster.Relay(peer, c, makeArgs("MGET", group...))
+		resp := cluster.relay(peer, c, makeArgs("MGET", group...))
 		if reply.IsErrorReply(resp) {
 			errReply := resp.(reply.ErrorReply)
 			return reply.MakeErrReply(fmt.Sprintf("ERR during get %s occurs: %v", group[0], errReply.Error()))
@@ -39,11 +40,11 @@ func MGet(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 }
 
 // args: PrepareMSet id keys...
-func PrepareMSet(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
+func prepareMSet(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	if len(args) < 3 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'preparemset' command")
 	}
-	txId := string(args[1])
+	txID := string(args[1])
 	size := (len(args) - 2) / 2
 	keys := make([]string, size)
 	for i := 0; i < size; i++ {
@@ -54,8 +55,8 @@ func PrepareMSet(cluster *Cluster, c redis.Connection, args [][]byte) redis.Repl
 		[]byte("MSet"),
 	} // actual args for cluster.db
 	txArgs = append(txArgs, args[2:]...)
-	tx := NewTransaction(cluster, c, txId, txArgs, keys)
-	cluster.transactions.Put(txId, tx)
+	tx := NewTransaction(cluster, c, txID, txArgs, keys)
+	cluster.transactions.Put(txID, tx)
 	err := tx.prepare()
 	if err != nil {
 		return reply.MakeErrReply(err.Error())
@@ -64,7 +65,7 @@ func PrepareMSet(cluster *Cluster, c redis.Connection, args [][]byte) redis.Repl
 }
 
 // invoker should provide lock
-func CommitMSet(cluster *Cluster, c redis.Connection, tx *Transaction) redis.Reply {
+func commitMSet(cluster *Cluster, c redis.Connection, tx *Transaction) redis.Reply {
 	size := len(tx.args) / 2
 	keys := make([]string, size)
 	values := make([][]byte, size)
@@ -80,6 +81,7 @@ func CommitMSet(cluster *Cluster, c redis.Connection, tx *Transaction) redis.Rep
 	return &reply.OkReply{}
 }
 
+// MSet atomically sets multi key-value in cluster, keys can be distributed on any node
 func MSet(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	argCount := len(args) - 1
 	if argCount%2 != 0 || argCount < 1 {
@@ -97,25 +99,25 @@ func MSet(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	groupMap := cluster.groupBy(keys)
 	if len(groupMap) == 1 && allowFastTransaction { // do fast
 		for peer := range groupMap {
-			return cluster.Relay(peer, c, args)
+			return cluster.relay(peer, c, args)
 		}
 	}
 
 	//prepare
 	var errReply redis.Reply
-	txId := cluster.idGenerator.NextId()
-	txIdStr := strconv.FormatInt(txId, 10)
+	txID := cluster.idGenerator.NextId()
+	txIDStr := strconv.FormatInt(txID, 10)
 	rollback := false
 	for peer, group := range groupMap {
-		peerArgs := []string{txIdStr}
+		peerArgs := []string{txIDStr}
 		for _, k := range group {
 			peerArgs = append(peerArgs, k, valueMap[k])
 		}
 		var resp redis.Reply
 		if peer == cluster.self {
-			resp = PrepareMSet(cluster, c, makeArgs("PrepareMSet", peerArgs...))
+			resp = prepareMSet(cluster, c, makeArgs("PrepareMSet", peerArgs...))
 		} else {
-			resp = cluster.Relay(peer, c, makeArgs("PrepareMSet", peerArgs...))
+			resp = cluster.relay(peer, c, makeArgs("PrepareMSet", peerArgs...))
 		}
 		if reply.IsErrorReply(resp) {
 			errReply = resp
@@ -125,9 +127,9 @@ func MSet(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	}
 	if rollback {
 		// rollback
-		RequestRollback(cluster, c, txId, groupMap)
+		requestRollback(cluster, c, txID, groupMap)
 	} else {
-		_, errReply = RequestCommit(cluster, c, txId, groupMap)
+		_, errReply = requestCommit(cluster, c, txID, groupMap)
 		rollback = errReply != nil
 	}
 	if !rollback {
@@ -137,6 +139,7 @@ func MSet(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 
 }
 
+// MSetNX sets multi key-value in database, only if none of the given keys exist and all given keys are on the same node
 func MSetNX(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	argCount := len(args) - 1
 	if argCount%2 != 0 || argCount < 1 {
@@ -155,5 +158,5 @@ func MSetNX(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 			}
 		}
 	}
-	return cluster.Relay(peer, c, args)
+	return cluster.relay(peer, c, args)
 }
