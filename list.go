@@ -1,4 +1,4 @@
-package db
+package godis
 
 import (
 	List "github.com/hdt3213/godis/datastruct/list"
@@ -8,7 +8,7 @@ import (
 )
 
 func (db *DB) getAsList(key string) (*List.LinkedList, reply.ErrorReply) {
-	entity, ok := db.Get(key)
+	entity, ok := db.GetEntity(key)
 	if !ok {
 		return nil, nil
 	}
@@ -27,7 +27,7 @@ func (db *DB) getOrInitList(key string) (list *List.LinkedList, isNew bool, errR
 	isNew = false
 	if list == nil {
 		list = &List.LinkedList{}
-		db.Put(key, &DataEntity{
+		db.PutEntity(key, &DataEntity{
 			Data: list,
 		})
 		isNew = true

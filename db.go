@@ -1,4 +1,5 @@
-package db
+// Package godis is a memory database with redis compatible interface
+package godis
 
 import (
 	"fmt"
@@ -17,7 +18,7 @@ import (
 	"time"
 )
 
-// DataEntity stores data bound to a key, may be a string, list, hash, set and so on
+// DataEntity stores data bound to a key, including a string, list, hash, set and so on
 type DataEntity struct {
 	Data interface{}
 }
@@ -101,9 +102,9 @@ func (db *DB) Close() {
 	}
 }
 
-// Exec execute command
-// parameter `args` is a RESP message including command and its params
-func (db *DB) Exec(c redis.Connection, args [][]byte) (result redis.Reply) {
+// Exec executes command
+// parameter `cmdArgs` contains command and its arguments, for example: "set key value"
+func (db *DB) Exec(c redis.Connection, cmdArgs [][]byte) (result redis.Reply) {
 	defer func() {
 		if err := recover(); err != nil {
 			logger.Warn(fmt.Sprintf("error occurs: %v\n%s", err, string(debug.Stack())))
@@ -111,26 +112,26 @@ func (db *DB) Exec(c redis.Connection, args [][]byte) (result redis.Reply) {
 		}
 	}()
 
-	cmd := strings.ToLower(string(args[0]))
+	cmd := strings.ToLower(string(cmdArgs[0]))
 	if cmd == "auth" {
-		return Auth(db, c, args[1:])
+		return Auth(db, c, cmdArgs[1:])
 	}
 	if !isAuthenticated(c) {
 		return reply.MakeErrReply("NOAUTH Authentication required")
 	}
 	// special commands
 	if cmd == "subscribe" {
-		if len(args) < 2 {
+		if len(cmdArgs) < 2 {
 			return &reply.ArgNumErrReply{Cmd: "subscribe"}
 		}
-		return pubsub.Subscribe(db.hub, c, args[1:])
+		return pubsub.Subscribe(db.hub, c, cmdArgs[1:])
 	} else if cmd == "publish" {
-		return pubsub.Publish(db.hub, args[1:])
+		return pubsub.Publish(db.hub, cmdArgs[1:])
 	} else if cmd == "unsubscribe" {
-		return pubsub.UnSubscribe(db.hub, c, args[1:])
+		return pubsub.UnSubscribe(db.hub, c, cmdArgs[1:])
 	} else if cmd == "bgrewriteaof" {
 		// aof.go imports router.go, router.go cannot import BGRewriteAOF from aof.go
-		return BGRewriteAOF(db, args[1:])
+		return BGRewriteAOF(db, cmdArgs[1:])
 	}
 
 	// normal commands
@@ -138,8 +139,8 @@ func (db *DB) Exec(c redis.Connection, args [][]byte) (result redis.Reply) {
 	if !ok {
 		return reply.MakeErrReply("ERR unknown command '" + cmd + "'")
 	}
-	if len(args) > 1 {
-		result = fun(db, args[1:])
+	if len(cmdArgs) > 1 {
+		result = fun(db, cmdArgs[1:])
 	} else {
 		result = fun(db, [][]byte{})
 	}
@@ -148,8 +149,8 @@ func (db *DB) Exec(c redis.Connection, args [][]byte) (result redis.Reply) {
 
 /* ---- Data Access ----- */
 
-// Get returns DataEntity bind to given key
-func (db *DB) Get(key string) (*DataEntity, bool) {
+// GetEntity returns DataEntity bind to given key
+func (db *DB) GetEntity(key string) (*DataEntity, bool) {
 	db.stopWorld.Wait()
 
 	raw, ok := db.data.Get(key)
@@ -163,8 +164,8 @@ func (db *DB) Get(key string) (*DataEntity, bool) {
 	return entity, true
 }
 
-// Put a DataEntity into DB
-func (db *DB) Put(key string, entity *DataEntity) int {
+// PutEntity a DataEntity into DB
+func (db *DB) PutEntity(key string, entity *DataEntity) int {
 	db.stopWorld.Wait()
 	return db.data.Put(key, entity)
 }
@@ -269,8 +270,7 @@ func (db *DB) Expire(key string, expireTime time.Time) {
 	taskKey := genExpireTask(key)
 	timewheel.At(expireTime, taskKey, func() {
 		logger.Info("expire " + key)
-		db.ttlMap.Remove(key)
-		db.data.Remove(key)
+		db.Remove(key)
 	})
 }
 

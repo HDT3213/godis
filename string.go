@@ -1,4 +1,4 @@
-package db
+package godis
 
 import (
 	"github.com/hdt3213/godis/interface/redis"
@@ -10,7 +10,7 @@ import (
 )
 
 func (db *DB) getAsString(key string) ([]byte, reply.ErrorReply) {
-	entity, ok := db.Get(key)
+	entity, ok := db.GetEntity(key)
 	if !ok {
 		return nil, nil
 	}
@@ -116,7 +116,7 @@ func Set(db *DB, args [][]byte) redis.Reply {
 	var result int
 	switch policy {
 	case upsertPolicy:
-		result = db.Put(key, entity)
+		result = db.PutEntity(key, entity)
 	case insertPolicy:
 		result = db.PutIfAbsent(key, entity)
 	case updatePolicy:
@@ -188,7 +188,7 @@ func SetEX(db *DB, args [][]byte) redis.Reply {
 	db.Lock(key)
 	defer db.UnLock(key)
 
-	db.Put(key, entity)
+	db.PutEntity(key, entity)
 	expireTime := time.Now().Add(time.Duration(ttl) * time.Millisecond)
 	db.Expire(key, expireTime)
 	db.AddAof(makeAofCmd("setex", args))
@@ -219,7 +219,7 @@ func PSetEX(db *DB, args [][]byte) redis.Reply {
 	db.Lock(key)
 	defer db.UnLock(key)
 
-	db.Put(key, entity)
+	db.PutEntity(key, entity)
 	expireTime := time.Now().Add(time.Duration(ttlArg) * time.Millisecond)
 	db.Expire(key, expireTime)
 	db.AddAof(makeAofCmd("setex", args))
@@ -247,7 +247,7 @@ func MSet(db *DB, args [][]byte) redis.Reply {
 
 	for i, key := range keys {
 		value := values[i]
-		db.Put(key, &DataEntity{Data: value})
+		db.PutEntity(key, &DataEntity{Data: value})
 	}
 	db.AddAof(makeAofCmd("mset", args))
 	return &reply.OkReply{}
@@ -300,7 +300,7 @@ func MSetNX(db *DB, args [][]byte) redis.Reply {
 	defer db.UnLocks(keys...)
 
 	for _, key := range keys {
-		_, exists := db.Get(key)
+		_, exists := db.GetEntity(key)
 		if exists {
 			return reply.MakeIntReply(0)
 		}
@@ -308,7 +308,7 @@ func MSetNX(db *DB, args [][]byte) redis.Reply {
 
 	for i, key := range keys {
 		value := values[i]
-		db.Put(key, &DataEntity{Data: value})
+		db.PutEntity(key, &DataEntity{Data: value})
 	}
 	db.AddAof(makeAofCmd("msetnx", args))
 	return reply.MakeIntReply(1)
@@ -327,7 +327,7 @@ func GetSet(db *DB, args [][]byte) redis.Reply {
 		return err
 	}
 
-	db.Put(key, &DataEntity{Data: value})
+	db.PutEntity(key, &DataEntity{Data: value})
 	db.Persist(key) // override ttl
 	db.AddAof(makeAofCmd("getset", args))
 	if old == nil {
@@ -355,13 +355,13 @@ func Incr(db *DB, args [][]byte) redis.Reply {
 		if err != nil {
 			return reply.MakeErrReply("ERR value is not an integer or out of range")
 		}
-		db.Put(key, &DataEntity{
+		db.PutEntity(key, &DataEntity{
 			Data: []byte(strconv.FormatInt(val+1, 10)),
 		})
 		db.AddAof(makeAofCmd("incr", args))
 		return reply.MakeIntReply(val + 1)
 	}
-	db.Put(key, &DataEntity{
+	db.PutEntity(key, &DataEntity{
 		Data: []byte("1"),
 	})
 	db.AddAof(makeAofCmd("incr", args))
@@ -393,13 +393,13 @@ func IncrBy(db *DB, args [][]byte) redis.Reply {
 		if err != nil {
 			return reply.MakeErrReply("ERR value is not an integer or out of range")
 		}
-		db.Put(key, &DataEntity{
+		db.PutEntity(key, &DataEntity{
 			Data: []byte(strconv.FormatInt(val+delta, 10)),
 		})
 		db.AddAof(makeAofCmd("incrby", args))
 		return reply.MakeIntReply(val + delta)
 	}
-	db.Put(key, &DataEntity{
+	db.PutEntity(key, &DataEntity{
 		Data: args[1],
 	})
 	db.AddAof(makeAofCmd("incrby", args))
@@ -431,13 +431,13 @@ func IncrByFloat(db *DB, args [][]byte) redis.Reply {
 			return reply.MakeErrReply("ERR value is not a valid float")
 		}
 		resultBytes := []byte(val.Add(delta).String())
-		db.Put(key, &DataEntity{
+		db.PutEntity(key, &DataEntity{
 			Data: resultBytes,
 		})
 		db.AddAof(makeAofCmd("incrbyfloat", args))
 		return reply.MakeBulkReply(resultBytes)
 	}
-	db.Put(key, &DataEntity{
+	db.PutEntity(key, &DataEntity{
 		Data: args[1],
 	})
 	db.AddAof(makeAofCmd("incrbyfloat", args))
@@ -463,7 +463,7 @@ func Decr(db *DB, args [][]byte) redis.Reply {
 		if err != nil {
 			return reply.MakeErrReply("ERR value is not an integer or out of range")
 		}
-		db.Put(key, &DataEntity{
+		db.PutEntity(key, &DataEntity{
 			Data: []byte(strconv.FormatInt(val-1, 10)),
 		})
 		db.AddAof(makeAofCmd("decr", args))
@@ -472,7 +472,7 @@ func Decr(db *DB, args [][]byte) redis.Reply {
 	entity := &DataEntity{
 		Data: []byte("-1"),
 	}
-	db.Put(key, entity)
+	db.PutEntity(key, entity)
 	db.AddAof(makeAofCmd("decr", args))
 	return reply.MakeIntReply(-1)
 }
@@ -501,14 +501,14 @@ func DecrBy(db *DB, args [][]byte) redis.Reply {
 		if err != nil {
 			return reply.MakeErrReply("ERR value is not an integer or out of range")
 		}
-		db.Put(key, &DataEntity{
+		db.PutEntity(key, &DataEntity{
 			Data: []byte(strconv.FormatInt(val-delta, 10)),
 		})
 		db.AddAof(makeAofCmd("decrby", args))
 		return reply.MakeIntReply(val - delta)
 	}
 	valueStr := strconv.FormatInt(-delta, 10)
-	db.Put(key, &DataEntity{
+	db.PutEntity(key, &DataEntity{
 		Data: []byte(valueStr),
 	})
 	db.AddAof(makeAofCmd("decrby", args))

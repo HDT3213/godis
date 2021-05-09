@@ -1,4 +1,4 @@
-package db
+package godis
 
 import (
 	SortedSet "github.com/hdt3213/godis/datastruct/sortedset"
@@ -9,7 +9,7 @@ import (
 )
 
 func (db *DB) getAsSortedSet(key string) (*SortedSet.SortedSet, reply.ErrorReply) {
-	entity, exists := db.Get(key)
+	entity, exists := db.GetEntity(key)
 	if !exists {
 		return nil, nil
 	}
@@ -28,7 +28,7 @@ func (db *DB) getOrInitSortedSet(key string) (sortedSet *SortedSet.SortedSet, in
 	inited = false
 	if sortedSet == nil {
 		sortedSet = SortedSet.Make()
-		db.Put(key, &DataEntity{
+		db.PutEntity(key, &DataEntity{
 			Data: sortedSet,
 		})
 		inited = true

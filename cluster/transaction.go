@@ -3,7 +3,7 @@ package cluster
 import (
 	"errors"
 	"fmt"
-	"github.com/hdt3213/godis/db"
+	"github.com/hdt3213/godis"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/timewheel"
@@ -80,9 +80,9 @@ func (tx *Transaction) prepare() error {
 	// build undoLog
 	tx.undoLog = make(map[string][][]byte)
 	for _, key := range tx.keys {
-		entity, ok := tx.cluster.db.Get(key)
+		entity, ok := tx.cluster.db.GetEntity(key)
 		if ok {
-			blob := db.EntityToCmd(key, entity)
+			blob := godis.EntityToCmd(key, entity)
 			tx.undoLog[key] = blob.Args
 		} else {
 			tx.undoLog[key] = nil // entity was nil, should be removed while rollback

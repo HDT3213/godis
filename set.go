@@ -1,4 +1,4 @@
-package db
+package godis
 
 import (
 	HashSet "github.com/hdt3213/godis/datastruct/set"
@@ -8,7 +8,7 @@ import (
 )
 
 func (db *DB) getAsSet(key string) (*HashSet.Set, reply.ErrorReply) {
-	entity, exists := db.Get(key)
+	entity, exists := db.GetEntity(key)
 	if !exists {
 		return nil, nil
 	}
@@ -27,7 +27,7 @@ func (db *DB) getOrInitSet(key string) (set *HashSet.Set, inited bool, errReply 
 	inited = false
 	if set == nil {
 		set = HashSet.Make()
-		db.Put(key, &DataEntity{
+		db.PutEntity(key, &DataEntity{
 			Data: set,
 		})
 		inited = true
@@ -253,7 +253,7 @@ func SInterStore(db *DB, args [][]byte) redis.Reply {
 	}
 
 	set := HashSet.MakeFromVals(result.ToSlice()...)
-	db.Put(dest, &DataEntity{
+	db.PutEntity(dest, &DataEntity{
 		Data: set,
 	})
 	db.AddAof(makeAofCmd("sinterstore", args))
@@ -348,7 +348,7 @@ func SUnionStore(db *DB, args [][]byte) redis.Reply {
 	}
 
 	set := HashSet.MakeFromVals(result.ToSlice()...)
-	db.Put(dest, &DataEntity{
+	db.PutEntity(dest, &DataEntity{
 		Data: set,
 	})
 
@@ -460,7 +460,7 @@ func SDiffStore(db *DB, args [][]byte) redis.Reply {
 		return &reply.EmptyMultiBulkReply{}
 	}
 	set := HashSet.MakeFromVals(result.ToSlice()...)
-	db.Put(dest, &DataEntity{
+	db.PutEntity(dest, &DataEntity{
 		Data: set,
 	})
 

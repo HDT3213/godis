@@ -3,9 +3,9 @@ package cluster
 import (
 	"context"
 	"fmt"
+	"github.com/hdt3213/godis"
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/datastruct/dict"
-	"github.com/hdt3213/godis/db"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/consistenthash"
 	"github.com/hdt3213/godis/lib/idgenerator"
@@ -23,7 +23,7 @@ type Cluster struct {
 	peerPicker     *consistenthash.Map
 	peerConnection map[string]*pool.ObjectPool
 
-	db           *db.DB
+	db           *godis.DB
 	transactions *dict.SimpleDict // id -> Transaction
 
 	idGenerator *idgenerator.IdGenerator
@@ -42,7 +42,7 @@ func MakeCluster() *Cluster {
 	cluster := &Cluster{
 		self: config.Properties.Self,
 
-		db:             db.MakeDB(),
+		db:             godis.MakeDB(),
 		transactions:   dict.MakeSimple(),
 		peerPicker:     consistenthash.New(replicas, nil),
 		peerConnection: make(map[string]*pool.ObjectPool),
@@ -95,7 +95,7 @@ func (cluster *Cluster) Exec(c redis.Connection, args [][]byte) (result redis.Re
 	}()
 	cmd := strings.ToLower(string(args[0]))
 	if cmd == "auth" {
-		return db.Auth(cluster.db, c, args[1:])
+		return godis.Auth(cluster.db, c, args[1:])
 	}
 	if !isAuthenticated(c) {
 		return reply.MakeErrReply("NOAUTH Authentication required")
@@ -112,7 +112,7 @@ func (cluster *Cluster) AfterClientClose(c redis.Connection) {
 }
 
 func Ping(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
-	return db.Ping(cluster.db, args[1:])
+	return godis.Ping(cluster.db, args[1:])
 }
 
 /*----- utils -------*/

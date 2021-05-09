@@ -1,4 +1,4 @@
-package db
+package godis
 
 import (
 	Dict "github.com/hdt3213/godis/datastruct/dict"
@@ -9,7 +9,7 @@ import (
 )
 
 func (db *DB) getAsDict(key string) (Dict.Dict, reply.ErrorReply) {
-	entity, exists := db.Get(key)
+	entity, exists := db.GetEntity(key)
 	if !exists {
 		return nil, nil
 	}
@@ -28,7 +28,7 @@ func (db *DB) getOrInitDict(key string) (dict Dict.Dict, inited bool, errReply r
 	inited = false
 	if dict == nil {
 		dict = Dict.MakeSimple()
-		db.Put(key, &DataEntity{
+		db.PutEntity(key, &DataEntity{
 			Data: dict,
 		})
 		inited = true

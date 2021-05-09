@@ -1,4 +1,4 @@
-package db
+package godis
 
 import (
 	"github.com/hdt3213/godis/config"
@@ -64,12 +64,12 @@ func TestAof(t *testing.T) {
 	aofWriteDB.Close()    // wait for aof finished
 	aofReadDB := MakeDB() // start new db and read aof file
 	for _, key := range keys {
-		expect, ok := aofWriteDB.Get(key)
+		expect, ok := aofWriteDB.GetEntity(key)
 		if !ok {
 			t.Errorf("key not found in origin: %s", key)
 			continue
 		}
-		actual, ok := aofReadDB.Get(key)
+		actual, ok := aofReadDB.GetEntity(key)
 		if !ok {
 			t.Errorf("key not found: %s", key)
 			continue
@@ -150,12 +150,12 @@ func TestRewriteAOF(t *testing.T) {
 	aofWriteDB.Close()    // wait for aof finished
 	aofReadDB := MakeDB() // start new db and read aof file
 	for _, key := range keys {
-		expect, ok := aofWriteDB.Get(key)
+		expect, ok := aofWriteDB.GetEntity(key)
 		if !ok {
 			t.Errorf("key not found in origin: %s", key)
 			continue
 		}
-		actual, ok := aofReadDB.Get(key)
+		actual, ok := aofReadDB.GetEntity(key)
 		if !ok {
 			t.Errorf("key not found: %s", key)
 			continue

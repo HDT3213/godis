@@ -1,4 +1,4 @@
-package db
+package godis
 
 import (
 	"github.com/hdt3213/godis/datastruct/dict"
@@ -38,7 +38,7 @@ func Exists(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'exists' command")
 	}
 	key := string(args[0])
-	_, exists := db.Get(key)
+	_, exists := db.GetEntity(key)
 	if exists {
 		return reply.MakeIntReply(1)
 	}
@@ -71,7 +71,7 @@ func Type(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'type' command")
 	}
 	key := string(args[0])
-	entity, exists := db.Get(key)
+	entity, exists := db.GetEntity(key)
 	if !exists {
 		return reply.MakeStatusReply("none")
 	}
@@ -101,12 +101,12 @@ func Rename(db *DB, args [][]byte) redis.Reply {
 	db.Locks(src, dest)
 	defer db.UnLocks(src, dest)
 
-	entity, ok := db.Get(src)
+	entity, ok := db.GetEntity(src)
 	if !ok {
 		return reply.MakeErrReply("no such key")
 	}
 	rawTTL, hasTTL := db.ttlMap.Get(src)
-	db.Put(dest, entity)
+	db.PutEntity(dest, entity)
 	db.Remove(src)
 	if hasTTL {
 		db.Persist(src) // clean src and dest with their ttl
@@ -129,18 +129,18 @@ func RenameNx(db *DB, args [][]byte) redis.Reply {
 	db.Locks(src, dest)
 	defer db.UnLocks(src, dest)
 
-	_, ok := db.Get(dest)
+	_, ok := db.GetEntity(dest)
 	if ok {
 		return reply.MakeIntReply(0)
 	}
 
-	entity, ok := db.Get(src)
+	entity, ok := db.GetEntity(src)
 	if !ok {
 		return reply.MakeErrReply("no such key")
 	}
 	rawTTL, hasTTL := db.ttlMap.Get(src)
 	db.Removes(src, dest) // clean src and dest with their ttl
-	db.Put(dest, entity)
+	db.PutEntity(dest, entity)
 	if hasTTL {
 		db.Persist(src) // clean src and dest with their ttl
 		db.Persist(dest)
@@ -164,7 +164,7 @@ func Expire(db *DB, args [][]byte) redis.Reply {
 	}
 	ttl := time.Duration(ttlArg) * time.Second
 
-	_, exists := db.Get(key)
+	_, exists := db.GetEntity(key)
 	if !exists {
 		return reply.MakeIntReply(0)
 	}
@@ -188,7 +188,7 @@ func ExpireAt(db *DB, args [][]byte) redis.Reply {
 	}
 	expireTime := time.Unix(raw, 0)
 
-	_, exists := db.Get(key)
+	_, exists := db.GetEntity(key)
 	if !exists {
 		return reply.MakeIntReply(0)
 	}
@@ -211,7 +211,7 @@ func PExpire(db *DB, args [][]byte) redis.Reply {
 	}
 	ttl := time.Duration(ttlArg) * time.Millisecond
 
-	_, exists := db.Get(key)
+	_, exists := db.GetEntity(key)
 	if !exists {
 		return reply.MakeIntReply(0)
 	}
@@ -235,7 +235,7 @@ func PExpireAt(db *DB, args [][]byte) redis.Reply {
 	}
 	expireTime := time.Unix(0, raw*int64(time.Millisecond))
 
-	_, exists := db.Get(key)
+	_, exists := db.GetEntity(key)
 	if !exists {
 		return reply.MakeIntReply(0)
 	}
@@ -252,7 +252,7 @@ func TTL(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'ttl' command")
 	}
 	key := string(args[0])
-	_, exists := db.Get(key)
+	_, exists := db.GetEntity(key)
 	if !exists {
 		return reply.MakeIntReply(-2)
 	}
@@ -272,7 +272,7 @@ func PTTL(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'pttl' command")
 	}
 	key := string(args[0])
-	_, exists := db.Get(key)
+	_, exists := db.GetEntity(key)
 	if !exists {
 		return reply.MakeIntReply(-2)
 	}
@@ -292,7 +292,7 @@ func Persist(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'persist' command")
 	}
 	key := string(args[0])
-	_, exists := db.Get(key)
+	_, exists := db.GetEntity(key)
 	if !exists {
 		return reply.MakeIntReply(0)
 	}

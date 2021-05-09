@@ -1,4 +1,4 @@
-package db
+package godis
 
 func makeRouter() map[string]cmdFunc {
 	routerMap := make(map[string]cmdFunc)

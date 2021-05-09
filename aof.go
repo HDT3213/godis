@@ -1,4 +1,4 @@
-package db
+package godis
 
 import (
 	"github.com/hdt3213/godis/config"

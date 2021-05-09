@@ -2,7 +2,7 @@ package cluster
 
 import (
 	"fmt"
-	"github.com/hdt3213/godis/db"
+	"github.com/hdt3213/godis"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/redis/reply"
 	"strconv"
@@ -74,7 +74,7 @@ func CommitMSet(cluster *Cluster, c redis.Connection, tx *Transaction) redis.Rep
 	}
 	for i, key := range keys {
 		value := values[i]
-		cluster.db.Put(key, &db.DataEntity{Data: value})
+		cluster.db.PutEntity(key, &godis.DataEntity{Data: value})
 	}
 	cluster.db.AddAof(reply.MakeMultiBulkReply(tx.args))
 	return &reply.OkReply{}
