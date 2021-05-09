@@ -11,13 +11,15 @@ import (
 )
 
 type PropertyHolder struct {
-	Bind           string   `cfg:"bind"`
-	Port           int      `cfg:"port"`
-	AppendOnly     bool     `cfg:"appendOnly"`
-	AppendFilename string   `cfg:"appendFilename"`
-	MaxClients     int      `cfg:"maxclients"`
-	Peers          []string `cfg:"peers"`
-	Self           string   `cfg:"self"`
+	Bind           string `cfg:"bind"`
+	Port           int    `cfg:"port"`
+	AppendOnly     bool   `cfg:"appendOnly"`
+	AppendFilename string `cfg:"appendFilename"`
+	MaxClients     int    `cfg:"maxclients"`
+	RequirePass    string `cfg:"requirepass"`
+
+	Peers []string `cfg:"peers"`
+	Self  string   `cfg:"self"`
 }
 
 var Properties *PropertyHolder

@@ -3,6 +3,8 @@ package cluster
 import (
 	"context"
 	"errors"
+	"github.com/hdt3213/godis/config"
+	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/client"
 	"github.com/jolestar/go-commons-pool/v2"
 )
@@ -17,6 +19,10 @@ func (f *ConnectionFactory) MakeObject(ctx context.Context) (*pool.PooledObject,
 		return nil, err
 	}
 	c.Start()
+	// all peers of cluster should use the same password
+	if config.Properties.RequirePass != "" {
+		c.Send(utils.ToBytesList("AUTH", config.Properties.RequirePass))
+	}
 	return pool.NewPooledObject(c), nil
 }
 

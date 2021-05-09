@@ -10,8 +10,6 @@
 `Godis` is a simple implementation of Redis Server, which intents to provide an example of writing a high concurrent
 middleware using golang.
 
-Please be advised, NEVER think about using this in production environment.
-
 Gods implemented most features of redis, including 5 data structures, ttl, publish/subscribe, geo and AOF persistence.
 
 Godis can run as a server side cluster which is transparent to client. You can connect to any node in the cluster to access all data in the cluster:

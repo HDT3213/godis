@@ -112,7 +112,12 @@ func (db *DB) Exec(c redis.Connection, args [][]byte) (result redis.Reply) {
 	}()
 
 	cmd := strings.ToLower(string(args[0]))
-
+	if cmd == "auth" {
+		return Auth(db, c, args[1:])
+	}
+	if !isAuthenticated(c) {
+		return reply.MakeErrReply("NOAUTH Authentication required")
+	}
 	// special commands
 	if cmd == "subscribe" {
 		if len(args) < 2 {

@@ -20,6 +20,9 @@ type Connection struct {
 
 	// subscribing channels
 	subs map[string]bool
+
+	// password may be changed by CONFIG command during runtime, so store the password
+	password string
 }
 
 // RemoteAddr returns the remote network address
@@ -95,6 +98,14 @@ func (c *Connection) GetChannels() []string {
 		i++
 	}
 	return channels
+}
+
+func (c *Connection) SetPassword(password string) {
+	c.password = password
+}
+
+func (c *Connection) GetPassword() string {
+	return c.password
 }
 
 type FakeConn struct {

@@ -79,6 +79,13 @@ func (cluster *Cluster) Close() {
 
 var router = MakeRouter()
 
+func isAuthenticated(c redis.Connection) bool {
+	if config.Properties.RequirePass == "" {
+		return true
+	}
+	return c.GetPassword() == config.Properties.RequirePass
+}
+
 func (cluster *Cluster) Exec(c redis.Connection, args [][]byte) (result redis.Reply) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -86,8 +93,13 @@ func (cluster *Cluster) Exec(c redis.Connection, args [][]byte) (result redis.Re
 			result = &reply.UnknownErrReply{}
 		}
 	}()
-
 	cmd := strings.ToLower(string(args[0]))
+	if cmd == "auth" {
+		return db.Auth(cluster.db, c, args[1:])
+	}
+	if !isAuthenticated(c) {
+		return reply.MakeErrReply("NOAUTH Authentication required")
+	}
 	cmdFunc, ok := router[cmd]
 	if !ok {
 		return reply.MakeErrReply("ERR unknown command '" + cmd + "', or not supported in cluster mode")

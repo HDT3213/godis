@@ -1,6 +1,9 @@
 package cluster
 
 import (
+	"github.com/hdt3213/godis/config"
+	"github.com/hdt3213/godis/lib/utils"
+	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/reply/asserts"
 	"testing"
 )
@@ -14,6 +17,21 @@ func TestExec(t *testing.T) {
 		ret := testCluster2.Exec(nil, toArgs("GET", key))
 		asserts.AssertBulkReply(t, ret, value)
 	}
+}
+
+func TestAuth(t *testing.T) {
+	passwd := utils.RandString(10)
+	config.Properties.RequirePass = passwd
+	defer func() {
+		config.Properties.RequirePass = ""
+	}()
+	conn := &connection.FakeConn{}
+	ret := testCluster.Exec(conn, toArgs("GET", "a"))
+	asserts.AssertErrReply(t, ret, "NOAUTH Authentication required")
+	ret = testCluster.Exec(conn, toArgs("AUTH", passwd))
+	asserts.AssertStatusReply(t, ret, "OK")
+	ret = testCluster.Exec(conn, toArgs("GET", "a"))
+	asserts.AssertNotError(t, ret)
 }
 
 func TestRelay(t *testing.T) {
