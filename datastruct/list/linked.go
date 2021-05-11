@@ -316,11 +316,3 @@ func Make(vals ...interface{}) *LinkedList {
 	}
 	return &list
 }
-
-func MakeBytesList(vals ...[]byte) *LinkedList {
-	list := LinkedList{}
-	for _, v := range vals {
-		list.Add(v)
-	}
-	return &list
-}

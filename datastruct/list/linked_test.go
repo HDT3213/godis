@@ -30,6 +30,16 @@ func TestAdd(t *testing.T) {
 	})
 }
 
+func TestLinkedList_Contains(t *testing.T) {
+	list := Make(1, 2, 3, 4)
+	if !list.Contains(1) {
+		t.Error("expect true actual false")
+	}
+	if list.Contains(-1) {
+		t.Error("expect false actual true")
+	}
+}
+
 func TestGet(t *testing.T) {
 	list := Make()
 	for i := 0; i < 10; i++ {
