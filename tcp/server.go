@@ -18,12 +18,14 @@ import (
 	"time"
 )
 
+// Config stores tcp server properties
 type Config struct {
 	Address    string        `yaml:"address"`
 	MaxConnect uint32        `yaml:"max-connect"`
 	Timeout    time.Duration `yaml:"timeout"`
 }
 
+// ListenAndServeWithSignal binds port and handle requests, blocking until receive stop signal
 func ListenAndServeWithSignal(cfg *Config, handler tcp.Handler) error {
 	closeChan := make(chan struct{})
 	sigCh := make(chan os.Signal)
@@ -45,9 +47,10 @@ func ListenAndServeWithSignal(cfg *Config, handler tcp.Handler) error {
 	return nil
 }
 
+// ListenAndServe binds port and handle requests, blocking until close
 func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan struct{}) {
 	// listen signal
-	var closing atomic.AtomicBool
+	var closing atomic.Boolean
 	go func() {
 		<-closeChan
 		logger.Info("shutting down...")

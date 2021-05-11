@@ -9,10 +9,12 @@ const (
 	prime32 = uint32(16777619)
 )
 
+// Locks provides rw locks for key
 type Locks struct {
 	table []*sync.RWMutex
 }
 
+// Make creates a new lock map
 func Make(tableSize int) *Locks {
 	table := make([]*sync.RWMutex, tableSize)
 	for i := 0; i < tableSize; i++ {
@@ -40,24 +42,28 @@ func (locks *Locks) spread(hashCode uint32) uint32 {
 	return (tableSize - 1) & uint32(hashCode)
 }
 
+// Lock obtains exclusive lock for writing
 func (locks *Locks) Lock(key string) {
 	index := locks.spread(fnv32(key))
 	mu := locks.table[index]
 	mu.Lock()
 }
 
+// RLock obtains shared lock for reading
 func (locks *Locks) RLock(key string) {
 	index := locks.spread(fnv32(key))
 	mu := locks.table[index]
 	mu.RLock()
 }
 
+// UnLock release exclusive lock
 func (locks *Locks) UnLock(key string) {
 	index := locks.spread(fnv32(key))
 	mu := locks.table[index]
 	mu.Unlock()
 }
 
+// RUnLock release shared lock
 func (locks *Locks) RUnLock(key string) {
 	index := locks.spread(fnv32(key))
 	mu := locks.table[index]
@@ -77,13 +83,14 @@ func (locks *Locks) toLockIndices(keys []string, reverse bool) []uint32 {
 	sort.Slice(indices, func(i, j int) bool {
 		if !reverse {
 			return indices[i] < indices[j]
-		} else {
-			return indices[i] > indices[j]
 		}
+		return indices[i] > indices[j]
 	})
 	return indices
 }
 
+// Locks obtains multiple exclusive locks for writing
+// invoking Lock in loop may cause dead lock, please use Locks
 func (locks *Locks) Locks(keys ...string) {
 	indices := locks.toLockIndices(keys, false)
 	for _, index := range indices {
@@ -92,6 +99,8 @@ func (locks *Locks) Locks(keys ...string) {
 	}
 }
 
+// RLocks obtains multiple shared locks for reading
+// invoking RLock in loop may cause dead lock, please use RLocks
 func (locks *Locks) RLocks(keys ...string) {
 	indices := locks.toLockIndices(keys, false)
 	for _, index := range indices {
@@ -100,6 +109,7 @@ func (locks *Locks) RLocks(keys ...string) {
 	}
 }
 
+// UnLocks releases multiple exclusive locks
 func (locks *Locks) UnLocks(keys ...string) {
 	indices := locks.toLockIndices(keys, true)
 	for _, index := range indices {
@@ -108,6 +118,7 @@ func (locks *Locks) UnLocks(keys ...string) {
 	}
 }
 
+// RUnLocks releases multiple shared locks
 func (locks *Locks) RUnLocks(keys ...string) {
 	indices := locks.toLockIndices(keys, true)
 	for _, index := range indices {

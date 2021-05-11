@@ -5,6 +5,7 @@ import (
 	"github.com/hdt3213/godis/datastruct/lock"
 )
 
+// Hub stores all subscribe relations
 type Hub struct {
 	// channel -> list(*Client)
 	subs dict.Dict
@@ -12,6 +13,7 @@ type Hub struct {
 	subsLocker *lock.Locks
 }
 
+// MakeHub creates new hub
 func MakeHub() *Hub {
 	return &Hub{
 		subs:       dict.MakeConcurrent(4),

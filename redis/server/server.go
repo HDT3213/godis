@@ -22,14 +22,14 @@ import (
 )
 
 var (
-	UnknownErrReplyBytes = []byte("-ERR unknown\r\n")
+	unknownErrReplyBytes = []byte("-ERR unknown\r\n")
 )
 
 // Handler implements tcp.Handler and serves as a redis server
 type Handler struct {
 	activeConn sync.Map // *client -> placeholder
 	db         db.DB
-	closing    atomic.AtomicBool // refusing new client and new request
+	closing    atomic.Boolean // refusing new client and new request
 }
 
 // MakeHandler creates a Handler instance
@@ -72,17 +72,16 @@ func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 				h.closeClient(client)
 				logger.Info("connection closed: " + client.RemoteAddr().String())
 				return
-			} else {
-				// protocol err
-				errReply := reply.MakeErrReply(payload.Err.Error())
-				err := client.Write(errReply.ToBytes())
-				if err != nil {
-					h.closeClient(client)
-					logger.Info("connection closed: " + client.RemoteAddr().String())
-					return
-				}
-				continue
 			}
+			// protocol err
+			errReply := reply.MakeErrReply(payload.Err.Error())
+			err := client.Write(errReply.ToBytes())
+			if err != nil {
+				h.closeClient(client)
+				logger.Info("connection closed: " + client.RemoteAddr().String())
+				return
+			}
+			continue
 		}
 		if payload.Data == nil {
 			logger.Error("empty payload")
@@ -97,7 +96,7 @@ func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 		if result != nil {
 			_ = client.Write(result.ToBytes())
 		} else {
-			_ = client.Write(UnknownErrReplyBytes)
+			_ = client.Write(unknownErrReplyBytes)
 		}
 	}
 }

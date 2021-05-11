@@ -100,28 +100,34 @@ func (c *Connection) GetChannels() []string {
 	return channels
 }
 
+// SetPassword stores password for authentication
 func (c *Connection) SetPassword(password string) {
 	c.password = password
 }
 
+// GetPassword get password for authentication
 func (c *Connection) GetPassword() string {
 	return c.password
 }
 
+// FakeConn implements redis.Connection for test
 type FakeConn struct {
 	Connection
 	buf bytes.Buffer
 }
 
+// Write writes data to buffer
 func (c *FakeConn) Write(b []byte) error {
 	c.buf.Write(b)
 	return nil
 }
 
+// Clean resets the buffer
 func (c *FakeConn) Clean() {
 	c.buf.Reset()
 }
 
+// Bytes returns written data
 func (c *FakeConn) Bytes() []byte {
 	return c.buf.Bytes()
 }

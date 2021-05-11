@@ -6,6 +6,7 @@ import (
 	"time"
 )
 
+// TimeWheel can execute job after waiting given duration
 type TimeWheel struct {
 	interval time.Duration
 	ticker   *time.Ticker
@@ -14,18 +15,19 @@ type TimeWheel struct {
 	timer             map[string]int
 	currentPos        int
 	slotNum           int
-	addTaskChannel    chan Task
+	addTaskChannel    chan task
 	removeTaskChannel chan string
 	stopChannel       chan bool
 }
 
-type Task struct {
+type task struct {
 	delay  time.Duration
 	circle int
 	key    string
 	job    func()
 }
 
+// New creates a new time wheel
 func New(interval time.Duration, slotNum int) *TimeWheel {
 	if interval <= 0 || slotNum <= 0 {
 		return nil
@@ -36,7 +38,7 @@ func New(interval time.Duration, slotNum int) *TimeWheel {
 		timer:             make(map[string]int),
 		currentPos:        0,
 		slotNum:           slotNum,
-		addTaskChannel:    make(chan Task),
+		addTaskChannel:    make(chan task),
 		removeTaskChannel: make(chan string),
 		stopChannel:       make(chan bool),
 	}
@@ -51,23 +53,28 @@ func (tw *TimeWheel) initSlots() {
 	}
 }
 
+// Start starts ticker for time wheel
 func (tw *TimeWheel) Start() {
 	tw.ticker = time.NewTicker(tw.interval)
 	go tw.start()
 }
 
+// Stop stops the time wheel
 func (tw *TimeWheel) Stop() {
 	tw.stopChannel <- true
 }
 
-func (tw *TimeWheel) AddTimer(delay time.Duration, key string, job func()) {
+// AddJob add new job into pending queue
+func (tw *TimeWheel) AddJob(delay time.Duration, key string, job func()) {
 	if delay < 0 {
 		return
 	}
-	tw.addTaskChannel <- Task{delay: delay, key: key, job: job}
+	tw.addTaskChannel <- task{delay: delay, key: key, job: job}
 }
 
-func (tw *TimeWheel) RemoveTimer(key string) {
+// RemoveJob add remove job from pending queue
+// if job is done or not found, then nothing happened
+func (tw *TimeWheel) RemoveJob(key string) {
 	if key == "" {
 		return
 	}
@@ -102,7 +109,7 @@ func (tw *TimeWheel) tickHandler() {
 
 func (tw *TimeWheel) scanAndRunTask(l *list.List) {
 	for e := l.Front(); e != nil; {
-		task := e.Value.(*Task)
+		task := e.Value.(*task)
 		if task.circle > 0 {
 			task.circle--
 			e = e.Next()
@@ -127,7 +134,7 @@ func (tw *TimeWheel) scanAndRunTask(l *list.List) {
 	}
 }
 
-func (tw *TimeWheel) addTask(task *Task) {
+func (tw *TimeWheel) addTask(task *task) {
 	pos, circle := tw.getPositionAndCircle(task.delay)
 	task.circle = circle
 
@@ -154,7 +161,7 @@ func (tw *TimeWheel) removeTask(key string) {
 	}
 	l := tw.slots[position]
 	for e := l.Front(); e != nil; {
-		task := e.Value.(*Task)
+		task := e.Value.(*task)
 		if task.key == key {
 			delete(tw.timer, task.key)
 			l.Remove(e)

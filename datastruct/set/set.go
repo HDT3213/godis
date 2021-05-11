@@ -2,19 +2,15 @@ package set
 
 import "github.com/hdt3213/godis/datastruct/dict"
 
+// Set is a set of elements based on hash table
 type Set struct {
 	dict dict.Dict
 }
 
-func Make() *Set {
-	return &Set{
-		dict: dict.MakeSimple(),
-	}
-}
-
-func MakeFromVals(members ...string) *Set {
+// Make creates a new set
+func Make(members ...string) *Set {
 	set := &Set{
-		dict: dict.MakeConcurrent(len(members)),
+		dict: dict.MakeSimple(),
 	}
 	for _, member := range members {
 		set.Add(member)
@@ -22,23 +18,28 @@ func MakeFromVals(members ...string) *Set {
 	return set
 }
 
+// Add adds member into set
 func (set *Set) Add(val string) int {
 	return set.dict.Put(val, nil)
 }
 
+// Remove removes member from set
 func (set *Set) Remove(val string) int {
 	return set.dict.Remove(val)
 }
 
+// Has returns true if the val exists in the set
 func (set *Set) Has(val string) bool {
 	_, exists := set.dict.Get(val)
 	return exists
 }
 
+// Len returns number of members in the set
 func (set *Set) Len() int {
 	return set.dict.Len()
 }
 
+// ToSlice convert set to []string
 func (set *Set) ToSlice() []string {
 	slice := make([]string, set.Len())
 	i := 0
@@ -55,12 +56,14 @@ func (set *Set) ToSlice() []string {
 	return slice
 }
 
+// ForEach visits each member in the set
 func (set *Set) ForEach(consumer func(member string) bool) {
 	set.dict.ForEach(func(key string, val interface{}) bool {
 		return consumer(key)
 	})
 }
 
+// Intersect intersects two sets
 func (set *Set) Intersect(another *Set) *Set {
 	if set == nil {
 		panic("set is nil")
@@ -76,6 +79,7 @@ func (set *Set) Intersect(another *Set) *Set {
 	return result
 }
 
+// Union adds two sets
 func (set *Set) Union(another *Set) *Set {
 	if set == nil {
 		panic("set is nil")
@@ -92,6 +96,7 @@ func (set *Set) Union(another *Set) *Set {
 	return result
 }
 
+// Diff subtracts two sets
 func (set *Set) Diff(another *Set) *Set {
 	if set == nil {
 		panic("set is nil")
@@ -107,10 +112,12 @@ func (set *Set) Diff(another *Set) *Set {
 	return result
 }
 
+// RandomMembers randomly returns keys of the given number, may contain duplicated key
 func (set *Set) RandomMembers(limit int) []string {
 	return set.dict.RandomKeys(limit)
 }
 
+// RandomDistinctMembers randomly returns keys of the given number, won't contain duplicated key
 func (set *Set) RandomDistinctMembers(limit int) []string {
 	return set.dict.RandomDistinctKeys(limit)
 }

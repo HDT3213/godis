@@ -12,4 +12,3 @@ func makeTestDB() *DB {
 		locker: lock.Make(lockerSize),
 	}
 }
-

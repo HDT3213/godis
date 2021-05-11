@@ -10,7 +10,8 @@ import (
 	"strings"
 )
 
-type PropertyHolder struct {
+// ServerProperties defines global config properties
+type ServerProperties struct {
 	Bind           string `cfg:"bind"`
 	Port           int    `cfg:"port"`
 	AppendOnly     bool   `cfg:"appendOnly"`
@@ -22,19 +23,20 @@ type PropertyHolder struct {
 	Self  string   `cfg:"self"`
 }
 
-var Properties *PropertyHolder
+// Properties holds global config properties
+var Properties *ServerProperties
 
 func init() {
 	// default config
-	Properties = &PropertyHolder{
+	Properties = &ServerProperties{
 		Bind:       "127.0.0.1",
 		Port:       6379,
 		AppendOnly: false,
 	}
 }
 
-func parse(src io.Reader) *PropertyHolder {
-	config := &PropertyHolder{}
+func parse(src io.Reader) *ServerProperties {
+	config := &ServerProperties{}
 
 	// read config file
 	rawMap := make(map[string]string)
@@ -91,6 +93,7 @@ func parse(src io.Reader) *PropertyHolder {
 	return config
 }
 
+// SetupConfig read config file and store properties into Properties
 func SetupConfig(configFilename string) {
 	file, err := os.Open(configFilename)
 	if err != nil {

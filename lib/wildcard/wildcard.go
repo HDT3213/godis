@@ -1,10 +1,10 @@
 package wildcard
 
 const (
-	normal = iota
-	all    // *
-	any    // ?
-	set_   // []
+	normal    = iota
+	all       // *
+	any       // ?
+	setSymbol // []
 )
 
 type item struct {
@@ -18,10 +18,12 @@ func (i *item) contains(c byte) bool {
 	return ok
 }
 
+// Pattern represents a wildcard pattern
 type Pattern struct {
 	items []*item
 }
 
+// CompilePattern convert wildcard string to Pattern
 func CompilePattern(src string) *Pattern {
 	items := make([]*item, 0)
 	escape := false
@@ -48,7 +50,7 @@ func CompilePattern(src string) *Pattern {
 		} else if c == ']' {
 			if inSet {
 				inSet = false
-				items = append(items, &item{typeCode: set_, set: set})
+				items = append(items, &item{typeCode: setSymbol, set: set})
 			} else {
 				items = append(items, &item{typeCode: normal, character: c})
 			}
@@ -65,6 +67,7 @@ func CompilePattern(src string) *Pattern {
 	}
 }
 
+// IsMatch returns whether the given string matches pattern
 func (p *Pattern) IsMatch(s string) bool {
 	if len(p.items) == 0 {
 		return len(s) == 0
@@ -87,7 +90,7 @@ func (p *Pattern) IsMatch(s string) bool {
 				table[i][j] = table[i-1][j-1] &&
 					(p.items[j-1].typeCode == any ||
 						(p.items[j-1].typeCode == normal && uint8(s[i-1]) == p.items[j-1].character) ||
-						(p.items[j-1].typeCode == set_ && p.items[j-1].contains(s[i-1])))
+						(p.items[j-1].typeCode == setSymbol && p.items[j-1].contains(s[i-1])))
 			}
 		}
 	}

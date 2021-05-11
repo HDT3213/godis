@@ -105,7 +105,7 @@ func MSet(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 
 	//prepare
 	var errReply redis.Reply
-	txID := cluster.idGenerator.NextId()
+	txID := cluster.idGenerator.NextID()
 	txIDStr := strconv.FormatInt(txID, 10)
 	rollback := false
 	for peer, group := range groupMap {

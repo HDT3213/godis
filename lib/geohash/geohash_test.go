@@ -8,13 +8,13 @@ import (
 
 func TestToRange(t *testing.T) {
 	neighbor := []byte{0x00, 0x00, 0x00, 0x00, 0xE0, 0x00, 0x00, 0x00}
-	range_ := ToRange(neighbor, 36)
+	geoRange := toRange(neighbor, 36)
 	expectedLower := ToInt([]byte{0x00, 0x00, 0x00, 0x00, 0xE0, 0x00, 0x00, 0x00})
 	expectedUpper := ToInt([]byte{0x00, 0x00, 0x00, 0x00, 0xF0, 0x00, 0x00, 0x00})
-	if expectedLower != range_[0] {
+	if expectedLower != geoRange[0] {
 		t.Error("incorrect lower")
 	}
-	if expectedUpper != range_[1] {
+	if expectedUpper != geoRange[1] {
 		t.Error("incorrect upper")
 	}
 }

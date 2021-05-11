@@ -4,11 +4,13 @@ import (
 	"strconv"
 )
 
+// SortedSet is a set which keys sorted by bound score
 type SortedSet struct {
 	dict     map[string]*Element
 	skiplist *skiplist
 }
 
+// Make makes a new SortedSet
 func Make() *SortedSet {
 	return &SortedSet{
 		dict:     make(map[string]*Element),
@@ -16,9 +18,7 @@ func Make() *SortedSet {
 	}
 }
 
-/*
- * return: has inserted new node
- */
+// Add puts member into set,  and returns whether has inserted new node
 func (sortedSet *SortedSet) Add(member string, score float64) bool {
 	element, ok := sortedSet.dict[member]
 	sortedSet.dict[member] = &Element{
@@ -31,16 +31,17 @@ func (sortedSet *SortedSet) Add(member string, score float64) bool {
 			sortedSet.skiplist.insert(member, score)
 		}
 		return false
-	} else {
-		sortedSet.skiplist.insert(member, score)
-		return true
 	}
+	sortedSet.skiplist.insert(member, score)
+	return true
 }
 
+// Len returns number of members in set
 func (sortedSet *SortedSet) Len() int64 {
 	return int64(len(sortedSet.dict))
 }
 
+// Get returns the given member
 func (sortedSet *SortedSet) Get(member string) (element *Element, ok bool) {
 	element, ok = sortedSet.dict[member]
 	if !ok {
@@ -49,6 +50,7 @@ func (sortedSet *SortedSet) Get(member string) (element *Element, ok bool) {
 	return element, true
 }
 
+// Remove removes the given member from set
 func (sortedSet *SortedSet) Remove(member string) bool {
 	v, ok := sortedSet.dict[member]
 	if ok {
@@ -59,9 +61,7 @@ func (sortedSet *SortedSet) Remove(member string) bool {
 	return false
 }
 
-/**
- * get 0-based rank
- */
+// GetRank returns the rank of the given member, sort by ascending order, rank starts from 0
 func (sortedSet *SortedSet) GetRank(member string, desc bool) (rank int64) {
 	element, ok := sortedSet.dict[member]
 	if !ok {
@@ -76,9 +76,7 @@ func (sortedSet *SortedSet) GetRank(member string, desc bool) (rank int64) {
 	return r
 }
 
-/**
- * traverse [start, stop), 0-based rank
- */
+// ForEach visits each member which rank within [start, stop), sort by ascending order, rank starts from 0
 func (sortedSet *SortedSet) ForEach(start int64, stop int64, desc bool, consumer func(element *Element) bool) {
 	size := int64(sortedSet.Len())
 	if start < 0 || start >= size {
@@ -89,7 +87,7 @@ func (sortedSet *SortedSet) ForEach(start int64, stop int64, desc bool, consumer
 	}
 
 	// find start node
-	var node *Node
+	var node *node
 	if desc {
 		node = sortedSet.skiplist.tail
 		if start > 0 {
@@ -115,10 +113,7 @@ func (sortedSet *SortedSet) ForEach(start int64, stop int64, desc bool, consumer
 	}
 }
 
-/**
- * return [start, stop), 0-based rank
- * assert start in [0, size), stop in [start, size]
- */
+// Range returns members which rank within [start, stop), sort by ascending order, rank starts from 0
 func (sortedSet *SortedSet) Range(start int64, stop int64, desc bool) []*Element {
 	sliceSize := int(stop - start)
 	slice := make([]*Element, sliceSize)
@@ -131,6 +126,7 @@ func (sortedSet *SortedSet) Range(start int64, stop int64, desc bool) []*Element
 	return slice
 }
 
+// Count returns the number of  members which score within the given border
 func (sortedSet *SortedSet) Count(min *ScoreBorder, max *ScoreBorder) int64 {
 	var i int64 = 0
 	// ascending order
@@ -152,9 +148,10 @@ func (sortedSet *SortedSet) Count(min *ScoreBorder, max *ScoreBorder) int64 {
 	return i
 }
 
+// ForEachByScore visits members which score within the given border
 func (sortedSet *SortedSet) ForEachByScore(min *ScoreBorder, max *ScoreBorder, offset int64, limit int64, desc bool, consumer func(element *Element) bool) {
 	// find start node
-	var node *Node
+	var node *node
 	if desc {
 		node = sortedSet.skiplist.getLastInScoreRange(min, max)
 	} else {
@@ -191,9 +188,8 @@ func (sortedSet *SortedSet) ForEachByScore(min *ScoreBorder, max *ScoreBorder, o
 	}
 }
 
-/*
- * param limit: <0 means no limit
- */
+// RangeByScore returns members which score within the given border
+// param limit: <0 means no limit
 func (sortedSet *SortedSet) RangeByScore(min *ScoreBorder, max *ScoreBorder, offset int64, limit int64, desc bool) []*Element {
 	if limit == 0 || offset < 0 {
 		return make([]*Element, 0)
@@ -206,6 +202,7 @@ func (sortedSet *SortedSet) RangeByScore(min *ScoreBorder, max *ScoreBorder, off
 	return slice
 }
 
+// RemoveByScore removes members which score within the given border
 func (sortedSet *SortedSet) RemoveByScore(min *ScoreBorder, max *ScoreBorder) int64 {
 	removed := sortedSet.skiplist.RemoveRangeByScore(min, max)
 	for _, element := range removed {
@@ -214,9 +211,8 @@ func (sortedSet *SortedSet) RemoveByScore(min *ScoreBorder, max *ScoreBorder) in
 	return int64(len(removed))
 }
 
-/*
- * 0-based rank, [start, stop)
- */
+// RemoveByRank removes member ranking within [start, stop)
+// sort by ascending order and rank starts from 0
 func (sortedSet *SortedSet) RemoveByRank(start int64, stop int64) int64 {
 	removed := sortedSet.skiplist.RemoveRangeByRank(start+1, stop+1)
 	for _, element := range removed {

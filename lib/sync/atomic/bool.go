@@ -2,13 +2,16 @@ package atomic
 
 import "sync/atomic"
 
-type AtomicBool uint32
+// Boolean is a boolean value, all actions of it is atomic
+type Boolean uint32
 
-func (b *AtomicBool) Get() bool {
+// Get reads the value atomically
+func (b *Boolean) Get() bool {
 	return atomic.LoadUint32((*uint32)(b)) != 0
 }
 
-func (b *AtomicBool) Set(v bool) {
+// Set writes the value atomically
+func (b *Boolean) Set(v bool) {
 	if v {
 		atomic.StoreUint32((*uint32)(b), 1)
 	} else {

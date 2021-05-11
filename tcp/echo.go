@@ -16,33 +16,38 @@ import (
 	"time"
 )
 
+// EchoHandler echos received line to client, using for test
 type EchoHandler struct {
 	activeConn sync.Map
-	closing    atomic.AtomicBool
+	closing    atomic.Boolean
 }
 
+// MakeEchoHandler creates EchoHandler
 func MakeEchoHandler() *EchoHandler {
 	return &EchoHandler{}
 }
 
-type Client struct {
+// EchoClient is client for EchoHandler, using for test
+type EchoClient struct {
 	Conn    net.Conn
 	Waiting wait.Wait
 }
 
-func (c *Client) Close() error {
+// Close close connection
+func (c *EchoClient) Close() error {
 	c.Waiting.WaitWithTimeout(10 * time.Second)
 	c.Conn.Close()
 	return nil
 }
 
+// Handle echos received line to client
 func (h *EchoHandler) Handle(ctx context.Context, conn net.Conn) {
 	if h.closing.Get() {
 		// closing handler refuse new connection
 		conn.Close()
 	}
 
-	client := &Client{
+	client := &EchoClient{
 		Conn: conn,
 	}
 	h.activeConn.Store(client, 1)
@@ -69,12 +74,13 @@ func (h *EchoHandler) Handle(ctx context.Context, conn net.Conn) {
 	}
 }
 
+// Close stops echo hanlder
 func (h *EchoHandler) Close() error {
 	logger.Info("handler shuting down...")
 	h.closing.Set(true)
 	// TODO: concurrent wait
 	h.activeConn.Range(func(key interface{}, val interface{}) bool {
-		client := key.(*Client)
+		client := key.(*EchoClient)
 		client.Close()
 		return true
 	})

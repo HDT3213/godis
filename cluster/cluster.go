@@ -29,7 +29,7 @@ type Cluster struct {
 	db           *godis.DB
 	transactions *dict.SimpleDict // id -> Transaction
 
-	idGenerator *idgenerator.IdGenerator
+	idGenerator *idgenerator.IDGenerator
 }
 
 const (

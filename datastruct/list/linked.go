@@ -2,6 +2,7 @@ package list
 
 import "github.com/hdt3213/godis/datastruct/utils"
 
+// LinkedList is doubly linked list
 type LinkedList struct {
 	first *node
 	last  *node
@@ -14,6 +15,7 @@ type node struct {
 	next *node
 }
 
+// Add adds value to the tail
 func (list *LinkedList) Add(val interface{}) {
 	if list == nil {
 		panic("list is nil")
@@ -35,20 +37,20 @@ func (list *LinkedList) Add(val interface{}) {
 
 func (list *LinkedList) find(index int) (n *node) {
 	if index < list.size/2 {
-		n := list.first
+		n = list.first
 		for i := 0; i < index; i++ {
 			n = n.next
 		}
-		return n
 	} else {
-		n := list.last
+		n = list.last
 		for i := list.size - 1; i > index; i-- {
 			n = n.prev
 		}
-		return n
 	}
+	return n
 }
 
+// Get returns value at the given index
 func (list *LinkedList) Get(index int) (val interface{}) {
 	if list == nil {
 		panic("list is nil")
@@ -59,6 +61,7 @@ func (list *LinkedList) Get(index int) (val interface{}) {
 	return list.find(index).val
 }
 
+// Set updates value at the given index, the index should between [0, list.size]
 func (list *LinkedList) Set(index int, val interface{}) {
 	if list == nil {
 		panic("list is nil")
@@ -70,6 +73,7 @@ func (list *LinkedList) Set(index int, val interface{}) {
 	n.val = val
 }
 
+// Insert inserts value at the given index, the original element at the given index will move backward
 func (list *LinkedList) Insert(index int, val interface{}) {
 	if list == nil {
 		panic("list is nil")
@@ -81,22 +85,21 @@ func (list *LinkedList) Insert(index int, val interface{}) {
 	if index == list.size {
 		list.Add(val)
 		return
-	} else {
-		// list is not empty
-		pivot := list.find(index)
-		n := &node{
-			val:  val,
-			prev: pivot.prev,
-			next: pivot,
-		}
-		if pivot.prev == nil {
-			list.first = n
-		} else {
-			pivot.prev.next = n
-		}
-		pivot.prev = n
-		list.size++
 	}
+	// list is not empty
+	pivot := list.find(index)
+	n := &node{
+		val:  val,
+		prev: pivot.prev,
+		next: pivot,
+	}
+	if pivot.prev == nil {
+		list.first = n
+	} else {
+		pivot.prev.next = n
+	}
+	pivot.prev = n
+	list.size++
 }
 
 func (list *LinkedList) removeNode(n *node) {
@@ -118,6 +121,7 @@ func (list *LinkedList) removeNode(n *node) {
 	list.size--
 }
 
+// Remove removes value at the given index
 func (list *LinkedList) Remove(index int) (val interface{}) {
 	if list == nil {
 		panic("list is nil")
@@ -131,6 +135,7 @@ func (list *LinkedList) Remove(index int) (val interface{}) {
 	return n.val
 }
 
+// RemoveLast removes the last element and returns its value
 func (list *LinkedList) RemoveLast() (val interface{}) {
 	if list == nil {
 		panic("list is nil")
@@ -144,6 +149,7 @@ func (list *LinkedList) RemoveLast() (val interface{}) {
 	return n.val
 }
 
+// RemoveAllByVal removes all elements with the given val
 func (list *LinkedList) RemoveAllByVal(val interface{}) int {
 	if list == nil {
 		panic("list is nil")
@@ -172,10 +178,8 @@ func (list *LinkedList) RemoveAllByVal(val interface{}) int {
 	return removed
 }
 
-/**
- * remove at most `count` values of the specified value in this list
- * scan from left to right
- */
+// RemoveByVal removes at most `count` values of the specified value in this list
+// scan from left to right
 func (list *LinkedList) RemoveByVal(val interface{}, count int) int {
 	if list == nil {
 		panic("list is nil")
@@ -208,6 +212,8 @@ func (list *LinkedList) RemoveByVal(val interface{}, count int) int {
 	return removed
 }
 
+// ReverseRemoveByVal removes at most `count` values of the specified value in this list
+// scan from right to left
 func (list *LinkedList) ReverseRemoveByVal(val interface{}, count int) int {
 	if list == nil {
 		panic("list is nil")
@@ -240,6 +246,7 @@ func (list *LinkedList) ReverseRemoveByVal(val interface{}, count int) int {
 	return removed
 }
 
+// Len returns the number of elements in list
 func (list *LinkedList) Len() int {
 	if list == nil {
 		panic("list is nil")
@@ -247,6 +254,8 @@ func (list *LinkedList) Len() int {
 	return list.size
 }
 
+// ForEach visits each element in the list
+// if the consumer returns false, the loop will be break
 func (list *LinkedList) ForEach(consumer func(int, interface{}) bool) {
 	if list == nil {
 		panic("list is nil")
@@ -264,6 +273,7 @@ func (list *LinkedList) ForEach(consumer func(int, interface{}) bool) {
 	}
 }
 
+// Contains returns whether the given value exist in the list
 func (list *LinkedList) Contains(val interface{}) bool {
 	contains := false
 	list.ForEach(func(i int, actual interface{}) bool {
@@ -276,6 +286,7 @@ func (list *LinkedList) Contains(val interface{}) bool {
 	return contains
 }
 
+// Range returns elements which index within [start, stop)
 func (list *LinkedList) Range(start int, stop int) []interface{} {
 	if list == nil {
 		panic("list is nil")
@@ -309,6 +320,7 @@ func (list *LinkedList) Range(start int, stop int) []interface{} {
 	return slice
 }
 
+// Make creates a new linked list
 func Make(vals ...interface{}) *LinkedList {
 	list := LinkedList{}
 	for _, v := range vals {

@@ -23,7 +23,7 @@ func TestAof(t *testing.T) {
 	defer func() {
 		_ = os.Remove(aofFilename)
 	}()
-	config.Properties = &config.PropertyHolder{
+	config.Properties = &config.ServerProperties{
 		AppendOnly:     true,
 		AppendFilename: aofFilename,
 	}
@@ -93,7 +93,7 @@ func TestRewriteAOF(t *testing.T) {
 	defer func() {
 		_ = os.Remove(aofFilename)
 	}()
-	config.Properties = &config.PropertyHolder{
+	config.Properties = &config.ServerProperties{
 		AppendOnly:     true,
 		AppendFilename: aofFilename,
 	}

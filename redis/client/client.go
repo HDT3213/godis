@@ -12,17 +12,19 @@ import (
 	"time"
 )
 
+// Client is a pipeline mode redis client
 type Client struct {
 	conn        net.Conn
-	pendingReqs chan *Request // wait to send
-	waitingReqs chan *Request // waiting response
+	pendingReqs chan *request // wait to send
+	waitingReqs chan *request // waiting response
 	ticker      *time.Ticker
 	addr        string
 
 	working *sync.WaitGroup // its counter presents unfinished requests(pending and waiting)
 }
 
-type Request struct {
+// request is a message sends to redis server
+type request struct {
 	id        uint64
 	args      [][]byte
 	reply     redis.Reply
@@ -36,6 +38,7 @@ const (
 	maxWait  = 3 * time.Second
 )
 
+// MakeClient creates a new client
 func MakeClient(addr string) (*Client, error) {
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
@@ -44,12 +47,13 @@ func MakeClient(addr string) (*Client, error) {
 	return &Client{
 		addr:        addr,
 		conn:        conn,
-		pendingReqs: make(chan *Request, chanSize),
-		waitingReqs: make(chan *Request, chanSize),
+		pendingReqs: make(chan *request, chanSize),
+		waitingReqs: make(chan *request, chanSize),
 		working:     &sync.WaitGroup{},
 	}, nil
 }
 
+// Start starts asynchronous goroutines
 func (client *Client) Start() {
 	client.ticker = time.NewTicker(10 * time.Second)
 	go client.handleWrite()
@@ -62,6 +66,7 @@ func (client *Client) Start() {
 	go client.heartbeat()
 }
 
+// Close stops asynchronous goroutines and close connection
 func (client *Client) Close() {
 	client.ticker.Stop()
 	// stop new request
@@ -110,8 +115,9 @@ func (client *Client) handleWrite() {
 	}
 }
 
+// Send sends a request to redis server
 func (client *Client) Send(args [][]byte) redis.Reply {
-	request := &Request{
+	request := &request{
 		args:      args,
 		heartbeat: false,
 		waiting:   &wait.Wait{},
@@ -131,7 +137,7 @@ func (client *Client) Send(args [][]byte) redis.Reply {
 }
 
 func (client *Client) doHeartbeat() {
-	request := &Request{
+	request := &request{
 		args:      [][]byte{[]byte("PING")},
 		heartbeat: true,
 		waiting:   &wait.Wait{},
@@ -143,7 +149,7 @@ func (client *Client) doHeartbeat() {
 	request.waiting.WaitWithTimeout(maxWait)
 }
 
-func (client *Client) doRequest(req *Request) {
+func (client *Client) doRequest(req *request) {
 	if req == nil || len(req.args) == 0 {
 		return
 	}

@@ -83,6 +83,7 @@ func Subscribe(hub *Hub, c redis.Connection, args [][]byte) redis.Reply {
 	return &reply.NoReply{}
 }
 
+// UnsubscribeAll removes the given connection from all subscribing channel
 func UnsubscribeAll(hub *Hub, c redis.Connection) {
 	channels := c.GetChannels()
 
@@ -95,6 +96,7 @@ func UnsubscribeAll(hub *Hub, c redis.Connection) {
 
 }
 
+// UnSubscribe removes the given connection from the given channel
 func UnSubscribe(db *Hub, c redis.Connection, args [][]byte) redis.Reply {
 	var channels []string
 	if len(args) > 0 {

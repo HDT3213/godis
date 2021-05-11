@@ -18,6 +18,7 @@ const (
 	positiveInf int8 = 1
 )
 
+// ScoreBorder represents range of a float value, including: <, <=, >, >=, +inf, -inf
 type ScoreBorder struct {
 	Inf     int8
 	Value   float64
@@ -34,9 +35,8 @@ func (border *ScoreBorder) greater(value float64) bool {
 	}
 	if border.Exclude {
 		return border.Value > value
-	} else {
-		return border.Value >= value
 	}
+	return border.Value >= value
 }
 
 func (border *ScoreBorder) less(value float64) bool {
@@ -47,9 +47,8 @@ func (border *ScoreBorder) less(value float64) bool {
 	}
 	if border.Exclude {
 		return border.Value < value
-	} else {
-		return border.Value <= value
 	}
+	return border.Value <= value
 }
 
 var positiveInfBorder = &ScoreBorder{
@@ -60,6 +59,7 @@ var negativeInfBorder = &ScoreBorder{
 	Inf: negativeInf,
 }
 
+// ParseScoreBorder creates ScoreBorder from redis arguments
 func ParseScoreBorder(s string) (*ScoreBorder, error) {
 	if s == "inf" || s == "+inf" {
 		return positiveInfBorder, nil
@@ -77,15 +77,14 @@ func ParseScoreBorder(s string) (*ScoreBorder, error) {
 			Value:   value,
 			Exclude: true,
 		}, nil
-	} else {
-		value, err := strconv.ParseFloat(s, 64)
-		if err != nil {
-			return nil, errors.New("ERR min or max is not a float")
-		}
-		return &ScoreBorder{
-			Inf:     0,
-			Value:   value,
-			Exclude: false,
-		}, nil
 	}
+	value, err := strconv.ParseFloat(s, 64)
+	if err != nil {
+		return nil, errors.New("ERR min or max is not a float")
+	}
+	return &ScoreBorder{
+		Inf:     0,
+		Value:   value,
+		Exclude: false,
+	}, nil
 }

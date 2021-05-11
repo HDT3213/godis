@@ -9,7 +9,7 @@ var testCluster = MakeTestCluster(nil)
 
 func MakeTestCluster(peers []string) *Cluster {
 	if config.Properties == nil {
-		config.Properties = &config.PropertyHolder{}
+		config.Properties = &config.ServerProperties{}
 	}
 	config.Properties.Self = "127.0.0.1:6399"
 	config.Properties.Peers = peers

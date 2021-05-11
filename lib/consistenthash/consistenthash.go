@@ -7,8 +7,10 @@ import (
 	"strings"
 )
 
+// HashFunc defines function to generate hash code
 type HashFunc func(data []byte) uint32
 
+// Map stores nodes and you can pick node from Map
 type Map struct {
 	hashFunc HashFunc
 	replicas int
@@ -16,6 +18,7 @@ type Map struct {
 	hashMap  map[int]string
 }
 
+// New creates a new Map
 func New(replicas int, fn HashFunc) *Map {
 	m := &Map{
 		replicas: replicas,
@@ -28,10 +31,12 @@ func New(replicas int, fn HashFunc) *Map {
 	return m
 }
 
+// IsEmpty returns if there is no node in Map
 func (m *Map) IsEmpty() bool {
 	return len(m.keys) == 0
 }
 
+// AddNode add the given nodes into consistent hash circle
 func (m *Map) AddNode(keys ...string) {
 	for _, key := range keys {
 		if key == "" {

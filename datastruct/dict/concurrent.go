@@ -7,12 +7,13 @@ import (
 	"sync/atomic"
 )
 
+// ConcurrentDict is thread safe map using sharding lock
 type ConcurrentDict struct {
-	table []*Shard
+	table []*shard
 	count int32
 }
 
-type Shard struct {
+type shard struct {
 	m     map[string]interface{}
 	mutex sync.RWMutex
 }
@@ -29,16 +30,16 @@ func computeCapacity(param int) (size int) {
 	n |= n >> 16
 	if n < 0 {
 		return math.MaxInt32
-	} else {
-		return int(n + 1)
 	}
+	return n + 1
 }
 
+// MakeConcurrent creates ConcurrentDict with the given shard count
 func MakeConcurrent(shardCount int) *ConcurrentDict {
 	shardCount = computeCapacity(shardCount)
-	table := make([]*Shard, shardCount)
+	table := make([]*shard, shardCount)
 	for i := 0; i < shardCount; i++ {
-		table[i] = &Shard{
+		table[i] = &shard{
 			m: make(map[string]interface{}),
 		}
 	}
@@ -68,13 +69,14 @@ func (dict *ConcurrentDict) spread(hashCode uint32) uint32 {
 	return (tableSize - 1) & uint32(hashCode)
 }
 
-func (dict *ConcurrentDict) getShard(index uint32) *Shard {
+func (dict *ConcurrentDict) getShard(index uint32) *shard {
 	if dict == nil {
 		panic("dict is nil")
 	}
 	return dict.table[index]
 }
 
+// Get returns the binding value and whether the key is exist
 func (dict *ConcurrentDict) Get(key string) (val interface{}, exists bool) {
 	if dict == nil {
 		panic("dict is nil")
@@ -88,6 +90,7 @@ func (dict *ConcurrentDict) Get(key string) (val interface{}, exists bool) {
 	return
 }
 
+// Len returns the number of dict
 func (dict *ConcurrentDict) Len() int {
 	if dict == nil {
 		panic("dict is nil")
@@ -95,7 +98,7 @@ func (dict *ConcurrentDict) Len() int {
 	return int(atomic.LoadInt32(&dict.count))
 }
 
-// return the number of new inserted key-value
+// Put puts key value into dict and returns the number of new inserted key-value
 func (dict *ConcurrentDict) Put(key string, val interface{}) (result int) {
 	if dict == nil {
 		panic("dict is nil")
@@ -109,14 +112,13 @@ func (dict *ConcurrentDict) Put(key string, val interface{}) (result int) {
 	if _, ok := shard.m[key]; ok {
 		shard.m[key] = val
 		return 0
-	} else {
-		shard.m[key] = val
-		dict.addCount()
-		return 1
 	}
+	shard.m[key] = val
+	dict.addCount()
+	return 1
 }
 
-// return the number of updated key-value
+// PutIfAbsent puts value if the key is not exists and returns the number of updated key-value
 func (dict *ConcurrentDict) PutIfAbsent(key string, val interface{}) (result int) {
 	if dict == nil {
 		panic("dict is nil")
@@ -129,14 +131,13 @@ func (dict *ConcurrentDict) PutIfAbsent(key string, val interface{}) (result int
 
 	if _, ok := shard.m[key]; ok {
 		return 0
-	} else {
-		shard.m[key] = val
-		dict.addCount()
-		return 1
 	}
+	shard.m[key] = val
+	dict.addCount()
+	return 1
 }
 
-// return the number of updated key-value
+// PutIfExists puts value if the key is exist and returns the number of inserted key-value
 func (dict *ConcurrentDict) PutIfExists(key string, val interface{}) (result int) {
 	if dict == nil {
 		panic("dict is nil")
@@ -150,12 +151,11 @@ func (dict *ConcurrentDict) PutIfExists(key string, val interface{}) (result int
 	if _, ok := shard.m[key]; ok {
 		shard.m[key] = val
 		return 1
-	} else {
-		return 0
 	}
+	return 0
 }
 
-// return the number of deleted key-value
+// Remove removes the key and return the number of deleted key-value
 func (dict *ConcurrentDict) Remove(key string) (result int) {
 	if dict == nil {
 		panic("dict is nil")
@@ -169,19 +169,16 @@ func (dict *ConcurrentDict) Remove(key string) (result int) {
 	if _, ok := shard.m[key]; ok {
 		delete(shard.m, key)
 		return 1
-	} else {
-		return 0
 	}
-	return
+	return 0
 }
 
 func (dict *ConcurrentDict) addCount() int32 {
 	return atomic.AddInt32(&dict.count, 1)
 }
 
-/*
- * may not contains new entry inserted during traversal
- */
+// ForEach traversal the dict
+// it may not visits new entry inserted during traversal
 func (dict *ConcurrentDict) ForEach(consumer Consumer) {
 	if dict == nil {
 		panic("dict is nil")
@@ -201,6 +198,7 @@ func (dict *ConcurrentDict) ForEach(consumer Consumer) {
 	}
 }
 
+// Keys returns all keys in dict
 func (dict *ConcurrentDict) Keys() []string {
 	keys := make([]string, dict.Len())
 	i := 0
@@ -216,7 +214,8 @@ func (dict *ConcurrentDict) Keys() []string {
 	return keys
 }
 
-func (shard *Shard) RandomKey() string {
+// RandomKey returns a key randomly
+func (shard *shard) RandomKey() string {
 	if shard == nil {
 		panic("shard is nil")
 	}
@@ -229,6 +228,7 @@ func (shard *Shard) RandomKey() string {
 	return ""
 }
 
+// RandomKeys randomly returns keys of the given number, may contain duplicated key
 func (dict *ConcurrentDict) RandomKeys(limit int) []string {
 	size := dict.Len()
 	if limit >= size {
@@ -251,6 +251,7 @@ func (dict *ConcurrentDict) RandomKeys(limit int) []string {
 	return result
 }
 
+// RandomDistinctKeys randomly returns keys of the given number, won't contain duplicated key
 func (dict *ConcurrentDict) RandomDistinctKeys(limit int) []string {
 	size := dict.Len()
 	if limit >= size {

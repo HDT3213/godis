@@ -8,41 +8,44 @@ import (
 )
 
 const (
-	// Epoch is set to the twitter snowflake epoch of Nov 04 2010 01:42:54 UTC in milliseconds
+	// epoch0 is set to the twitter snowflake epoch of Nov 04 2010 01:42:54 UTC in milliseconds
 	// You may customize this to set a different epoch for your application.
-	Epoch       int64 = 1288834974657
+	epoch0      int64 = 1288834974657
 	maxSequence int64 = -1 ^ (-1 << uint64(nodeLeft))
 	timeLeft    uint8 = 22
 	nodeLeft    uint8 = 10
 	nodeMask    int64 = -1 ^ (-1 << uint64(timeLeft-nodeLeft))
 )
 
-type IdGenerator struct {
+// IDGenerator generates unique uint64 ID using snowflake algorithm
+type IDGenerator struct {
 	mu        *sync.Mutex
 	lastStamp int64
-	workerId  int64
+	nodeID    int64
 	sequence  int64
 	epoch     time.Time
 }
 
-func MakeGenerator(node string) *IdGenerator {
+// MakeGenerator creates a new IDGenerator
+func MakeGenerator(node string) *IDGenerator {
 	fnv64 := fnv.New64()
 	_, _ = fnv64.Write([]byte(node))
-	nodeId := int64(fnv64.Sum64()) & nodeMask
+	nodeID := int64(fnv64.Sum64()) & nodeMask
 
 	var curTime = time.Now()
-	epoch := curTime.Add(time.Unix(Epoch/1000, (Epoch%1000)*1000000).Sub(curTime))
+	epoch := curTime.Add(time.Unix(epoch0/1000, (epoch0%1000)*1000000).Sub(curTime))
 
-	return &IdGenerator{
+	return &IDGenerator{
 		mu:        &sync.Mutex{},
 		lastStamp: -1,
-		workerId:  nodeId,
+		nodeID:    nodeID,
 		sequence:  1,
 		epoch:     epoch,
 	}
 }
 
-func (w *IdGenerator) NextId() int64 {
+// NextID returns next unique ID
+func (w *IDGenerator) NextID() int64 {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -61,7 +64,7 @@ func (w *IdGenerator) NextId() int64 {
 		w.sequence = 0
 	}
 	w.lastStamp = timestamp
-	id := (timestamp << timeLeft) | (w.workerId << nodeLeft) | w.sequence
+	id := (timestamp << timeLeft) | (w.nodeID << nodeLeft) | w.sequence
 	//fmt.Printf("%d %d %d\n", timestamp, w.sequence, id)
 	return id
 }

@@ -50,6 +50,7 @@ func encode0(latitude, longitude float64, bitSize uint) ([]byte, [2][2]float64) 
 	return hash.Bytes(), box
 }
 
+// Encode converts latitude and longitude to uint64 geohash code
 func Encode(latitude, longitude float64) uint64 {
 	buf, _ := encode0(latitude, longitude, defaultBitSize)
 	return binary.BigEndian.Uint64(buf)
@@ -77,6 +78,7 @@ func decode0(hash []byte) [][]float64 {
 	return box
 }
 
+// Decode converts uint64 geohash code to latitude and longitude
 func Decode(code uint64) (float64, float64) {
 	buf := make([]byte, 8)
 	binary.BigEndian.PutUint64(buf, code)
@@ -86,10 +88,12 @@ func Decode(code uint64) (float64, float64) {
 	return lat, lng
 }
 
+// ToString converts bytes geohash code to base32 string
 func ToString(buf []byte) string {
 	return enc.EncodeToString(buf)
 }
 
+// ToInt converts bytes geohash code to uint64 code
 func ToInt(buf []byte) uint64 {
 	// padding
 	if len(buf) < 8 {
@@ -100,6 +104,7 @@ func ToInt(buf []byte) uint64 {
 	return binary.BigEndian.Uint64(buf)
 }
 
+// FromInt converts uint64 geohash code to bytes
 func FromInt(code uint64) []byte {
 	buf := make([]byte, 8)
 	binary.BigEndian.PutUint64(buf, code)

@@ -2,7 +2,6 @@ package logger
 
 import (
 	"fmt"
-	"github.com/hdt3213/godis/lib/files"
 	"io"
 	"log"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"time"
 )
 
+// Settings stores config for logger
 type Settings struct {
 	Path       string `yaml:"path"`
 	Name       string `yaml:"name"`
@@ -19,18 +19,19 @@ type Settings struct {
 }
 
 var (
-	F                  *os.File
-	DefaultPrefix      = ""
-	DefaultCallerDepth = 2
+	logFile            *os.File
+	defaultPrefix      = ""
+	defaultCallerDepth = 2
 	logger             *log.Logger
 	logPrefix          = ""
 	levelFlags         = []string{"DEBUG", "INFO", "WARN", "ERROR", "FATAL"}
 )
 
-type Level int
+type logLevel int
 
+// log levels
 const (
-	DEBUG Level = iota
+	DEBUG logLevel = iota
 	INFO
 	WARNING
 	ERROR
@@ -40,9 +41,10 @@ const (
 const flags = log.LstdFlags
 
 func init() {
-	logger = log.New(os.Stdout, DefaultPrefix, flags)
+	logger = log.New(os.Stdout, defaultPrefix, flags)
 }
 
+// Setup initializes logger
 func Setup(settings *Settings) {
 	var err error
 	dir := settings.Path
@@ -51,17 +53,17 @@ func Setup(settings *Settings) {
 		time.Now().Format(settings.TimeFormat),
 		settings.Ext)
 
-	logFile, err := files.MustOpen(fileName, dir)
+	logFile, err := mustOpen(fileName, dir)
 	if err != nil {
 		log.Fatalf("logging.Setup err: %s", err)
 	}
 
 	mw := io.MultiWriter(os.Stdout, logFile)
-	logger = log.New(mw, DefaultPrefix, flags)
+	logger = log.New(mw, defaultPrefix, flags)
 }
 
-func setPrefix(level Level) {
-	_, file, line, ok := runtime.Caller(DefaultCallerDepth)
+func setPrefix(level logLevel) {
+	_, file, line, ok := runtime.Caller(defaultCallerDepth)
 	if ok {
 		logPrefix = fmt.Sprintf("[%s][%s:%d] ", levelFlags[level], filepath.Base(file), line)
 	} else {
@@ -71,26 +73,31 @@ func setPrefix(level Level) {
 	logger.SetPrefix(logPrefix)
 }
 
+// Debug prints debug log
 func Debug(v ...interface{}) {
 	setPrefix(DEBUG)
 	logger.Println(v...)
 }
 
+// Info prints normal log
 func Info(v ...interface{}) {
 	setPrefix(INFO)
 	logger.Println(v...)
 }
 
+// Warn prints warning log
 func Warn(v ...interface{}) {
 	setPrefix(WARNING)
 	logger.Println(v...)
 }
 
+// Error prints error log
 func Error(v ...interface{}) {
 	setPrefix(ERROR)
 	logger.Println(v...)
 }
 
+// Fatal prints error log then stop the program
 func Fatal(v ...interface{}) {
 	setPrefix(FATAL)
 	logger.Fatalln(v...)

@@ -190,7 +190,7 @@ func SInter(db *DB, args [][]byte) redis.Reply {
 
 		if result == nil {
 			// init
-			result = HashSet.MakeFromVals(set.ToSlice()...)
+			result = HashSet.Make(set.ToSlice()...)
 		} else {
 			result = result.Intersect(set)
 			if result.Len() == 0 {
@@ -241,7 +241,7 @@ func SInterStore(db *DB, args [][]byte) redis.Reply {
 
 		if result == nil {
 			// init
-			result = HashSet.MakeFromVals(set.ToSlice()...)
+			result = HashSet.Make(set.ToSlice()...)
 		} else {
 			result = result.Intersect(set)
 			if result.Len() == 0 {
@@ -252,7 +252,7 @@ func SInterStore(db *DB, args [][]byte) redis.Reply {
 		}
 	}
 
-	set := HashSet.MakeFromVals(result.ToSlice()...)
+	set := HashSet.Make(result.ToSlice()...)
 	db.PutEntity(dest, &DataEntity{
 		Data: set,
 	})
@@ -286,7 +286,7 @@ func SUnion(db *DB, args [][]byte) redis.Reply {
 
 		if result == nil {
 			// init
-			result = HashSet.MakeFromVals(set.ToSlice()...)
+			result = HashSet.Make(set.ToSlice()...)
 		} else {
 			result = result.Union(set)
 		}
@@ -335,7 +335,7 @@ func SUnionStore(db *DB, args [][]byte) redis.Reply {
 		}
 		if result == nil {
 			// init
-			result = HashSet.MakeFromVals(set.ToSlice()...)
+			result = HashSet.Make(set.ToSlice()...)
 		} else {
 			result = result.Union(set)
 		}
@@ -347,7 +347,7 @@ func SUnionStore(db *DB, args [][]byte) redis.Reply {
 		return &reply.EmptyMultiBulkReply{}
 	}
 
-	set := HashSet.MakeFromVals(result.ToSlice()...)
+	set := HashSet.Make(result.ToSlice()...)
 	db.PutEntity(dest, &DataEntity{
 		Data: set,
 	})
@@ -385,7 +385,7 @@ func SDiff(db *DB, args [][]byte) redis.Reply {
 		}
 		if result == nil {
 			// init
-			result = HashSet.MakeFromVals(set.ToSlice()...)
+			result = HashSet.Make(set.ToSlice()...)
 		} else {
 			result = result.Diff(set)
 			if result.Len() == 0 {
@@ -443,7 +443,7 @@ func SDiffStore(db *DB, args [][]byte) redis.Reply {
 		}
 		if result == nil {
 			// init
-			result = HashSet.MakeFromVals(set.ToSlice()...)
+			result = HashSet.Make(set.ToSlice()...)
 		} else {
 			result = result.Diff(set)
 			if result.Len() == 0 {
@@ -459,7 +459,7 @@ func SDiffStore(db *DB, args [][]byte) redis.Reply {
 		db.Remove(dest)
 		return &reply.EmptyMultiBulkReply{}
 	}
-	set := HashSet.MakeFromVals(result.ToSlice()...)
+	set := HashSet.Make(result.ToSlice()...)
 	db.PutEntity(dest, &DataEntity{
 		Data: set,
 	})

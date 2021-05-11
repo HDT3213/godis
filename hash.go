@@ -96,6 +96,9 @@ func HGet(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	field := string(args[1])
 
+	db.RLock(key)
+	defer db.RUnLock(key)
+
 	// get entity
 	dict, errReply := db.getAsDict(key)
 	if errReply != nil {
@@ -121,6 +124,9 @@ func HExists(db *DB, args [][]byte) redis.Reply {
 	}
 	key := string(args[0])
 	field := string(args[1])
+
+	db.RLock(key)
+	defer db.RUnLock(key)
 
 	// get entity
 	dict, errReply := db.getAsDict(key)
@@ -185,6 +191,9 @@ func HLen(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'hlen' command")
 	}
 	key := string(args[0])
+
+	db.RLock(key)
+	defer db.RUnLock(key)
 
 	dict, errReply := db.getAsDict(key)
 	if errReply != nil {

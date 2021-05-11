@@ -156,6 +156,7 @@ func TestZRangeByScore(t *testing.T) {
 		setArgs = append(setArgs, strconv.FormatInt(int64(scores[i]), 10), members[i])
 	}
 	result := ZAdd(testDB, utils.ToBytesList(setArgs...))
+	asserts.AssertIntReply(t, result, size)
 
 	min := "20"
 	max := "30"

@@ -13,7 +13,8 @@ middleware using golang.
 
 Gods implemented most features of redis, including 5 data structures, ttl, publish/subscribe, geo and AOF persistence.
 
-Godis can run as a server side cluster which is transparent to client. You can connect to any node in the cluster to access all data in the cluster:
+Godis can run as a server side cluster which is transparent to client. You can connect to any node in the cluster to
+access all data in the cluster:
 
 If you could read Chinese, you can find more details in [My Blog](https://www.cnblogs.com/Finley/category/1598973.html).
 

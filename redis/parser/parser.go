@@ -13,6 +13,7 @@ import (
 	"strings"
 )
 
+// Payload stores redis.Reply or error
 type Payload struct {
 	Data redis.Reply
 	Err  error
@@ -71,13 +72,13 @@ func parse0(reader io.Reader, ch chan<- *Payload) {
 				}
 				close(ch)
 				return
-			} else { // protocol err, reset read state
-				ch <- &Payload{
-					Err: err,
-				}
-				state = readState{}
-				continue
 			}
+			// protocol err, reset read state
+			ch <- &Payload{
+				Err: err,
+			}
+			state = readState{}
+			continue
 		}
 
 		// parse line

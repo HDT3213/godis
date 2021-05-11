@@ -9,6 +9,7 @@ import (
 	"testing"
 )
 
+// AssertIntReply checks if the given redis.Reply is the expected integer
 func AssertIntReply(t *testing.T, actual redis.Reply, expected int) {
 	intResult, ok := actual.(*reply.IntReply)
 	if !ok {
@@ -20,6 +21,7 @@ func AssertIntReply(t *testing.T, actual redis.Reply, expected int) {
 	}
 }
 
+// AssertBulkReply checks if the given redis.Reply is the expected string
 func AssertBulkReply(t *testing.T, actual redis.Reply, expected string) {
 	bulkReply, ok := actual.(*reply.BulkReply)
 	if !ok {
@@ -31,6 +33,7 @@ func AssertBulkReply(t *testing.T, actual redis.Reply, expected string) {
 	}
 }
 
+// AssertStatusReply checks if the given redis.Reply is the expected status
 func AssertStatusReply(t *testing.T, actual redis.Reply, expected string) {
 	statusReply, ok := actual.(*reply.StatusReply)
 	if !ok {
@@ -47,6 +50,7 @@ func AssertStatusReply(t *testing.T, actual redis.Reply, expected string) {
 	}
 }
 
+// AssertErrReply checks if the given redis.Reply is the expected error
 func AssertErrReply(t *testing.T, actual redis.Reply, expected string) {
 	errReply, ok := actual.(reply.ErrorReply)
 	if !ok {
@@ -62,6 +66,7 @@ func AssertErrReply(t *testing.T, actual redis.Reply, expected string) {
 	}
 }
 
+// AssertNotError checks if the given redis.Reply is not error reply
 func AssertNotError(t *testing.T, result redis.Reply) {
 	if result == nil {
 		t.Errorf("result is nil %s", printStack())
@@ -77,6 +82,7 @@ func AssertNotError(t *testing.T, result redis.Reply) {
 	}
 }
 
+// AssertNullBulk checks if the given redis.Reply is reply.NullBulkReply
 func AssertNullBulk(t *testing.T, result redis.Reply) {
 	if result == nil {
 		t.Errorf("result is nil %s", printStack())
@@ -93,6 +99,7 @@ func AssertNullBulk(t *testing.T, result redis.Reply) {
 	}
 }
 
+// AssertMultiBulkReply checks if the given redis.Reply has the expected content
 func AssertMultiBulkReply(t *testing.T, actual redis.Reply, expected []string) {
 	multiBulk, ok := actual.(*reply.MultiBulkReply)
 	if !ok {
@@ -112,6 +119,7 @@ func AssertMultiBulkReply(t *testing.T, actual redis.Reply, expected []string) {
 	}
 }
 
+// AssertMultiBulkReplySize check if redis.Reply has expected length
 func AssertMultiBulkReplySize(t *testing.T, actual redis.Reply, expected int) {
 	multiBulk, ok := actual.(*reply.MultiBulkReply)
 	if !ok {
