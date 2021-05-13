@@ -74,7 +74,7 @@ func (h *EchoHandler) Handle(ctx context.Context, conn net.Conn) {
 	}
 }
 
-// Close stops echo hanlder
+// Close stops echo handler
 func (h *EchoHandler) Close() error {
 	logger.Info("handler shuting down...")
 	h.closing.Set(true)
