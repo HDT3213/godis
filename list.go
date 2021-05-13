@@ -48,6 +48,9 @@ func LIndex(db *DB, args [][]byte) redis.Reply {
 	}
 	index := int(index64)
 
+	db.RLock(key)
+	defer db.RUnLock(key)
+
 	// get entity
 	list, errReply := db.getAsList(key)
 	if errReply != nil {
@@ -77,6 +80,9 @@ func LLen(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'llen' command")
 	}
 	key := string(args[0])
+
+	db.RLock(key)
+	defer db.RUnLock(key)
 
 	list, errReply := db.getAsList(key)
 	if errReply != nil {
@@ -128,8 +134,8 @@ func LPush(db *DB, args [][]byte) redis.Reply {
 	values := args[1:]
 
 	// lock
-	db.locker.Lock(key)
-	defer db.locker.UnLock(key)
+	db.Lock(key)
+	defer db.UnLock(key)
 
 	// get or init entity
 	list, _, errReply := db.getOrInitList(key)
@@ -155,8 +161,8 @@ func LPushX(db *DB, args [][]byte) redis.Reply {
 	values := args[1:]
 
 	// lock
-	db.locker.Lock(key)
-	defer db.locker.UnLock(key)
+	db.Lock(key)
+	defer db.UnLock(key)
 
 	// get or init entity
 	list, errReply := db.getAsList(key)
@@ -299,8 +305,8 @@ func LSet(db *DB, args [][]byte) redis.Reply {
 	value := args[2]
 
 	// lock
-	db.locker.Lock(key)
-	defer db.locker.UnLock(key)
+	db.Lock(key)
+	defer db.UnLock(key)
 
 	// get data
 	list, errReply := db.getAsList(key)

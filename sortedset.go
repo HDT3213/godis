@@ -88,6 +88,8 @@ func ZScore(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	member := string(args[1])
 
+	db.RLock(key)
+	defer db.RUnLock(key)
 	sortedSet, errReply := db.getAsSortedSet(key)
 	if errReply != nil {
 		return errReply
@@ -114,6 +116,8 @@ func ZRank(db *DB, args [][]byte) redis.Reply {
 	member := string(args[1])
 
 	// get entity
+	db.RLock(key)
+	defer db.RUnLock(key)
 	sortedSet, errReply := db.getAsSortedSet(key)
 	if errReply != nil {
 		return errReply
@@ -139,6 +143,8 @@ func ZRevRank(db *DB, args [][]byte) redis.Reply {
 	member := string(args[1])
 
 	// get entity
+	db.RLock(key)
+	defer db.RUnLock(key)
 	sortedSet, errReply := db.getAsSortedSet(key)
 	if errReply != nil {
 		return errReply
@@ -163,6 +169,8 @@ func ZCard(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 
 	// get entity
+	db.RLock(key)
+	defer db.RUnLock(key)
 	sortedSet, errReply := db.getAsSortedSet(key)
 	if errReply != nil {
 		return errReply
@@ -171,7 +179,7 @@ func ZCard(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeIntReply(0)
 	}
 
-	return reply.MakeIntReply(int64(sortedSet.Len()))
+	return reply.MakeIntReply(sortedSet.Len())
 }
 
 // ZRange gets members in range, sort by score in ascending order
@@ -226,8 +234,8 @@ func ZRevRange(db *DB, args [][]byte) redis.Reply {
 
 func range0(db *DB, key string, start int64, stop int64, withScores bool, desc bool) redis.Reply {
 	// lock key
-	db.locker.RLock(key)
-	defer db.locker.RUnLock(key)
+	db.RLock(key)
+	defer db.RUnLock(key)
 
 	// get data
 	sortedSet, errReply := db.getAsSortedSet(key)
@@ -300,8 +308,8 @@ func ZCount(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply(err.Error())
 	}
 
-	db.locker.RLock(key)
-	defer db.locker.RUnLock(key)
+	db.RLock(key)
+	defer db.RUnLock(key)
 
 	// get data
 	sortedSet, errReply := db.getAsSortedSet(key)
@@ -320,8 +328,8 @@ func ZCount(db *DB, args [][]byte) redis.Reply {
  */
 func rangeByScore0(db *DB, key string, min *SortedSet.ScoreBorder, max *SortedSet.ScoreBorder, offset int64, limit int64, withScores bool, desc bool) redis.Reply {
 	// lock key
-	db.locker.RLock(key)
-	defer db.locker.RUnLock(key)
+	db.RLock(key)
+	defer db.RUnLock(key)
 
 	// get data
 	sortedSet, errReply := db.getAsSortedSet(key)
@@ -465,8 +473,8 @@ func ZRemRangeByScore(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply(err.Error())
 	}
 
-	db.locker.Lock(key)
-	defer db.locker.UnLock(key)
+	db.Lock(key)
+	defer db.UnLock(key)
 
 	// get data
 	sortedSet, errReply := db.getAsSortedSet(key)
@@ -499,8 +507,8 @@ func ZRemRangeByRank(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply("ERR value is not an integer or out of range")
 	}
 
-	db.locker.Lock(key)
-	defer db.locker.UnLock(key)
+	db.Lock(key)
+	defer db.UnLock(key)
 
 	// get data
 	sortedSet, errReply := db.getAsSortedSet(key)
@@ -591,8 +599,8 @@ func ZIncrBy(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply("ERR value is not a valid float")
 	}
 
-	db.locker.Lock(key)
-	defer db.locker.UnLock(key)
+	db.Lock(key)
+	defer db.UnLock(key)
 
 	// get or init entity
 	sortedSet, _, errReply := db.getOrInitSortedSet(key)

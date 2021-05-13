@@ -221,8 +221,8 @@ func HMSet(db *DB, args [][]byte) redis.Reply {
 	}
 
 	// lock key
-	db.locker.Lock(key)
-	defer db.locker.UnLock(key)
+	db.Lock(key)
+	defer db.UnLock(key)
 
 	// get or init entity
 	dict, _, errReply := db.getOrInitDict(key)
@@ -378,8 +378,8 @@ func HIncrBy(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply("ERR value is not an integer or out of range")
 	}
 
-	db.locker.Lock(key)
-	defer db.locker.UnLock(key)
+	db.Lock(key)
+	defer db.UnLock(key)
 
 	dict, _, errReply := db.getOrInitDict(key)
 	if errReply != nil {

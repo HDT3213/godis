@@ -68,6 +68,9 @@ func SIsMember(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	member := string(args[1])
 
+	db.RLock(key)
+	defer db.RUnLock(key)
+
 	// get set
 	set, errReply := db.getAsSet(key)
 	if errReply != nil {
@@ -123,6 +126,9 @@ func SCard(db *DB, args [][]byte) redis.Reply {
 	}
 	key := string(args[0])
 
+	db.RLock(key)
+	defer db.RUnLock(key)
+
 	// get or init entity
 	set, errReply := db.getAsSet(key)
 	if errReply != nil {
@@ -142,8 +148,8 @@ func SMembers(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 
 	// lock
-	db.locker.RLock(key)
-	defer db.locker.RUnLock(key)
+	db.RLock(key)
+	defer db.RUnLock(key)
 
 	// get or init entity
 	set, errReply := db.getAsSet(key)
@@ -175,8 +181,8 @@ func SInter(db *DB, args [][]byte) redis.Reply {
 	}
 
 	// lock
-	db.locker.RLocks(keys...)
-	defer db.locker.RUnLocks(keys...)
+	db.RLocks(keys...)
+	defer db.RUnLocks(keys...)
 
 	var result *HashSet.Set
 	for _, key := range keys {
@@ -223,10 +229,11 @@ func SInterStore(db *DB, args [][]byte) redis.Reply {
 	}
 
 	// lock
-	db.RLocks(keys...)
-	defer db.RUnLocks(keys...)
-	db.Lock(dest)
-	defer db.UnLock(dest)
+	lockedKeySet := HashSet.Make(keys...)
+	lockedKeySet.Add(dest)
+	lockedKeys := lockedKeySet.ToSlice()
+	db.Locks(lockedKeys...)
+	defer db.UnLocks(lockedKeys...)
 
 	var result *HashSet.Set
 	for _, key := range keys {
@@ -319,10 +326,11 @@ func SUnionStore(db *DB, args [][]byte) redis.Reply {
 	}
 
 	// lock
-	db.RLocks(keys...)
-	defer db.RUnLocks(keys...)
-	db.Lock(dest)
-	defer db.UnLock(dest)
+	lockedKeySet := HashSet.Make(keys...)
+	lockedKeySet.Add(dest)
+	lockedKeys := lockedKeySet.ToSlice()
+	db.Locks(lockedKeys...)
+	defer db.UnLocks(lockedKeys...)
 
 	var result *HashSet.Set
 	for _, key := range keys {
@@ -422,10 +430,11 @@ func SDiffStore(db *DB, args [][]byte) redis.Reply {
 	}
 
 	// lock
-	db.RLocks(keys...)
-	defer db.RUnLocks(keys...)
-	db.Lock(dest)
-	defer db.locker.UnLock(dest)
+	lockedKeySet := HashSet.Make(keys...)
+	lockedKeySet.Add(dest)
+	lockedKeys := lockedKeySet.ToSlice()
+	db.Locks(lockedKeys...)
+	defer db.UnLocks(lockedKeys...)
 
 	var result *HashSet.Set
 	for i, key := range keys {
