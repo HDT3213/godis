@@ -27,7 +27,7 @@ Godis 的信息。
 
 ![](https://i.loli.net/2021/05/15/oQM1yZ6pWm3AIEj.png)
 
-godis 默认监听 127.0.0.1:6379，可以使用 redis-cli 或者其它 redis 客户端连接 Godis 服务器。
+godis 默认监听 0.0.0.0:6399，可以使用 redis-cli 或者其它 redis 客户端连接 Godis 服务器。
 
 ![](https://i.loli.net/2021/05/15/7WquEgonzY62sZI.png)
 

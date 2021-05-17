@@ -29,7 +29,7 @@ You can get runnable program in the releases of this repository, which supports 
 
 ![](https://i.loli.net/2021/05/15/oQM1yZ6pWm3AIEj.png)
 
-You could use redis-cli or other redis client to connect godis server, which listens on 127.0.0.1:6379 on default mode.
+You could use redis-cli or other redis client to connect godis server, which listens on 0.0.0.0:6399 on default mode.
 
 ![](https://i.loli.net/2021/05/15/7WquEgonzY62sZI.png)
 
