@@ -12,11 +12,8 @@ import (
 	"time"
 )
 
-// Del removes a key from db
-func Del(db *DB, args [][]byte) redis.Reply {
-	if len(args) == 0 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'del' command")
-	}
+// execDel removes a key from db
+func execDel(db *DB, args [][]byte) redis.Reply {
 	keys := make([]string, len(args))
 	for i, v := range args {
 		keys[i] = string(v)
@@ -32,44 +29,35 @@ func Del(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(deleted))
 }
 
-// Exists checks if a is existed in db
-func Exists(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'exists' command")
+// execExists checks if a is existed in db
+func execExists(db *DB, args [][]byte) redis.Reply {
+	result := int64(0)
+	for _, arg := range args {
+		key := string(arg)
+		_, exists := db.GetEntity(key)
+		if exists {
+			result++
+		}
 	}
-	key := string(args[0])
-	_, exists := db.GetEntity(key)
-	if exists {
-		return reply.MakeIntReply(1)
-	}
-	return reply.MakeIntReply(0)
+	return reply.MakeIntReply(result)
 }
 
-// FlushDB removes all data in current db
-func FlushDB(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 0 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'flushdb' command")
-	}
+// execFlushDB removes all data in current db
+func execFlushDB(db *DB, args [][]byte) redis.Reply {
 	db.Flush()
 	db.AddAof(makeAofCmd("flushdb", args))
 	return &reply.OkReply{}
 }
 
-// FlushAll removes all data in all db
-func FlushAll(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 0 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'flushall' command")
-	}
+// execFlushAll removes all data in all db
+func execFlushAll(db *DB, args [][]byte) redis.Reply {
 	db.Flush()
 	db.AddAof(makeAofCmd("flushdb", args))
 	return &reply.OkReply{}
 }
 
-// Type returns the type of entity, including: string, list, hash, set and zset
-func Type(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'type' command")
-	}
+// execType returns the type of entity, including: string, list, hash, set and zset
+func execType(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	entity, exists := db.GetEntity(key)
 	if !exists {
@@ -90,8 +78,8 @@ func Type(db *DB, args [][]byte) redis.Reply {
 	return &reply.UnknownErrReply{}
 }
 
-// Rename a key
-func Rename(db *DB, args [][]byte) redis.Reply {
+// execRename a key
+func execRename(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'rename' command")
 	}
@@ -118,11 +106,8 @@ func Rename(db *DB, args [][]byte) redis.Reply {
 	return &reply.OkReply{}
 }
 
-// RenameNx a key, only if the new key does not exist
-func RenameNx(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'renamenx' command")
-	}
+// execRenameNx a key, only if the new key does not exist
+func execRenameNx(db *DB, args [][]byte) redis.Reply {
 	src := string(args[0])
 	dest := string(args[1])
 
@@ -151,11 +136,8 @@ func RenameNx(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(1)
 }
 
-// Expire sets a key's time to live in seconds
-func Expire(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'expire' command")
-	}
+// execExpire sets a key's time to live in seconds
+func execExpire(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 
 	ttlArg, err := strconv.ParseInt(string(args[1]), 10, 64)
@@ -175,11 +157,8 @@ func Expire(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(1)
 }
 
-// ExpireAt sets a key's expiration in unix timestamp
-func ExpireAt(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'expireat' command")
-	}
+// execExpireAt sets a key's expiration in unix timestamp
+func execExpireAt(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 
 	raw, err := strconv.ParseInt(string(args[1]), 10, 64)
@@ -198,11 +177,8 @@ func ExpireAt(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(1)
 }
 
-// PExpire sets a key's time to live in milliseconds
-func PExpire(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'pexpire' command")
-	}
+// execPExpire sets a key's time to live in milliseconds
+func execPExpire(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 
 	ttlArg, err := strconv.ParseInt(string(args[1]), 10, 64)
@@ -222,11 +198,8 @@ func PExpire(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(1)
 }
 
-// PExpireAt sets a key's expiration in unix timestamp specified in milliseconds
-func PExpireAt(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'pexpireat' command")
-	}
+// execPExpireAt sets a key's expiration in unix timestamp specified in milliseconds
+func execPExpireAt(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 
 	raw, err := strconv.ParseInt(string(args[1]), 10, 64)
@@ -246,11 +219,8 @@ func PExpireAt(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(1)
 }
 
-// TTL returns a key's time to live in seconds
-func TTL(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'ttl' command")
-	}
+// execTTL returns a key's time to live in seconds
+func execTTL(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	_, exists := db.GetEntity(key)
 	if !exists {
@@ -266,11 +236,8 @@ func TTL(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(ttl / time.Second))
 }
 
-// PTTL returns a key's time to live in milliseconds
-func PTTL(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'pttl' command")
-	}
+// execPTTL returns a key's time to live in milliseconds
+func execPTTL(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	_, exists := db.GetEntity(key)
 	if !exists {
@@ -286,11 +253,8 @@ func PTTL(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(ttl / time.Millisecond))
 }
 
-// Persist removes expiration from a key
-func Persist(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'persist' command")
-	}
+// execPersist removes expiration from a key
+func execPersist(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	_, exists := db.GetEntity(key)
 	if !exists {
@@ -309,18 +273,12 @@ func Persist(db *DB, args [][]byte) redis.Reply {
 
 // BGRewriteAOF asynchronously rewrites Append-Only-File
 func BGRewriteAOF(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 0 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'bgrewriteaof' command")
-	}
 	go db.aofRewrite()
 	return reply.MakeStatusReply("Background append only file rewriting started")
 }
 
-// Keys returns all keys matching the given pattern
-func Keys(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'keys' command")
-	}
+// execKeys returns all keys matching the given pattern
+func execKeys(db *DB, args [][]byte) redis.Reply {
 	pattern := wildcard.CompilePattern(string(args[0]))
 	result := make([][]byte, 0)
 	db.data.ForEach(func(key string, val interface{}) bool {
@@ -330,4 +288,22 @@ func Keys(db *DB, args [][]byte) redis.Reply {
 		return true
 	})
 	return reply.MakeMultiBulkReply(result)
+}
+
+func init() {
+	RegisterCommand("Del", execDel, nil, -2)
+	RegisterCommand("Expire", execExpire, nil, 3)
+	RegisterCommand("ExpireAt", execExpireAt, nil, 3)
+	RegisterCommand("PExpire", execPExpire, nil, 3)
+	RegisterCommand("PExpireAt", execPExpireAt, nil, 3)
+	RegisterCommand("TTL", execTTL, nil, 2)
+	RegisterCommand("PTTL", execPTTL, nil, 2)
+	RegisterCommand("Persist", execPersist, nil, 2)
+	RegisterCommand("Exists", execExists, nil, -2)
+	RegisterCommand("Type", execType, nil, 2)
+	RegisterCommand("Rename", execRename, nil, 3)
+	RegisterCommand("RenameNx", execRenameNx, nil, 3)
+	RegisterCommand("FlushDB", execFlushDB, nil, -1)
+	RegisterCommand("FlushAll", execFlushAll, nil, -1)
+	RegisterCommand("Keys", execKeys, nil, 2)
 }

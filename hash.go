@@ -36,12 +36,9 @@ func (db *DB) getOrInitDict(key string) (dict Dict.Dict, inited bool, errReply r
 	return dict, inited, nil
 }
 
-// HSet sets field in hash table
-func HSet(db *DB, args [][]byte) redis.Reply {
+// execHSet sets field in hash table
+func execHSet(db *DB, args [][]byte) redis.Reply {
 	// parse args
-	if len(args) != 3 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'hset' command")
-	}
 	key := string(args[0])
 	field := string(args[1])
 	value := args[2]
@@ -61,12 +58,9 @@ func HSet(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(result))
 }
 
-// HSetNX sets field in hash table only if field not exists
-func HSetNX(db *DB, args [][]byte) redis.Reply {
+// execHSetNX sets field in hash table only if field not exists
+func execHSetNX(db *DB, args [][]byte) redis.Reply {
 	// parse args
-	if len(args) != 3 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'hsetnx' command")
-	}
 	key := string(args[0])
 	field := string(args[1])
 	value := args[2]
@@ -87,12 +81,9 @@ func HSetNX(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(result))
 }
 
-// HGet gets field value of hash table
-func HGet(db *DB, args [][]byte) redis.Reply {
+// execHGet gets field value of hash table
+func execHGet(db *DB, args [][]byte) redis.Reply {
 	// parse args
-	if len(args) != 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'hget' command")
-	}
 	key := string(args[0])
 	field := string(args[1])
 
@@ -116,12 +107,9 @@ func HGet(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeBulkReply(value)
 }
 
-// HExists checks if a hash field exists
-func HExists(db *DB, args [][]byte) redis.Reply {
+// execHExists checks if a hash field exists
+func execHExists(db *DB, args [][]byte) redis.Reply {
 	// parse args
-	if len(args) != 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'hexists' command")
-	}
 	key := string(args[0])
 	field := string(args[1])
 
@@ -144,12 +132,9 @@ func HExists(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(0)
 }
 
-// HDel deletes a hash field
-func HDel(db *DB, args [][]byte) redis.Reply {
+// execHDel deletes a hash field
+func execHDel(db *DB, args [][]byte) redis.Reply {
 	// parse args
-	if len(args) < 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'hdel' command")
-	}
 	key := string(args[0])
 	fields := make([]string, len(args)-1)
 	fieldArgs := args[1:]
@@ -184,12 +169,9 @@ func HDel(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(deleted))
 }
 
-// HLen gets number of fields in hash table
-func HLen(db *DB, args [][]byte) redis.Reply {
+// execHLen gets number of fields in hash table
+func execHLen(db *DB, args [][]byte) redis.Reply {
 	// parse args
-	if len(args) != 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'hlen' command")
-	}
 	key := string(args[0])
 
 	db.RLock(key)
@@ -205,11 +187,11 @@ func HLen(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(dict.Len()))
 }
 
-// HMSet sets multi fields in hash table
-func HMSet(db *DB, args [][]byte) redis.Reply {
+// execHMSet sets multi fields in hash table
+func execHMSet(db *DB, args [][]byte) redis.Reply {
 	// parse args
-	if len(args) < 3 || len(args)%2 != 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'hmset' command")
+	if len(args)%2 != 1 {
+		return reply.MakeSyntaxErrReply()
 	}
 	key := string(args[0])
 	size := (len(args) - 1) / 2
@@ -241,9 +223,6 @@ func HMSet(db *DB, args [][]byte) redis.Reply {
 
 // HMGet gets multi fields in hash table
 func HMGet(db *DB, args [][]byte) redis.Reply {
-	if len(args) < 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'hmget' command")
-	}
 	key := string(args[0])
 	size := len(args) - 1
 	fields := make([]string, size)
@@ -276,11 +255,8 @@ func HMGet(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(result)
 }
 
-// HKeys gets all field names in hash table
-func HKeys(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'hkeys' command")
-	}
+// execHKeys gets all field names in hash table
+func execHKeys(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 
 	db.RLock(key)
@@ -304,11 +280,8 @@ func HKeys(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(fields[:i])
 }
 
-// HVals gets all field value in hash table
-func HVals(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'hvals' command")
-	}
+// execHVals gets all field value in hash table
+func execHVals(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 
 	db.RLock(key)
@@ -333,11 +306,8 @@ func HVals(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(values[:i])
 }
 
-// HGetAll gets all key-value entries in hash table
-func HGetAll(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'hgetAll' command")
-	}
+// execHGetAll gets all key-value entries in hash table
+func execHGetAll(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 
 	db.RLock(key)
@@ -365,11 +335,8 @@ func HGetAll(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(result[:i])
 }
 
-// HIncrBy increments the integer value of a hash field by the given number
-func HIncrBy(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 3 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'hincrby' command")
-	}
+// execHIncrBy increments the integer value of a hash field by the given number
+func execHIncrBy(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	field := string(args[1])
 	rawDelta := string(args[2])
@@ -403,11 +370,8 @@ func HIncrBy(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeBulkReply(bytes)
 }
 
-// HIncrByFloat increments the float value of a hash field by the given number
-func HIncrByFloat(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 3 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'hincrbyfloat' command")
-	}
+// execHIncrByFloat increments the float value of a hash field by the given number
+func execHIncrByFloat(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	field := string(args[1])
 	rawDelta := string(args[2])
@@ -439,4 +403,20 @@ func HIncrByFloat(db *DB, args [][]byte) redis.Reply {
 	dict.Put(field, resultBytes)
 	db.AddAof(makeAofCmd("hincrbyfloat", args))
 	return reply.MakeBulkReply(resultBytes)
+}
+
+func init() {
+	RegisterCommand("HSet", execHSet, nil, 4)
+	RegisterCommand("HSetNX", execHSetNX, nil, 4)
+	RegisterCommand("HGet", execHGet, nil, 3)
+	RegisterCommand("HExists", execHExists, nil, 3)
+	RegisterCommand("HDel", execHDel, nil, -3)
+	RegisterCommand("HLen", execHLen, nil, 2)
+	RegisterCommand("HMSet", execHMSet, nil, -4)
+	RegisterCommand("HGet", execHGet, nil, -3)
+	RegisterCommand("HKeys", execHKeys, nil, 2)
+	RegisterCommand("HVals", execHVals, nil, 2)
+	RegisterCommand("HGetAll", execHGetAll, nil, 2)
+	RegisterCommand("HIncrBy", execHIncrBy, nil, 4)
+	RegisterCommand("HIncrByFloat", execHIncrByFloat, nil, 4)
 }

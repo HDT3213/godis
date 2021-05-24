@@ -2,7 +2,6 @@
 package godis
 
 import (
-	"fmt"
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/datastruct/dict"
 	"github.com/hdt3213/godis/datastruct/lock"
@@ -12,16 +11,9 @@ import (
 	"github.com/hdt3213/godis/pubsub"
 	"github.com/hdt3213/godis/redis/reply"
 	"os"
-	"runtime/debug"
-	"strings"
 	"sync"
 	"time"
 )
-
-// DataEntity stores data bound to a key, including a string, list, hash, set and so on
-type DataEntity struct {
-	Data interface{}
-}
 
 const (
 	dataDictSize = 1 << 16
@@ -29,9 +21,6 @@ const (
 	lockerSize   = 128
 	aofQueueSize = 1 << 16
 )
-
-// args don't include cmd line
-type cmdFunc func(db *DB, args [][]byte) redis.Reply
 
 // DB stores data and execute user's commands
 type DB struct {
@@ -43,7 +32,7 @@ type DB struct {
 	// dict.Dict will ensure concurrent-safety of its method
 	// use this mutex for complicated command only, eg. rpush, incr ...
 	locker *lock.Locks
-	// stop all data access for FlushDB
+	// stop all data access for execFlushDB
 	stopWorld sync.WaitGroup
 	// handle publish/subscribe
 	hub *pubsub.Hub
@@ -60,7 +49,18 @@ type DB struct {
 	pausingAof sync.RWMutex
 }
 
-var router = makeRouter()
+// PreFunc analyses command line when queued command to `multi`
+// returns related keys and undo commands
+type PreFunc func(args [][]byte) ([]string, [][][]byte)
+
+// ExecFunc is interface for command executor
+// args don't include cmd line
+type ExecFunc func(db *DB, args [][]byte) redis.Reply
+
+// DataEntity stores data bound to a key, including a string, list, hash, set and so on
+type DataEntity struct {
+	Data interface{}
+}
 
 // MakeDB create DB instance and start it
 func MakeDB() *DB {
@@ -102,49 +102,12 @@ func (db *DB) Close() {
 	}
 }
 
-// Exec executes command
-// parameter `cmdArgs` contains command and its arguments, for example: "set key value"
-func (db *DB) Exec(c redis.Connection, cmdArgs [][]byte) (result redis.Reply) {
-	defer func() {
-		if err := recover(); err != nil {
-			logger.Warn(fmt.Sprintf("error occurs: %v\n%s", err, string(debug.Stack())))
-			result = &reply.UnknownErrReply{}
-		}
-	}()
-
-	cmd := strings.ToLower(string(cmdArgs[0]))
-	if cmd == "auth" {
-		return Auth(db, c, cmdArgs[1:])
+func validateArity(arity int, cmdArgs [][]byte) bool {
+	argNum := len(cmdArgs)
+	if arity >= 0 {
+		return argNum == arity
 	}
-	if !isAuthenticated(c) {
-		return reply.MakeErrReply("NOAUTH Authentication required")
-	}
-	// special commands
-	if cmd == "subscribe" {
-		if len(cmdArgs) < 2 {
-			return &reply.ArgNumErrReply{Cmd: "subscribe"}
-		}
-		return pubsub.Subscribe(db.hub, c, cmdArgs[1:])
-	} else if cmd == "publish" {
-		return pubsub.Publish(db.hub, cmdArgs[1:])
-	} else if cmd == "unsubscribe" {
-		return pubsub.UnSubscribe(db.hub, c, cmdArgs[1:])
-	} else if cmd == "bgrewriteaof" {
-		// aof.go imports router.go, router.go cannot import BGRewriteAOF from aof.go
-		return BGRewriteAOF(db, cmdArgs[1:])
-	}
-
-	// normal commands
-	fun, ok := router[cmd]
-	if !ok {
-		return reply.MakeErrReply("ERR unknown command '" + cmd + "'")
-	}
-	if len(cmdArgs) > 1 {
-		result = fun(db, cmdArgs[1:])
-	} else {
-		result = fun(db, [][]byte{})
-	}
-	return
+	return argNum >= -arity
 }
 
 /* ---- Data Access ----- */
@@ -263,7 +226,7 @@ func genExpireTask(key string) string {
 	return "expire:" + key
 }
 
-// Expire sets TTL of key
+// Expire sets ttlCmd of key
 func (db *DB) Expire(key string, expireTime time.Time) {
 	db.stopWorld.Wait()
 	db.ttlMap.Put(key, expireTime)
@@ -274,7 +237,7 @@ func (db *DB) Expire(key string, expireTime time.Time) {
 	})
 }
 
-// Persist cancel TTL of key
+// Persist cancel ttlCmd of key
 func (db *DB) Persist(key string) {
 	db.stopWorld.Wait()
 	db.ttlMap.Remove(key)

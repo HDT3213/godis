@@ -21,18 +21,20 @@ func TestPing(t *testing.T) {
 func TestAuth(t *testing.T) {
 	passwd := utils.RandString(10)
 	c := &connection.FakeConn{}
-	ret := Auth(testDB, c, utils.ToBytesList())
+	ret := testDB.Exec(c, utils.ToBytesList("AUTH"))
 	asserts.AssertErrReply(t, ret, "ERR wrong number of arguments for 'auth' command")
-	ret = Auth(testDB, c, utils.ToBytesList(passwd))
+	ret = testDB.Exec(c, utils.ToBytesList("AUTH", passwd))
 	asserts.AssertErrReply(t, ret, "ERR Client sent AUTH, but no password is set")
 
 	config.Properties.RequirePass = passwd
 	defer func() {
 		config.Properties.RequirePass = ""
 	}()
-	ret = Auth(testDB, c, utils.ToBytesList(passwd+passwd))
+	ret = testDB.Exec(c, utils.ToBytesList("AUTH", passwd+"wrong"))
 	asserts.AssertErrReply(t, ret, "ERR invalid password")
-	ret = Auth(testDB, c, utils.ToBytesList(passwd))
+	ret = testDB.Exec(c, utils.ToBytesList("PING"))
+	asserts.AssertErrReply(t, ret, "NOAUTH Authentication required")
+	ret = testDB.Exec(c, utils.ToBytesList("AUTH", passwd))
 	asserts.AssertStatusReply(t, ret, "OK")
 
 }

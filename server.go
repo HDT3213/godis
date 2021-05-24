@@ -39,3 +39,7 @@ func isAuthenticated(c redis.Connection) bool {
 	}
 	return c.GetPassword() == config.Properties.RequirePass
 }
+
+func init() {
+	RegisterCommand("ping", Ping, nil, -1)
+}

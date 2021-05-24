@@ -19,11 +19,11 @@ import (
 	"time"
 )
 
-var pExpireAtCmd = []byte("PEXPIREAT")
+var pExpireAtBytes = []byte("PEXPIREAT")
 
 func makeExpireCmd(key string, expireAt time.Time) *reply.MultiBulkReply {
 	args := make([][]byte, 3)
-	args[0] = pExpireAtCmd
+	args[0] = pExpireAtBytes
 	args[1] = []byte(key)
 	args[2] = []byte(strconv.FormatInt(expireAt.UnixNano()/1e6, 10))
 	return reply.MakeMultiBulkReply(args)
@@ -101,9 +101,10 @@ func (db *DB) loadAof(maxBytes int) {
 			continue
 		}
 		cmd := strings.ToLower(string(r.Args[0]))
-		cmdFunc, ok := router[cmd]
+		command, ok := cmdTable[cmd]
 		if ok {
-			cmdFunc(db, r.Args[1:])
+			handler := command.executor
+			handler(db, r.Args[1:])
 		}
 	}
 }

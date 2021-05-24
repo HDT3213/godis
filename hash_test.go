@@ -11,7 +11,7 @@ import (
 )
 
 func TestHSet(t *testing.T) {
-	FlushAll(testDB, [][]byte{})
+	execFlushAll(testDB, [][]byte{})
 	size := 100
 
 	// test hset
@@ -21,7 +21,7 @@ func TestHSet(t *testing.T) {
 		value := utils2.RandString(10)
 		field := strconv.Itoa(i)
 		values[field] = []byte(value)
-		result := HSet(testDB, utils2.ToBytesList(key, field, value))
+		result := execHSet(testDB, utils2.ToBytesList(key, field, value))
 		if intResult, _ := result.(*reply.IntReply); intResult.Code != int64(1) {
 			t.Error(fmt.Sprintf("expected %d, actually %d", 1, intResult.Code))
 		}
@@ -29,26 +29,26 @@ func TestHSet(t *testing.T) {
 
 	// test hget and hexists
 	for field, v := range values {
-		actual := HGet(testDB, utils2.ToBytesList(key, field))
+		actual := execHGet(testDB, utils2.ToBytesList(key, field))
 		expected := reply.MakeBulkReply(v)
 		if !utils.BytesEquals(actual.ToBytes(), expected.ToBytes()) {
 			t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(actual.ToBytes())))
 		}
-		actual = HExists(testDB, utils2.ToBytesList(key, field))
+		actual = execHExists(testDB, utils2.ToBytesList(key, field))
 		if intResult, _ := actual.(*reply.IntReply); intResult.Code != int64(1) {
 			t.Error(fmt.Sprintf("expected %d, actually %d", 1, intResult.Code))
 		}
 	}
 
 	// test hlen
-	actual := HLen(testDB, utils2.ToBytesList(key))
+	actual := execHLen(testDB, utils2.ToBytesList(key))
 	if intResult, _ := actual.(*reply.IntReply); intResult.Code != int64(len(values)) {
 		t.Error(fmt.Sprintf("expected %d, actually %d", len(values), intResult.Code))
 	}
 }
 
 func TestHDel(t *testing.T) {
-	FlushAll(testDB, [][]byte{})
+	execFlushAll(testDB, [][]byte{})
 	size := 100
 
 	// set values
@@ -58,25 +58,25 @@ func TestHDel(t *testing.T) {
 		value := utils2.RandString(10)
 		field := strconv.Itoa(i)
 		fields[i] = field
-		HSet(testDB, utils2.ToBytesList(key, field, value))
+		execHSet(testDB, utils2.ToBytesList(key, field, value))
 	}
 
 	// test HDel
 	args := []string{key}
 	args = append(args, fields...)
-	actual := HDel(testDB, utils2.ToBytesList(args...))
+	actual := execHDel(testDB, utils2.ToBytesList(args...))
 	if intResult, _ := actual.(*reply.IntReply); intResult.Code != int64(len(fields)) {
 		t.Error(fmt.Sprintf("expected %d, actually %d", len(fields), intResult.Code))
 	}
 
-	actual = HLen(testDB, utils2.ToBytesList(key))
+	actual = execHLen(testDB, utils2.ToBytesList(key))
 	if intResult, _ := actual.(*reply.IntReply); intResult.Code != int64(0) {
 		t.Error(fmt.Sprintf("expected %d, actually %d", 0, intResult.Code))
 	}
 }
 
 func TestHMSet(t *testing.T) {
-	FlushAll(testDB, [][]byte{})
+	execFlushAll(testDB, [][]byte{})
 	size := 100
 
 	// test hset
@@ -89,7 +89,7 @@ func TestHMSet(t *testing.T) {
 		values[i] = utils2.RandString(10)
 		setArgs = append(setArgs, fields[i], values[i])
 	}
-	result := HMSet(testDB, utils2.ToBytesList(setArgs...))
+	result := execHMSet(testDB, utils2.ToBytesList(setArgs...))
 	if _, ok := result.(*reply.OkReply); !ok {
 		t.Error(fmt.Sprintf("expected ok, actually %s", string(result.ToBytes())))
 	}
@@ -105,7 +105,7 @@ func TestHMSet(t *testing.T) {
 }
 
 func TestHGetAll(t *testing.T) {
-	FlushAll(testDB, [][]byte{})
+	execFlushAll(testDB, [][]byte{})
 	size := 100
 	key := utils2.RandString(10)
 	fields := make([]string, size)
@@ -118,11 +118,11 @@ func TestHGetAll(t *testing.T) {
 		all = append(all, fields[i], value)
 		valueMap[fields[i]] = value
 		valueSet[value] = true
-		HSet(testDB, utils2.ToBytesList(key, fields[i], value))
+		execHSet(testDB, utils2.ToBytesList(key, fields[i], value))
 	}
 
 	// test HGetAll
-	result := HGetAll(testDB, utils2.ToBytesList(key))
+	result := execHGetAll(testDB, utils2.ToBytesList(key))
 	multiBulk, ok := result.(*reply.MultiBulkReply)
 	if !ok {
 		t.Error(fmt.Sprintf("expected MultiBulkReply, actually %s", string(result.ToBytes())))
@@ -144,7 +144,7 @@ func TestHGetAll(t *testing.T) {
 	}
 
 	// test HKeys
-	result = HKeys(testDB, utils2.ToBytesList(key))
+	result = execHKeys(testDB, utils2.ToBytesList(key))
 	multiBulk, ok = result.(*reply.MultiBulkReply)
 	if !ok {
 		t.Error(fmt.Sprintf("expected MultiBulkReply, actually %s", string(result.ToBytes())))
@@ -160,7 +160,7 @@ func TestHGetAll(t *testing.T) {
 	}
 
 	// test HVals
-	result = HVals(testDB, utils2.ToBytesList(key))
+	result = execHVals(testDB, utils2.ToBytesList(key))
 	multiBulk, ok = result.(*reply.MultiBulkReply)
 	if !ok {
 		t.Error(fmt.Sprintf("expected MultiBulkReply, actually %s", string(result.ToBytes())))
@@ -178,39 +178,39 @@ func TestHGetAll(t *testing.T) {
 }
 
 func TestHIncrBy(t *testing.T) {
-	FlushAll(testDB, [][]byte{})
+	execFlushAll(testDB, [][]byte{})
 
 	key := utils2.RandString(10)
-	result := HIncrBy(testDB, utils2.ToBytesList(key, "a", "1"))
+	result := execHIncrBy(testDB, utils2.ToBytesList(key, "a", "1"))
 	if bulkResult, _ := result.(*reply.BulkReply); string(bulkResult.Arg) != "1" {
 		t.Error(fmt.Sprintf("expected %s, actually %s", "1", string(bulkResult.Arg)))
 	}
-	result = HIncrBy(testDB, utils2.ToBytesList(key, "a", "1"))
+	result = execHIncrBy(testDB, utils2.ToBytesList(key, "a", "1"))
 	if bulkResult, _ := result.(*reply.BulkReply); string(bulkResult.Arg) != "2" {
 		t.Error(fmt.Sprintf("expected %s, actually %s", "2", string(bulkResult.Arg)))
 	}
 
-	result = HIncrByFloat(testDB, utils2.ToBytesList(key, "b", "1.2"))
+	result = execHIncrByFloat(testDB, utils2.ToBytesList(key, "b", "1.2"))
 	if bulkResult, _ := result.(*reply.BulkReply); string(bulkResult.Arg) != "1.2" {
 		t.Error(fmt.Sprintf("expected %s, actually %s", "1.2", string(bulkResult.Arg)))
 	}
-	result = HIncrByFloat(testDB, utils2.ToBytesList(key, "b", "1.2"))
+	result = execHIncrByFloat(testDB, utils2.ToBytesList(key, "b", "1.2"))
 	if bulkResult, _ := result.(*reply.BulkReply); string(bulkResult.Arg) != "2.4" {
 		t.Error(fmt.Sprintf("expected %s, actually %s", "2.4", string(bulkResult.Arg)))
 	}
 }
 
 func TestHSetNX(t *testing.T) {
-	FlushAll(testDB, [][]byte{})
+	execFlushAll(testDB, [][]byte{})
 	key := utils2.RandString(10)
 	field := utils2.RandString(10)
 	value := utils2.RandString(10)
-	result := HSetNX(testDB, utils2.ToBytesList(key, field, value))
+	result := execHSetNX(testDB, utils2.ToBytesList(key, field, value))
 	asserts.AssertIntReply(t, result, 1)
 	value2 := utils2.RandString(10)
-	result = HSetNX(testDB, utils2.ToBytesList(key, field, value2))
+	result = execHSetNX(testDB, utils2.ToBytesList(key, field, value2))
 	asserts.AssertIntReply(t, result, 0)
-	result = HGet(testDB, utils2.ToBytesList(key, field))
+	result = execHGet(testDB, utils2.ToBytesList(key, field))
 	asserts.AssertBulkReply(t, result, value)
 
 }

@@ -10,8 +10,8 @@ import (
 	"strings"
 )
 
-// GeoAdd add a location into SortedSet
-func GeoAdd(db *DB, args [][]byte) redis.Reply {
+// execGeoAdd add a location into SortedSet
+func execGeoAdd(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 4 || len(args)%3 != 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'geoadd' command")
 	}
@@ -61,8 +61,8 @@ func GeoAdd(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(i))
 }
 
-// GeoPos returns location of a member
-func GeoPos(db *DB, args [][]byte) redis.Reply {
+// execGeoPos returns location of a member
+func execGeoPos(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) < 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'geopos' command")
@@ -94,8 +94,8 @@ func GeoPos(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiRawReply(positions)
 }
 
-// GeoDist returns the distance between two locations
-func GeoDist(db *DB, args [][]byte) redis.Reply {
+// execGeoDist returns the distance between two locations
+func execGeoDist(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 3 && len(args) != 4 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'geodist' command")
@@ -135,8 +135,8 @@ func GeoDist(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeErrReply("ERR unsupported unit provided. please use m, km")
 }
 
-// GeoHash return geo-hash-code of given position
-func GeoHash(db *DB, args [][]byte) redis.Reply {
+// execGeoHash return geo-hash-code of given position
+func execGeoHash(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) < 1 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'geohash' command")
@@ -165,8 +165,8 @@ func GeoHash(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(strs)
 }
 
-// GeoRadius returns members within max distance of given point
-func GeoRadius(db *DB, args [][]byte) redis.Reply {
+// execGeoRadius returns members within max distance of given point
+func execGeoRadius(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) < 5 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'georadius' command")
@@ -203,8 +203,8 @@ func GeoRadius(db *DB, args [][]byte) redis.Reply {
 	return geoRadius0(sortedSet, lat, lng, radius)
 }
 
-// GeoRadiusByMember returns members within max distance of given member's location
-func GeoRadiusByMember(db *DB, args [][]byte) redis.Reply {
+// execGeoRadiusByMember returns members within max distance of given member's location
+func execGeoRadiusByMember(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) < 3 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'georadiusbymember' command")
@@ -254,4 +254,13 @@ func geoRadius0(sortedSet *sortedset.SortedSet, lat float64, lng float64, radius
 		}
 	}
 	return reply.MakeMultiBulkReply(members)
+}
+
+func init() {
+	RegisterCommand("GeoAdd", execGeoAdd, nil, -5)
+	RegisterCommand("GeoPos", execGeoPos, nil, -2)
+	RegisterCommand("GeoDist", execGeoDist, nil, -4)
+	RegisterCommand("GeoHash", execGeoHash, nil, -2)
+	RegisterCommand("GeoRadius", execGeoRadius, nil, -6)
+	RegisterCommand("GeoRadiusByMember", execGeoRadiusByMember, nil, -5)
 }

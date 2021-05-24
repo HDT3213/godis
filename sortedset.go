@@ -36,10 +36,10 @@ func (db *DB) getOrInitSortedSet(key string) (sortedSet *SortedSet.SortedSet, in
 	return sortedSet, inited, nil
 }
 
-// ZAdd adds member into sorted set
-func ZAdd(db *DB, args [][]byte) redis.Reply {
-	if len(args) < 3 || len(args)%2 != 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'zadd' command")
+// execZAdd adds member into sorted set
+func execZAdd(db *DB, args [][]byte) redis.Reply {
+	if len(args)%2 != 1 {
+		return reply.MakeSyntaxErrReply()
 	}
 	key := string(args[0])
 	size := (len(args) - 1) / 2
@@ -79,12 +79,9 @@ func ZAdd(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(i))
 }
 
-// ZScore gets score of a member in sortedset
-func ZScore(db *DB, args [][]byte) redis.Reply {
+// execZScore gets score of a member in sortedset
+func execZScore(db *DB, args [][]byte) redis.Reply {
 	// parse args
-	if len(args) != 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'zscore' command")
-	}
 	key := string(args[0])
 	member := string(args[1])
 
@@ -106,12 +103,9 @@ func ZScore(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeBulkReply([]byte(value))
 }
 
-// ZRank gets index of a member in sortedset, ascending order, start from 0
-func ZRank(db *DB, args [][]byte) redis.Reply {
+// execZRank gets index of a member in sortedset, ascending order, start from 0
+func execZRank(db *DB, args [][]byte) redis.Reply {
 	// parse args
-	if len(args) != 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'zrank' command")
-	}
 	key := string(args[0])
 	member := string(args[1])
 
@@ -133,12 +127,9 @@ func ZRank(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(rank)
 }
 
-// ZRevRank gets index of a member in sortedset, descending order, start from 0
-func ZRevRank(db *DB, args [][]byte) redis.Reply {
+// execZRevRank gets index of a member in sortedset, descending order, start from 0
+func execZRevRank(db *DB, args [][]byte) redis.Reply {
 	// parse args
-	if len(args) != 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'zrevrank' command")
-	}
 	key := string(args[0])
 	member := string(args[1])
 
@@ -160,12 +151,9 @@ func ZRevRank(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(rank)
 }
 
-// ZCard gets number of members in sortedset
-func ZCard(db *DB, args [][]byte) redis.Reply {
+// execZCard gets number of members in sortedset
+func execZCard(db *DB, args [][]byte) redis.Reply {
 	// parse args
-	if len(args) != 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'zcard' command")
-	}
 	key := string(args[0])
 
 	// get entity
@@ -182,8 +170,8 @@ func ZCard(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(sortedSet.Len())
 }
 
-// ZRange gets members in range, sort by score in ascending order
-func ZRange(db *DB, args [][]byte) redis.Reply {
+// execZRange gets members in range, sort by score in ascending order
+func execZRange(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 3 && len(args) != 4 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'zrange' command")
@@ -207,8 +195,8 @@ func ZRange(db *DB, args [][]byte) redis.Reply {
 	return range0(db, key, start, stop, withScores, false)
 }
 
-// ZRevRange gets members in range, sort by score in descending order
-func ZRevRange(db *DB, args [][]byte) redis.Reply {
+// execZRevRange gets members in range, sort by score in descending order
+func execZRevRange(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 3 && len(args) != 4 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'zrevrange' command")
@@ -291,11 +279,8 @@ func range0(db *DB, key string, start int64, stop int64, withScores bool, desc b
 	return reply.MakeMultiBulkReply(result)
 }
 
-// ZCount gets number of members which score within given range
-func ZCount(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 3 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'zcount' command")
-	}
+// execZCount gets number of members which score within given range
+func execZCount(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 
 	min, err := SortedSet.ParseScoreBorder(string(args[1]))
@@ -362,8 +347,8 @@ func rangeByScore0(db *DB, key string, min *SortedSet.ScoreBorder, max *SortedSe
 	return reply.MakeMultiBulkReply(result)
 }
 
-// ZRangeByScore gets members which score within given range, in ascending order
-func ZRangeByScore(db *DB, args [][]byte) redis.Reply {
+// execZRangeByScore gets members which score within given range, in ascending order
+func execZRangeByScore(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 3 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'zrangebyscore' command")
 	}
@@ -409,8 +394,8 @@ func ZRangeByScore(db *DB, args [][]byte) redis.Reply {
 	return rangeByScore0(db, key, min, max, offset, limit, withScores, false)
 }
 
-// ZRevRangeByScore gets number of members which score within given range, in descending order
-func ZRevRangeByScore(db *DB, args [][]byte) redis.Reply {
+// execZRevRangeByScore gets number of members which score within given range, in descending order
+func execZRevRangeByScore(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 3 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'zrangebyscore' command")
 	}
@@ -456,8 +441,8 @@ func ZRevRangeByScore(db *DB, args [][]byte) redis.Reply {
 	return rangeByScore0(db, key, min, max, offset, limit, withScores, true)
 }
 
-// ZRemRangeByScore removes members which score within given range
-func ZRemRangeByScore(db *DB, args [][]byte) redis.Reply {
+// execZRemRangeByScore removes members which score within given range
+func execZRemRangeByScore(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 3 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'zremrangebyscore' command")
 	}
@@ -492,11 +477,8 @@ func ZRemRangeByScore(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(removed)
 }
 
-// ZRemRangeByRank removes members within given indexes
-func ZRemRangeByRank(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 3 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'zremrangebyrank' command")
-	}
+// execZRemRangeByRank removes members within given indexes
+func execZRemRangeByRank(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	start, err := strconv.ParseInt(string(args[1]), 10, 64)
 	if err != nil {
@@ -549,12 +531,9 @@ func ZRemRangeByRank(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(removed)
 }
 
-// ZRem removes given members
-func ZRem(db *DB, args [][]byte) redis.Reply {
+// execZRem removes given members
+func execZRem(db *DB, args [][]byte) redis.Reply {
 	// parse args
-	if len(args) < 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'zrem' command")
-	}
 	key := string(args[0])
 	fields := make([]string, len(args)-1)
 	fieldArgs := args[1:]
@@ -586,11 +565,8 @@ func ZRem(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(deleted)
 }
 
-// ZIncrBy increments the score of a member
-func ZIncrBy(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 3 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'zincrby' command")
-	}
+// execZIncrBy increments the score of a member
+func execZIncrBy(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	rawDelta := string(args[1])
 	field := string(args[2])
@@ -619,4 +595,21 @@ func ZIncrBy(db *DB, args [][]byte) redis.Reply {
 	bytes := []byte(strconv.FormatFloat(score, 'f', -1, 64))
 	db.AddAof(makeAofCmd("zincrby", args))
 	return reply.MakeBulkReply(bytes)
+}
+
+func init() {
+	RegisterCommand("ZAdd", execZAdd, nil, -4)
+	RegisterCommand("ZScore", execZScore, nil, 3)
+	RegisterCommand("ZIncrBy", execZIncrBy, nil, 4)
+	RegisterCommand("ZRank", execZRank, nil, 3)
+	RegisterCommand("ZCount", execZCount, nil, 4)
+	RegisterCommand("ZRevRank", execZRevRank, nil, 3)
+	RegisterCommand("ZCard", execZCard, nil, 2)
+	RegisterCommand("ZRange", execZRange, nil, -4)
+	RegisterCommand("ZRangeByScore", execZRangeByScore, nil, -4)
+	RegisterCommand("ZRange", execZRevRange, nil, -4)
+	RegisterCommand("ZRangeByScore", execZRevRangeByScore, nil, -4)
+	RegisterCommand("ZRem", execZRem, nil, -3)
+	RegisterCommand("ZRemRangeByScore", execZRemRangeByScore, nil, 4)
+	RegisterCommand("ZRemRangeByRank", execZRemRangeByRank, nil, 4)
 }

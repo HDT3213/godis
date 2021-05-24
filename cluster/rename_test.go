@@ -2,7 +2,6 @@ package cluster
 
 import (
 	"fmt"
-	"github.com/hdt3213/godis"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/reply"
 	"github.com/hdt3213/godis/redis/reply/asserts"
@@ -11,22 +10,22 @@ import (
 
 func TestRename(t *testing.T) {
 	testDB := testCluster.db
-	godis.FlushAll(testDB, [][]byte{})
+	testDB.Exec(nil, utils.ToBytesList("FlushALL"))
 	key := utils.RandString(10)
 	value := utils.RandString(10)
 	newKey := key + utils.RandString(2)
-	godis.Set(testDB, utils.ToBytesList(key, value, "ex", "1000"))
+	testDB.Exec(nil, utils.ToBytesList("SET", key, value, "ex", "1000"))
 	result := Rename(testCluster, nil, utils.ToBytesList("RENAME", key, newKey))
 	if _, ok := result.(*reply.OkReply); !ok {
 		t.Error("expect ok")
 		return
 	}
-	result = godis.Exists(testDB, utils.ToBytesList(key))
+	result = testDB.Exec(nil, utils.ToBytesList("EXISTS", key))
 	asserts.AssertIntReply(t, result, 0)
-	result = godis.Exists(testDB, utils.ToBytesList(newKey))
+	result = testDB.Exec(nil, utils.ToBytesList("EXISTS", newKey))
 	asserts.AssertIntReply(t, result, 1)
 	// check ttl
-	result = godis.TTL(testDB, utils.ToBytesList(newKey))
+	result = testDB.Exec(nil, utils.ToBytesList("TTL", newKey))
 	intResult, ok := result.(*reply.IntReply)
 	if !ok {
 		t.Error(fmt.Sprintf("expected int reply, actually %s", result.ToBytes()))
@@ -40,18 +39,19 @@ func TestRename(t *testing.T) {
 
 func TestRenameNx(t *testing.T) {
 	testDB := testCluster.db
-	godis.FlushAll(testDB, [][]byte{})
+	testDB.Exec(nil, utils.ToBytesList("FlushALL"))
 	key := utils.RandString(10)
 	value := utils.RandString(10)
 	newKey := key + utils.RandString(2)
-	godis.Set(testCluster.db, utils.ToBytesList(key, value, "ex", "1000"))
+	testCluster.db.Exec(nil, utils.ToBytesList("SET", key, value, "ex", "1000"))
 	result := RenameNx(testCluster, nil, utils.ToBytesList("RENAMENX", key, newKey))
 	asserts.AssertIntReply(t, result, 1)
-	result = godis.Exists(testDB, utils.ToBytesList(key))
+	result = testDB.Exec(nil, utils.ToBytesList("EXISTS", key))
 	asserts.AssertIntReply(t, result, 0)
-	result = godis.Exists(testDB, utils.ToBytesList(newKey))
+	result = testDB.Exec(nil, utils.ToBytesList("EXISTS", newKey))
+
 	asserts.AssertIntReply(t, result, 1)
-	result = godis.TTL(testDB, utils.ToBytesList(newKey))
+	result = testDB.Exec(nil, utils.ToBytesList("TTL", newKey))
 	intResult, ok := result.(*reply.IntReply)
 	if !ok {
 		t.Error(fmt.Sprintf("expected int reply, actually %s", result.ToBytes()))

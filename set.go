@@ -35,11 +35,8 @@ func (db *DB) getOrInitSet(key string) (set *HashSet.Set, inited bool, errReply 
 	return set, inited, nil
 }
 
-// SAdd adds members into set
-func SAdd(db *DB, args [][]byte) redis.Reply {
-	if len(args) < 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'sadd' command")
-	}
+// execSAdd adds members into set
+func execSAdd(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	members := args[1:]
 
@@ -60,11 +57,8 @@ func SAdd(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(counter))
 }
 
-// SIsMember checks if the given value is member of set
-func SIsMember(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'sismember' command")
-	}
+// execSIsMember checks if the given value is member of set
+func execSIsMember(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	member := string(args[1])
 
@@ -87,11 +81,8 @@ func SIsMember(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(0)
 }
 
-// SRem removes a member from set
-func SRem(db *DB, args [][]byte) redis.Reply {
-	if len(args) < 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'srem' command")
-	}
+// execSRem removes a member from set
+func execSRem(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	members := args[1:]
 
@@ -119,11 +110,8 @@ func SRem(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(counter))
 }
 
-// SCard gets the number of members in a set
-func SCard(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'scard' command")
-	}
+// execSCard gets the number of members in a set
+func execSCard(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 
 	db.RLock(key)
@@ -140,11 +128,8 @@ func SCard(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(set.Len()))
 }
 
-// SMembers gets all members in a set
-func SMembers(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'smembers' command")
-	}
+// execSMembers gets all members in a set
+func execSMembers(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 
 	// lock
@@ -170,11 +155,8 @@ func SMembers(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(arr)
 }
 
-// SInter intersect multiple sets
-func SInter(db *DB, args [][]byte) redis.Reply {
-	if len(args) < 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'sinter' command")
-	}
+// execSInter intersect multiple sets
+func execSInter(db *DB, args [][]byte) redis.Reply {
 	keys := make([]string, len(args))
 	for i, arg := range args {
 		keys[i] = string(arg)
@@ -216,11 +198,8 @@ func SInter(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(arr)
 }
 
-// SInterStore intersects multiple sets and store the result in a key
-func SInterStore(db *DB, args [][]byte) redis.Reply {
-	if len(args) < 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'sinterstore' command")
-	}
+// execSInterStore intersects multiple sets and store the result in a key
+func execSInterStore(db *DB, args [][]byte) redis.Reply {
 	dest := string(args[0])
 	keys := make([]string, len(args)-1)
 	keyArgs := args[1:]
@@ -267,11 +246,8 @@ func SInterStore(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(set.Len()))
 }
 
-// SUnion adds multiple sets
-func SUnion(db *DB, args [][]byte) redis.Reply {
-	if len(args) < 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'sunion' command")
-	}
+// execSUnion adds multiple sets
+func execSUnion(db *DB, args [][]byte) redis.Reply {
 	keys := make([]string, len(args))
 	for i, arg := range args {
 		keys[i] = string(arg)
@@ -313,11 +289,8 @@ func SUnion(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(arr)
 }
 
-// SUnionStore adds multiple sets and store the result in a key
-func SUnionStore(db *DB, args [][]byte) redis.Reply {
-	if len(args) < 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'sunionstore' command")
-	}
+// execSUnionStore adds multiple sets and store the result in a key
+func execSUnionStore(db *DB, args [][]byte) redis.Reply {
 	dest := string(args[0])
 	keys := make([]string, len(args)-1)
 	keyArgs := args[1:]
@@ -364,11 +337,8 @@ func SUnionStore(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(set.Len()))
 }
 
-// SDiff subtracts multiple sets
-func SDiff(db *DB, args [][]byte) redis.Reply {
-	if len(args) < 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'sdiff' command")
-	}
+// execSDiff subtracts multiple sets
+func execSDiff(db *DB, args [][]byte) redis.Reply {
 	keys := make([]string, len(args))
 	for i, arg := range args {
 		keys[i] = string(arg)
@@ -417,11 +387,8 @@ func SDiff(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(arr)
 }
 
-// SDiffStore subtracts multiple sets and store the result in a key
-func SDiffStore(db *DB, args [][]byte) redis.Reply {
-	if len(args) < 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'sdiffstore' command")
-	}
+// execSDiffStore subtracts multiple sets and store the result in a key
+func execSDiffStore(db *DB, args [][]byte) redis.Reply {
 	dest := string(args[0])
 	keys := make([]string, len(args)-1)
 	keyArgs := args[1:]
@@ -477,8 +444,8 @@ func SDiffStore(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(set.Len()))
 }
 
-// SRandMember gets random members from set
-func SRandMember(db *DB, args [][]byte) redis.Reply {
+// execSRandMember gets random members from set
+func execSRandMember(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 1 && len(args) != 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'srandmember' command")
 	}
@@ -521,4 +488,19 @@ func SRandMember(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeMultiBulkReply(result)
 	}
 	return &reply.EmptyMultiBulkReply{}
+}
+
+func init() {
+	RegisterCommand("SAdd", execSAdd, nil, -3)
+	RegisterCommand("SIsMember", execSIsMember, nil, 3)
+	RegisterCommand("SRem", execSRem, nil, -3)
+	RegisterCommand("SCard", execSCard, nil, 2)
+	RegisterCommand("SMembers", execSMembers, nil, 2)
+	RegisterCommand("SInter", execSInter, nil, -2)
+	RegisterCommand("SInterStore", execSInterStore, nil, -3)
+	RegisterCommand("SUnion", execSUnion, nil, -2)
+	RegisterCommand("SUnionStore", execSUnionStore, nil, -3)
+	RegisterCommand("SDiff", execSDiff, nil, -2)
+	RegisterCommand("SDiffStore", execSDiffStore, nil, -3)
+	RegisterCommand("SRandMember", execSRandMember, nil, -2)
 }

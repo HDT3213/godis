@@ -21,11 +21,8 @@ func (db *DB) getAsString(key string) ([]byte, reply.ErrorReply) {
 	return bytes, nil
 }
 
-// Get returns string value bound to the given key
-func Get(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'get' command")
-	}
+// execGet returns string value bound to the given key
+func execGet(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	bytes, err := db.getAsString(key)
 	if err != nil {
@@ -45,11 +42,8 @@ const (
 
 const unlimitedTTL int64 = 0
 
-// Set sets string value and time to live to the given key
-func Set(db *DB, args [][]byte) redis.Reply {
-	if len(args) < 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'set' command")
-	}
+// execSet sets string value and time to live to the given key
+func execSet(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	value := args[1]
 	policy := upsertPolicy
@@ -149,11 +143,8 @@ func Set(db *DB, args [][]byte) redis.Reply {
 	return &reply.NullBulkReply{}
 }
 
-// SetNX sets string if not exists
-func SetNX(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'setnx' command")
-	}
+// execSetNX sets string if not exists
+func execSetNX(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	value := args[1]
 	entity := &DataEntity{
@@ -164,11 +155,8 @@ func SetNX(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(result))
 }
 
-// SetEX sets string and its ttl
-func SetEX(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 3 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'setex' command")
-	}
+// execSetEX sets string and its ttl
+func execSetEX(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	value := args[2]
 
@@ -196,11 +184,8 @@ func SetEX(db *DB, args [][]byte) redis.Reply {
 	return &reply.OkReply{}
 }
 
-// PSetEX set a key's time to live in  milliseconds
-func PSetEX(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 3 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'setex' command")
-	}
+// execPSetEX set a key's time to live in  milliseconds
+func execPSetEX(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	value := args[2]
 
@@ -228,10 +213,10 @@ func PSetEX(db *DB, args [][]byte) redis.Reply {
 	return &reply.OkReply{}
 }
 
-// MSet sets multi key-value in database
-func MSet(db *DB, args [][]byte) redis.Reply {
-	if len(args)%2 != 0 || len(args) == 0 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'mset' command")
+// execMSet sets multi key-value in database
+func execMSet(db *DB, args [][]byte) redis.Reply {
+	if len(args)%2 != 0 {
+		return reply.MakeSyntaxErrReply()
 	}
 
 	size := len(args) / 2
@@ -253,11 +238,8 @@ func MSet(db *DB, args [][]byte) redis.Reply {
 	return &reply.OkReply{}
 }
 
-// MGet get multi key-value from database
-func MGet(db *DB, args [][]byte) redis.Reply {
-	if len(args) == 0 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'mget' command")
-	}
+// execMGet get multi key-value from database
+func execMGet(db *DB, args [][]byte) redis.Reply {
 	keys := make([]string, len(args))
 	for i, v := range args {
 		keys[i] = string(v)
@@ -281,11 +263,11 @@ func MGet(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(result)
 }
 
-// MSetNX sets multi key-value in database, only if none of the given keys exist
-func MSetNX(db *DB, args [][]byte) redis.Reply {
+// execMSetNX sets multi key-value in database, only if none of the given keys exist
+func execMSetNX(db *DB, args [][]byte) redis.Reply {
 	// parse args
-	if len(args)%2 != 0 || len(args) == 0 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'msetnx' command")
+	if len(args)%2 != 0 {
+		return reply.MakeSyntaxErrReply()
 	}
 	size := len(args) / 2
 	values := make([][]byte, size)
@@ -314,11 +296,8 @@ func MSetNX(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(1)
 }
 
-// GetSet sets value of a string-type key and returns its old value
-func GetSet(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'getset' command")
-	}
+// execGetSet sets value of a string-type key and returns its old value
+func execGetSet(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	value := args[1]
 
@@ -336,11 +315,8 @@ func GetSet(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeBulkReply(old)
 }
 
-// Incr increments the integer value of a key by one
-func Incr(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'incr' command")
-	}
+// execIncr increments the integer value of a key by one
+func execIncr(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 
 	db.Lock(key)
@@ -368,11 +344,8 @@ func Incr(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(1)
 }
 
-// IncrBy increments the integer value of a key by given value
-func IncrBy(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'incrby' command")
-	}
+// execIncrBy increments the integer value of a key by given value
+func execIncrBy(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	rawDelta := string(args[1])
 	delta, err := strconv.ParseInt(rawDelta, 10, 64)
@@ -406,11 +379,8 @@ func IncrBy(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(delta)
 }
 
-// IncrByFloat increments the float value of a key by given value
-func IncrByFloat(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'incrbyfloat' command")
-	}
+// execIncrByFloat increments the float value of a key by given value
+func execIncrByFloat(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	rawDelta := string(args[1])
 	delta, err := decimal.NewFromString(rawDelta)
@@ -444,11 +414,8 @@ func IncrByFloat(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeBulkReply(args[1])
 }
 
-// Decr decrements the integer value of a key by one
-func Decr(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'decr' command")
-	}
+// execDecr decrements the integer value of a key by one
+func execDecr(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 
 	db.Lock(key)
@@ -477,11 +444,8 @@ func Decr(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(-1)
 }
 
-// DecrBy decrements the integer value of a key by onedecrement
-func DecrBy(db *DB, args [][]byte) redis.Reply {
-	if len(args) != 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'decrby' command")
-	}
+// execDecrBy decrements the integer value of a key by onedecrement
+func execDecrBy(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	rawDelta := string(args[1])
 	delta, err := strconv.ParseInt(rawDelta, 10, 64)
@@ -513,4 +477,23 @@ func DecrBy(db *DB, args [][]byte) redis.Reply {
 	})
 	db.AddAof(makeAofCmd("decrby", args))
 	return reply.MakeIntReply(-delta)
+}
+
+func init() {
+	RegisterCommand("Set", execSet, nil, -3)
+	RegisterCommand("SetNx", execSetNX, nil, 3)
+	RegisterCommand("SetEX", execSetEX, nil, 4)
+	RegisterCommand("PSetEX", execPSetEX, nil, 4)
+	RegisterCommand("MSet", execMSet, nil, -3)
+	RegisterCommand("MGet", execMGet, nil, -2)
+	RegisterCommand("MSetNX", execMSetNX, nil, -3)
+	RegisterCommand("Get", execGet, nil, 2)
+	RegisterCommand("MSet", execMSet, nil, -3)
+	RegisterCommand("GetSet", execGetSet, nil, 3)
+	RegisterCommand("MSet", execMSet, nil, -3)
+	RegisterCommand("Incr", execIncr, nil, 2)
+	RegisterCommand("IncrBy", execIncrBy, nil, 3)
+	RegisterCommand("IncrByFloat", execIncrByFloat, nil, 3)
+	RegisterCommand("Decr", execDecr, nil, 2)
+	RegisterCommand("DecrBy", execDecrBy, nil, 3)
 }
