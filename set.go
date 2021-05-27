@@ -208,11 +208,8 @@ func execSInterStore(db *DB, args [][]byte) redis.Reply {
 	}
 
 	// lock
-	lockedKeySet := HashSet.Make(keys...)
-	lockedKeySet.Add(dest)
-	lockedKeys := lockedKeySet.ToSlice()
-	db.Locks(lockedKeys...)
-	defer db.UnLocks(lockedKeys...)
+	db.RWLocks([]string{dest}, keys)
+	defer db.RWUnLocks([]string{dest}, keys)
 
 	var result *HashSet.Set
 	for _, key := range keys {
@@ -299,11 +296,8 @@ func execSUnionStore(db *DB, args [][]byte) redis.Reply {
 	}
 
 	// lock
-	lockedKeySet := HashSet.Make(keys...)
-	lockedKeySet.Add(dest)
-	lockedKeys := lockedKeySet.ToSlice()
-	db.Locks(lockedKeys...)
-	defer db.UnLocks(lockedKeys...)
+	db.RWLocks([]string{dest}, keys)
+	defer db.RWUnLocks([]string{dest}, keys)
 
 	var result *HashSet.Set
 	for _, key := range keys {
@@ -397,11 +391,8 @@ func execSDiffStore(db *DB, args [][]byte) redis.Reply {
 	}
 
 	// lock
-	lockedKeySet := HashSet.Make(keys...)
-	lockedKeySet.Add(dest)
-	lockedKeys := lockedKeySet.ToSlice()
-	db.Locks(lockedKeys...)
-	defer db.UnLocks(lockedKeys...)
+	db.RWLocks([]string{dest}, keys)
+	defer db.RWUnLocks([]string{dest}, keys)
 
 	var result *HashSet.Set
 	for i, key := range keys {

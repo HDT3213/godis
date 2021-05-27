@@ -220,6 +220,16 @@ func (db *DB) RUnLocks(keys ...string) {
 	db.locker.RUnLocks(keys...)
 }
 
+// RWLocks lock keys for writing and reading
+func (db *DB) RWLocks(writeKeys []string, readKeys []string) {
+	db.locker.RWLocks(writeKeys, readKeys)
+}
+
+// RWUnLocks unlock keys for writing and reading
+func (db *DB) RWUnLocks(writeKeys []string, readKeys []string) {
+	db.locker.RWUnLocks(writeKeys, readKeys)
+}
+
 /* ---- TTL Functions ---- */
 
 func genExpireTask(key string) string {
