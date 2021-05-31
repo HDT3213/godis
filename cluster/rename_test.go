@@ -10,22 +10,22 @@ import (
 
 func TestRename(t *testing.T) {
 	testDB := testCluster.db
-	testDB.Exec(nil, utils.ToBytesList("FlushALL"))
+	testDB.Exec(nil, utils.ToCmdLine("FlushALL"))
 	key := utils.RandString(10)
 	value := utils.RandString(10)
 	newKey := key + utils.RandString(2)
-	testDB.Exec(nil, utils.ToBytesList("SET", key, value, "ex", "1000"))
-	result := Rename(testCluster, nil, utils.ToBytesList("RENAME", key, newKey))
+	testDB.Exec(nil, utils.ToCmdLine("SET", key, value, "ex", "1000"))
+	result := Rename(testCluster, nil, utils.ToCmdLine("RENAME", key, newKey))
 	if _, ok := result.(*reply.OkReply); !ok {
 		t.Error("expect ok")
 		return
 	}
-	result = testDB.Exec(nil, utils.ToBytesList("EXISTS", key))
+	result = testDB.Exec(nil, utils.ToCmdLine("EXISTS", key))
 	asserts.AssertIntReply(t, result, 0)
-	result = testDB.Exec(nil, utils.ToBytesList("EXISTS", newKey))
+	result = testDB.Exec(nil, utils.ToCmdLine("EXISTS", newKey))
 	asserts.AssertIntReply(t, result, 1)
 	// check ttl
-	result = testDB.Exec(nil, utils.ToBytesList("TTL", newKey))
+	result = testDB.Exec(nil, utils.ToCmdLine("TTL", newKey))
 	intResult, ok := result.(*reply.IntReply)
 	if !ok {
 		t.Error(fmt.Sprintf("expected int reply, actually %s", result.ToBytes()))
@@ -39,19 +39,19 @@ func TestRename(t *testing.T) {
 
 func TestRenameNx(t *testing.T) {
 	testDB := testCluster.db
-	testDB.Exec(nil, utils.ToBytesList("FlushALL"))
+	testDB.Exec(nil, utils.ToCmdLine("FlushALL"))
 	key := utils.RandString(10)
 	value := utils.RandString(10)
 	newKey := key + utils.RandString(2)
-	testCluster.db.Exec(nil, utils.ToBytesList("SET", key, value, "ex", "1000"))
-	result := RenameNx(testCluster, nil, utils.ToBytesList("RENAMENX", key, newKey))
+	testCluster.db.Exec(nil, utils.ToCmdLine("SET", key, value, "ex", "1000"))
+	result := RenameNx(testCluster, nil, utils.ToCmdLine("RENAMENX", key, newKey))
 	asserts.AssertIntReply(t, result, 1)
-	result = testDB.Exec(nil, utils.ToBytesList("EXISTS", key))
+	result = testDB.Exec(nil, utils.ToCmdLine("EXISTS", key))
 	asserts.AssertIntReply(t, result, 0)
-	result = testDB.Exec(nil, utils.ToBytesList("EXISTS", newKey))
+	result = testDB.Exec(nil, utils.ToCmdLine("EXISTS", newKey))
 
 	asserts.AssertIntReply(t, result, 1)
-	result = testDB.Exec(nil, utils.ToBytesList("TTL", newKey))
+	result = testDB.Exec(nil, utils.ToCmdLine("TTL", newKey))
 	intResult, ok := result.(*reply.IntReply)
 	if !ok {
 		t.Error(fmt.Sprintf("expected int reply, actually %s", result.ToBytes()))

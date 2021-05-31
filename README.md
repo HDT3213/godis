@@ -13,12 +13,17 @@
 `Godis` is a golang implementation of Redis Server, which intents to provide an example of writing a high concurrent
 middleware using golang.
 
-Godis implemented most features of redis, including 5 data structures, ttl, publish/subscribe, geo and AOF persistence.
+Key Features:
 
-Godis can run as a server side cluster which is transparent to client. You can connect to any node in the cluster to
-access all data in the cluster.
-
-Godis has a concurrent core, so you don't have to worry about your commands blocking the server too much. 
+- support string, list, hash, set, sorted set
+- ttl
+- publish/suscribe
+- geo
+- aof and aof rewrite
+- Transaction. The `multi` command is Atomic and Isolated. If any errors are encountered during execution, godis will rollback the executed commands
+- server side cluster which is transparent to client. You can connect to any node in the cluster to
+  access all data in the cluster.
+- a concurrent core, so you don't have to worry about your commands blocking the server too much. 
 
 If you could read Chinese, you can find more details in [My Blog](https://www.cnblogs.com/Finley/category/1598973.html).
 

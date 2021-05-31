@@ -2,13 +2,11 @@ package cluster
 
 import (
 	"fmt"
-	"github.com/hdt3213/godis"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/timewheel"
 	"github.com/hdt3213/godis/redis/reply"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 )
@@ -16,13 +14,14 @@ import (
 // Transaction stores state and data for a try-commit-catch distributed transaction
 type Transaction struct {
 	id      string   // transaction id
-	args    [][]byte // cmd args
+	cmdLine [][]byte // cmd cmdLine
 	cluster *Cluster
 	conn    redis.Connection
 
-	keys       []string // related keys
-	lockedKeys bool
-	undoLog    map[string][][]byte // store data for undoLog
+	writeKeys  []string
+	readKeys   []string
+	keysLocked bool
+	undoLog    []CmdLine
 
 	status int8
 	mu     *sync.Mutex
@@ -43,13 +42,12 @@ func genTaskKey(txID string) string {
 }
 
 // NewTransaction creates a try-commit-catch distributed transaction
-func NewTransaction(cluster *Cluster, c redis.Connection, id string, args [][]byte, keys []string) *Transaction {
+func NewTransaction(cluster *Cluster, c redis.Connection, id string, cmdLine [][]byte) *Transaction {
 	return &Transaction{
 		id:      id,
-		args:    args,
+		cmdLine: cmdLine,
 		cluster: cluster,
 		conn:    c,
-		keys:    keys,
 		status:  createdStatus,
 		mu:      new(sync.Mutex),
 	}
@@ -58,16 +56,16 @@ func NewTransaction(cluster *Cluster, c redis.Connection, id string, args [][]by
 // Reentrant
 // invoker should hold tx.mu
 func (tx *Transaction) lockKeys() {
-	if !tx.lockedKeys {
-		tx.cluster.db.Locks(tx.keys...)
-		tx.lockedKeys = true
+	if !tx.keysLocked {
+		tx.cluster.db.RWLocks(tx.writeKeys, tx.readKeys)
+		tx.keysLocked = true
 	}
 }
 
 func (tx *Transaction) unLockKeys() {
-	if tx.lockedKeys {
-		tx.cluster.db.UnLocks(tx.keys...)
-		tx.lockedKeys = false
+	if tx.keysLocked {
+		tx.cluster.db.RWUnLocks(tx.writeKeys, tx.readKeys)
+		tx.keysLocked = false
 	}
 }
 
@@ -75,20 +73,13 @@ func (tx *Transaction) unLockKeys() {
 func (tx *Transaction) prepare() error {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
-	// lock keys
+
+	tx.writeKeys, tx.readKeys = tx.cluster.db.GetRelatedKeys(tx.cmdLine)
+	// lock writeKeys
 	tx.lockKeys()
 
 	// build undoLog
-	tx.undoLog = make(map[string][][]byte)
-	for _, key := range tx.keys {
-		entity, ok := tx.cluster.db.GetEntity(key)
-		if ok {
-			blob := godis.EntityToCmd(key, entity)
-			tx.undoLog[key] = blob.Args
-		} else {
-			tx.undoLog[key] = nil // entity was nil, should be removed while rollback
-		}
-	}
+	tx.undoLog = tx.cluster.db.GetUndoLogs(tx.cmdLine)
 	tx.status = preparedStatus
 	taskKey := genTaskKey(tx.id)
 	timewheel.Delay(maxLockTime, taskKey, func() {
@@ -112,25 +103,35 @@ func (tx *Transaction) rollback() error {
 		return nil
 	}
 	tx.lockKeys()
-	for key, blob := range tx.undoLog {
-		if len(blob) > 0 {
-			tx.cluster.db.Remove(key)
-			tx.cluster.db.Exec(nil, blob)
-		} else {
-			tx.cluster.db.Remove(key)
-		}
+	for _, cmdLine := range tx.undoLog {
+		tx.cluster.db.ExecWithLock(cmdLine)
 	}
 	tx.unLockKeys()
 	tx.status = rolledBackStatus
 	return nil
 }
 
-// Rollback rollbacks local transaction
-func Rollback(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
-	if len(args) != 2 {
+// cmdLine: Prepare id cmdName args...
+func execPrepare(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
+	if len(cmdLine) < 3 {
+		return reply.MakeErrReply("ERR wrong number of arguments for 'preparedel' command")
+	}
+	txID := string(cmdLine[1])
+	tx := NewTransaction(cluster, c, txID, cmdLine[2:])
+	cluster.transactions.Put(txID, tx)
+	err := tx.prepare()
+	if err != nil {
+		return reply.MakeErrReply(err.Error())
+	}
+	return &reply.OkReply{}
+}
+
+// execRollback rollbacks local transaction
+func execRollback(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
+	if len(cmdLine) != 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'rollback' command")
 	}
-	txID := string(args[1])
+	txID := string(cmdLine[1])
 	raw, ok := cluster.transactions.Get(txID)
 	if !ok {
 		return reply.MakeIntReply(0)
@@ -147,12 +148,12 @@ func Rollback(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(1)
 }
 
-// commit commits local transaction as a worker when receive commit command from coordinator
-func commit(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
-	if len(args) != 2 {
+// execCommit commits local transaction as a worker when receive execCommit command from coordinator
+func execCommit(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
+	if len(cmdLine) != 2 {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'commit' command")
 	}
-	txID := string(args[1])
+	txID := string(cmdLine[1])
 	raw, ok := cluster.transactions.Get(txID)
 	if !ok {
 		return reply.MakeIntReply(0)
@@ -162,13 +163,7 @@ func commit(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
-	cmd := strings.ToLower(string(tx.args[0]))
-	var result redis.Reply
-	if cmd == "del" {
-		result = commitDel(cluster, c, tx)
-	} else if cmd == "mset" {
-		result = commitMSet(cluster, c, tx)
-	}
+	result := cluster.db.ExecWithLock(tx.cmdLine)
 
 	if reply.IsErrorReply(result) {
 		// failed
@@ -186,7 +181,7 @@ func commit(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	return result
 }
 
-// requestCommit commands all node commit transaction as coordinator
+// requestCommit commands all node to commit transaction as coordinator
 func requestCommit(cluster *Cluster, c redis.Connection, txID int64, peers map[string][]string) ([]redis.Reply, reply.ErrorReply) {
 	var errReply reply.ErrorReply
 	txIDStr := strconv.FormatInt(txID, 10)
@@ -194,7 +189,7 @@ func requestCommit(cluster *Cluster, c redis.Connection, txID int64, peers map[s
 	for peer := range peers {
 		var resp redis.Reply
 		if peer == cluster.self {
-			resp = commit(cluster, c, makeArgs("commit", txIDStr))
+			resp = execCommit(cluster, c, makeArgs("commit", txIDStr))
 		} else {
 			resp = cluster.relay(peer, c, makeArgs("commit", txIDStr))
 		}
@@ -216,7 +211,7 @@ func requestRollback(cluster *Cluster, c redis.Connection, txID int64, peers map
 	txIDStr := strconv.FormatInt(txID, 10)
 	for peer := range peers {
 		if peer == cluster.self {
-			Rollback(cluster, c, makeArgs("rollback", txIDStr))
+			execRollback(cluster, c, makeArgs("rollback", txIDStr))
 		} else {
 			cluster.relay(peer, c, makeArgs("rollback", txIDStr))
 		}

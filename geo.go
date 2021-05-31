@@ -39,10 +39,6 @@ func execGeoAdd(db *DB, args [][]byte) redis.Reply {
 		}
 	}
 
-	// lock
-	db.Lock(key)
-	defer db.UnLock(key)
-
 	// get or init entity
 	sortedSet, _, errReply := db.getOrInitSortedSet(key)
 	if errReply != nil {
@@ -59,6 +55,16 @@ func execGeoAdd(db *DB, args [][]byte) redis.Reply {
 	db.AddAof(makeAofCmd("geoadd", args))
 
 	return reply.MakeIntReply(int64(i))
+}
+
+func undoGeoAdd(db *DB, args [][]byte) []CmdLine {
+	key := string(args[0])
+	size := (len(args) - 1) / 3
+	fields := make([]string, size)
+	for i := 0; i < size; i++ {
+		fields[i] = string(args[3*i+3])
+	}
+	return rollbackZSetFields(db, key, fields...)
 }
 
 // execGeoPos returns location of a member
@@ -257,10 +263,10 @@ func geoRadius0(sortedSet *sortedset.SortedSet, lat float64, lng float64, radius
 }
 
 func init() {
-	RegisterCommand("GeoAdd", execGeoAdd, nil, -5)
-	RegisterCommand("GeoPos", execGeoPos, nil, -2)
-	RegisterCommand("GeoDist", execGeoDist, nil, -4)
-	RegisterCommand("GeoHash", execGeoHash, nil, -2)
-	RegisterCommand("GeoRadius", execGeoRadius, nil, -6)
-	RegisterCommand("GeoRadiusByMember", execGeoRadiusByMember, nil, -5)
+	RegisterCommand("GeoAdd", execGeoAdd, writeFirstKey, undoGeoAdd, -5)
+	RegisterCommand("GeoPos", execGeoPos, readFirstKey, nil, -2)
+	RegisterCommand("GeoDist", execGeoDist, readFirstKey, nil, -4)
+	RegisterCommand("GeoHash", execGeoHash, readFirstKey, nil, -2)
+	RegisterCommand("GeoRadius", execGeoRadius, readFirstKey, nil, -6)
+	RegisterCommand("GeoRadiusByMember", execGeoRadiusByMember, readFirstKey, nil, -5)
 }

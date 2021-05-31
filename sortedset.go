@@ -57,10 +57,6 @@ func execZAdd(db *DB, args [][]byte) redis.Reply {
 		}
 	}
 
-	// lock
-	db.Lock(key)
-	defer db.UnLock(key)
-
 	// get or init entity
 	sortedSet, _, errReply := db.getOrInitSortedSet(key)
 	if errReply != nil {
@@ -79,14 +75,22 @@ func execZAdd(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(i))
 }
 
+func undoZAdd(db *DB, args [][]byte) []CmdLine {
+	key := string(args[0])
+	size := (len(args) - 1) / 2
+	fields := make([]string, size)
+	for i := 0; i < size; i++ {
+		fields[i] = string(args[2*i+2])
+	}
+	return rollbackZSetFields(db, key, fields...)
+}
+
 // execZScore gets score of a member in sortedset
 func execZScore(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	key := string(args[0])
 	member := string(args[1])
 
-	db.RLock(key)
-	defer db.RUnLock(key)
 	sortedSet, errReply := db.getAsSortedSet(key)
 	if errReply != nil {
 		return errReply
@@ -110,8 +114,6 @@ func execZRank(db *DB, args [][]byte) redis.Reply {
 	member := string(args[1])
 
 	// get entity
-	db.RLock(key)
-	defer db.RUnLock(key)
 	sortedSet, errReply := db.getAsSortedSet(key)
 	if errReply != nil {
 		return errReply
@@ -134,8 +136,6 @@ func execZRevRank(db *DB, args [][]byte) redis.Reply {
 	member := string(args[1])
 
 	// get entity
-	db.RLock(key)
-	defer db.RUnLock(key)
 	sortedSet, errReply := db.getAsSortedSet(key)
 	if errReply != nil {
 		return errReply
@@ -157,8 +157,6 @@ func execZCard(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 
 	// get entity
-	db.RLock(key)
-	defer db.RUnLock(key)
 	sortedSet, errReply := db.getAsSortedSet(key)
 	if errReply != nil {
 		return errReply
@@ -221,10 +219,6 @@ func execZRevRange(db *DB, args [][]byte) redis.Reply {
 }
 
 func range0(db *DB, key string, start int64, stop int64, withScores bool, desc bool) redis.Reply {
-	// lock key
-	db.RLock(key)
-	defer db.RUnLock(key)
-
 	// get data
 	sortedSet, errReply := db.getAsSortedSet(key)
 	if errReply != nil {
@@ -293,9 +287,6 @@ func execZCount(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply(err.Error())
 	}
 
-	db.RLock(key)
-	defer db.RUnLock(key)
-
 	// get data
 	sortedSet, errReply := db.getAsSortedSet(key)
 	if errReply != nil {
@@ -312,10 +303,6 @@ func execZCount(db *DB, args [][]byte) redis.Reply {
  * param limit: limit < 0 means no limit
  */
 func rangeByScore0(db *DB, key string, min *SortedSet.ScoreBorder, max *SortedSet.ScoreBorder, offset int64, limit int64, withScores bool, desc bool) redis.Reply {
-	// lock key
-	db.RLock(key)
-	defer db.RUnLock(key)
-
 	// get data
 	sortedSet, errReply := db.getAsSortedSet(key)
 	if errReply != nil {
@@ -458,9 +445,6 @@ func execZRemRangeByScore(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply(err.Error())
 	}
 
-	db.Lock(key)
-	defer db.UnLock(key)
-
 	// get data
 	sortedSet, errReply := db.getAsSortedSet(key)
 	if errReply != nil {
@@ -488,9 +472,6 @@ func execZRemRangeByRank(db *DB, args [][]byte) redis.Reply {
 	if err != nil {
 		return reply.MakeErrReply("ERR value is not an integer or out of range")
 	}
-
-	db.Lock(key)
-	defer db.UnLock(key)
 
 	// get data
 	sortedSet, errReply := db.getAsSortedSet(key)
@@ -541,9 +522,6 @@ func execZRem(db *DB, args [][]byte) redis.Reply {
 		fields[i] = string(v)
 	}
 
-	db.Lock(key)
-	defer db.UnLock(key)
-
 	// get entity
 	sortedSet, errReply := db.getAsSortedSet(key)
 	if errReply != nil {
@@ -565,6 +543,16 @@ func execZRem(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(deleted)
 }
 
+func undoZRem(db *DB, args [][]byte) []CmdLine {
+	key := string(args[0])
+	fields := make([]string, len(args)-1)
+	fieldArgs := args[1:]
+	for i, v := range fieldArgs {
+		fields[i] = string(v)
+	}
+	return rollbackZSetFields(db, key, fields...)
+}
+
 // execZIncrBy increments the score of a member
 func execZIncrBy(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
@@ -574,9 +562,6 @@ func execZIncrBy(db *DB, args [][]byte) redis.Reply {
 	if err != nil {
 		return reply.MakeErrReply("ERR value is not a valid float")
 	}
-
-	db.Lock(key)
-	defer db.UnLock(key)
 
 	// get or init entity
 	sortedSet, _, errReply := db.getOrInitSortedSet(key)
@@ -597,19 +582,27 @@ func execZIncrBy(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeBulkReply(bytes)
 }
 
+func undoZIncr(db *DB, args [][]byte) []CmdLine {
+	key := string(args[0])
+	field := string(args[2])
+	return rollbackZSetFields(db, key, field)
+}
+
 func init() {
-	RegisterCommand("ZAdd", execZAdd, nil, -4)
-	RegisterCommand("ZScore", execZScore, nil, 3)
-	RegisterCommand("ZIncrBy", execZIncrBy, nil, 4)
-	RegisterCommand("ZRank", execZRank, nil, 3)
-	RegisterCommand("ZCount", execZCount, nil, 4)
-	RegisterCommand("ZRevRank", execZRevRank, nil, 3)
-	RegisterCommand("ZCard", execZCard, nil, 2)
-	RegisterCommand("ZRange", execZRange, nil, -4)
-	RegisterCommand("ZRangeByScore", execZRangeByScore, nil, -4)
-	RegisterCommand("ZRange", execZRevRange, nil, -4)
-	RegisterCommand("ZRangeByScore", execZRevRangeByScore, nil, -4)
-	RegisterCommand("ZRem", execZRem, nil, -3)
-	RegisterCommand("ZRemRangeByScore", execZRemRangeByScore, nil, 4)
-	RegisterCommand("ZRemRangeByRank", execZRemRangeByRank, nil, 4)
+	RegisterCommand("ZAdd", execZAdd, writeFirstKey, undoZAdd, -4)
+	RegisterCommand("ZScore", execZScore, readFirstKey, nil, 3)
+	RegisterCommand("ZIncrBy", execZIncrBy, writeFirstKey, undoZIncr, 4)
+	RegisterCommand("ZRank", execZRank, readFirstKey, nil, 3)
+	RegisterCommand("ZCount", execZCount, readFirstKey, nil, 4)
+	RegisterCommand("ZRevRank", execZRevRank, readFirstKey, nil, 3)
+	RegisterCommand("ZCard", execZCard, readFirstKey, nil, 2)
+	RegisterCommand("ZRange", execZRange, readFirstKey, nil, -4)
+	RegisterCommand("ZRangeByScore", execZRangeByScore, readFirstKey, nil, -4)
+	RegisterCommand("ZRange", execZRange, readFirstKey, nil, -4)
+	RegisterCommand("ZRevRange", execZRevRange, readFirstKey, nil, -4)
+	RegisterCommand("ZRangeByScore", execZRangeByScore, readFirstKey, nil, -4)
+	RegisterCommand("ZRevRangeByScore", execZRevRangeByScore, readFirstKey, nil, -4)
+	RegisterCommand("ZRem", execZRem, writeFirstKey, undoZRem, -3)
+	RegisterCommand("ZRemRangeByScore", execZRemRangeByScore, writeFirstKey, rollbackFirstKey, 4)
+	RegisterCommand("ZRemRangeByRank", execZRemRangeByRank, writeFirstKey, rollbackFirstKey, 4)
 }

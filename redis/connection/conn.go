@@ -23,6 +23,10 @@ type Connection struct {
 
 	// password may be changed by CONFIG command during runtime, so store the password
 	password string
+
+	// queued commands for `multi`
+	multiState bool
+	queue      [][][]byte
 }
 
 // RemoteAddr returns the remote network address
@@ -76,7 +80,7 @@ func (c *Connection) UnSubscribe(channel string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if c.subs == nil {
+	if len(c.subs) == 0 {
 		return
 	}
 	delete(c.subs, channel)
@@ -84,9 +88,6 @@ func (c *Connection) UnSubscribe(channel string) {
 
 // SubsCount returns the number of subscribing channels
 func (c *Connection) SubsCount() int {
-	if c.subs == nil {
-		return 0
-	}
 	return len(c.subs)
 }
 
@@ -112,6 +113,26 @@ func (c *Connection) SetPassword(password string) {
 // GetPassword get password for authentication
 func (c *Connection) GetPassword() string {
 	return c.password
+}
+
+func (c *Connection) InMultiState() bool {
+	return c.multiState
+}
+
+func (c *Connection) SetMultiState(state bool) {
+	c.multiState = state
+}
+
+func (c *Connection) GetQueuedCmdLine() [][][]byte {
+	return c.queue
+}
+
+func (c *Connection) EnqueueCmd(cmdLine [][]byte) {
+	c.queue = append(c.queue, cmdLine)
+}
+
+func (c *Connection) ClearQueuedCmds() {
+	c.queue = nil
 }
 
 // FakeConn implements redis.Connection for test

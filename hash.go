@@ -43,10 +43,6 @@ func execHSet(db *DB, args [][]byte) redis.Reply {
 	field := string(args[1])
 	value := args[2]
 
-	// lock
-	db.Lock(key)
-	defer db.UnLock(key)
-
 	// get or init entity
 	dict, _, errReply := db.getOrInitDict(key)
 	if errReply != nil {
@@ -58,15 +54,18 @@ func execHSet(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(result))
 }
 
+func undoHSet(db *DB, args [][]byte) []CmdLine {
+	key := string(args[0])
+	field := string(args[1])
+	return rollbackHashFields(db, key, field)
+}
+
 // execHSetNX sets field in hash table only if field not exists
 func execHSetNX(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	key := string(args[0])
 	field := string(args[1])
 	value := args[2]
-
-	db.Lock(key)
-	defer db.UnLock(key)
 
 	dict, _, errReply := db.getOrInitDict(key)
 	if errReply != nil {
@@ -86,9 +85,6 @@ func execHGet(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	key := string(args[0])
 	field := string(args[1])
-
-	db.RLock(key)
-	defer db.RUnLock(key)
 
 	// get entity
 	dict, errReply := db.getAsDict(key)
@@ -112,9 +108,6 @@ func execHExists(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	key := string(args[0])
 	field := string(args[1])
-
-	db.RLock(key)
-	defer db.RUnLock(key)
 
 	// get entity
 	dict, errReply := db.getAsDict(key)
@@ -142,9 +135,6 @@ func execHDel(db *DB, args [][]byte) redis.Reply {
 		fields[i] = string(v)
 	}
 
-	db.Lock(key)
-	defer db.UnLock(key)
-
 	// get entity
 	dict, errReply := db.getAsDict(key)
 	if errReply != nil {
@@ -169,13 +159,20 @@ func execHDel(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(deleted))
 }
 
+func undoHDel(db *DB, args [][]byte) []CmdLine {
+	key := string(args[0])
+	fields := make([]string, len(args)-1)
+	fieldArgs := args[1:]
+	for i, v := range fieldArgs {
+		fields[i] = string(v)
+	}
+	return rollbackHashFields(db, key, fields...)
+}
+
 // execHLen gets number of fields in hash table
 func execHLen(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	key := string(args[0])
-
-	db.RLock(key)
-	defer db.RUnLock(key)
 
 	dict, errReply := db.getAsDict(key)
 	if errReply != nil {
@@ -202,10 +199,6 @@ func execHMSet(db *DB, args [][]byte) redis.Reply {
 		values[i] = args[2*i+2]
 	}
 
-	// lock key
-	db.Lock(key)
-	defer db.UnLock(key)
-
 	// get or init entity
 	dict, _, errReply := db.getOrInitDict(key)
 	if errReply != nil {
@@ -221,17 +214,24 @@ func execHMSet(db *DB, args [][]byte) redis.Reply {
 	return &reply.OkReply{}
 }
 
-// HMGet gets multi fields in hash table
-func HMGet(db *DB, args [][]byte) redis.Reply {
+func undoHMSet(db *DB, args [][]byte) []CmdLine {
+	key := string(args[0])
+	size := (len(args) - 1) / 2
+	fields := make([]string, size)
+	for i := 0; i < size; i++ {
+		fields[i] = string(args[2*i+1])
+	}
+	return rollbackHashFields(db, key, fields...)
+}
+
+// execHMGet gets multi fields in hash table
+func execHMGet(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	size := len(args) - 1
 	fields := make([]string, size)
 	for i := 0; i < size; i++ {
 		fields[i] = string(args[i+1])
 	}
-
-	db.RLock(key)
-	defer db.RUnLock(key)
 
 	// get entity
 	result := make([][]byte, size)
@@ -259,9 +259,6 @@ func HMGet(db *DB, args [][]byte) redis.Reply {
 func execHKeys(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 
-	db.RLock(key)
-	defer db.RUnLock(key)
-
 	dict, errReply := db.getAsDict(key)
 	if errReply != nil {
 		return errReply
@@ -283,9 +280,6 @@ func execHKeys(db *DB, args [][]byte) redis.Reply {
 // execHVals gets all field value in hash table
 func execHVals(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
-
-	db.RLock(key)
-	defer db.RUnLock(key)
 
 	// get entity
 	dict, errReply := db.getAsDict(key)
@@ -309,9 +303,6 @@ func execHVals(db *DB, args [][]byte) redis.Reply {
 // execHGetAll gets all key-value entries in hash table
 func execHGetAll(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
-
-	db.RLock(key)
-	defer db.RUnLock(key)
 
 	// get entity
 	dict, errReply := db.getAsDict(key)
@@ -345,9 +336,6 @@ func execHIncrBy(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply("ERR value is not an integer or out of range")
 	}
 
-	db.Lock(key)
-	defer db.UnLock(key)
-
 	dict, _, errReply := db.getOrInitDict(key)
 	if errReply != nil {
 		return errReply
@@ -370,6 +358,12 @@ func execHIncrBy(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeBulkReply(bytes)
 }
 
+func undoHIncr(db *DB, args [][]byte) []CmdLine {
+	key := string(args[0])
+	field := string(args[1])
+	return rollbackHashFields(db, key, field)
+}
+
 // execHIncrByFloat increments the float value of a hash field by the given number
 func execHIncrByFloat(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
@@ -379,9 +373,6 @@ func execHIncrByFloat(db *DB, args [][]byte) redis.Reply {
 	if err != nil {
 		return reply.MakeErrReply("ERR value is not a valid float")
 	}
-
-	db.Lock(key)
-	defer db.UnLock(key)
 
 	// get or init entity
 	dict, _, errReply := db.getOrInitDict(key)
@@ -406,17 +397,18 @@ func execHIncrByFloat(db *DB, args [][]byte) redis.Reply {
 }
 
 func init() {
-	RegisterCommand("HSet", execHSet, nil, 4)
-	RegisterCommand("HSetNX", execHSetNX, nil, 4)
-	RegisterCommand("HGet", execHGet, nil, 3)
-	RegisterCommand("HExists", execHExists, nil, 3)
-	RegisterCommand("HDel", execHDel, nil, -3)
-	RegisterCommand("HLen", execHLen, nil, 2)
-	RegisterCommand("HMSet", execHMSet, nil, -4)
-	RegisterCommand("HGet", execHGet, nil, -3)
-	RegisterCommand("HKeys", execHKeys, nil, 2)
-	RegisterCommand("HVals", execHVals, nil, 2)
-	RegisterCommand("HGetAll", execHGetAll, nil, 2)
-	RegisterCommand("HIncrBy", execHIncrBy, nil, 4)
-	RegisterCommand("HIncrByFloat", execHIncrByFloat, nil, 4)
+	RegisterCommand("HSet", execHSet, writeFirstKey, undoHSet, 4)
+	RegisterCommand("HSetNX", execHSetNX, writeFirstKey, undoHSet, 4)
+	RegisterCommand("HGet", execHGet, readFirstKey, nil, 3)
+	RegisterCommand("HExists", execHExists, readFirstKey, nil, 3)
+	RegisterCommand("HDel", execHDel, writeFirstKey, undoHDel, -3)
+	RegisterCommand("HLen", execHLen, readFirstKey, nil, 2)
+	RegisterCommand("HMSet", execHMSet, writeFirstKey, undoHMSet, -4)
+	RegisterCommand("HMGet", execHMGet, readFirstKey, nil, -3)
+	RegisterCommand("HGet", execHGet, readFirstKey, nil, -3)
+	RegisterCommand("HKeys", execHKeys, readFirstKey, nil, 2)
+	RegisterCommand("HVals", execHVals, readFirstKey, nil, 2)
+	RegisterCommand("HGetAll", execHGetAll, readFirstKey, nil, 2)
+	RegisterCommand("HIncrBy", execHIncrBy, writeFirstKey, undoHIncr, 4)
+	RegisterCommand("HIncrByFloat", execHIncrByFloat, writeFirstKey, undoHIncr, 4)
 }

@@ -3,6 +3,7 @@ package godis
 import (
 	List "github.com/hdt3213/godis/datastruct/list"
 	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/reply"
 	"strconv"
 )
@@ -45,9 +46,6 @@ func execLIndex(db *DB, args [][]byte) redis.Reply {
 	}
 	index := int(index64)
 
-	db.RLock(key)
-	defer db.RUnLock(key)
-
 	// get entity
 	list, errReply := db.getAsList(key)
 	if errReply != nil {
@@ -75,9 +73,6 @@ func execLLen(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	key := string(args[0])
 
-	db.RLock(key)
-	defer db.RUnLock(key)
-
 	list, errReply := db.getAsList(key)
 	if errReply != nil {
 		return errReply
@@ -94,10 +89,6 @@ func execLLen(db *DB, args [][]byte) redis.Reply {
 func execLPop(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	key := string(args[0])
-
-	// lock
-	db.Lock(key)
-	defer db.UnLock(key)
 
 	// get data
 	list, errReply := db.getAsList(key)
@@ -116,14 +107,31 @@ func execLPop(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeBulkReply(val)
 }
 
+var lPushCmd = []byte("LPUSH")
+
+func undoLPop(db *DB, args [][]byte) []CmdLine {
+	key := string(args[0])
+	list, errReply := db.getAsList(key)
+	if errReply != nil {
+		return nil
+	}
+	if list == nil || list.Len() == 0 {
+		return nil
+	}
+	element, _ := list.Get(0).([]byte)
+	return []CmdLine{
+		{
+			lPushCmd,
+			args[0],
+			element,
+		},
+	}
+}
+
 // execLPush inserts element at head of list
 func execLPush(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	values := args[1:]
-
-	// lock
-	db.Lock(key)
-	defer db.UnLock(key)
 
 	// get or init entity
 	list, _, errReply := db.getOrInitList(key)
@@ -140,14 +148,20 @@ func execLPush(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(list.Len()))
 }
 
+func undoLPush(db *DB, args [][]byte) []CmdLine {
+	key := string(args[0])
+	count := len(args) - 1
+	cmdLines := make([]CmdLine, 0, count)
+	for i := 0; i < count; i++ {
+		cmdLines = append(cmdLines, utils.ToCmdLine("LPOP", key))
+	}
+	return cmdLines
+}
+
 // execLPushX inserts element at head of list, only if list exists
 func execLPushX(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	values := args[1:]
-
-	// lock
-	db.Lock(key)
-	defer db.UnLock(key)
 
 	// get or init entity
 	list, errReply := db.getAsList(key)
@@ -180,10 +194,6 @@ func execLRange(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply("ERR value is not an integer or out of range")
 	}
 	stop := int(stop64)
-
-	// lock key
-	db.RLock(key)
-	defer db.RUnLock(key)
 
 	// get data
 	list, errReply := db.getAsList(key)
@@ -237,10 +247,6 @@ func execLRem(db *DB, args [][]byte) redis.Reply {
 	count := int(count64)
 	value := args[2]
 
-	// lock
-	db.Lock(key)
-	defer db.UnLock(key)
-
 	// get data entity
 	list, errReply := db.getAsList(key)
 	if errReply != nil {
@@ -280,10 +286,6 @@ func execLSet(db *DB, args [][]byte) redis.Reply {
 	index := int(index64)
 	value := args[2]
 
-	// lock
-	db.Lock(key)
-	defer db.UnLock(key)
-
 	// get data
 	list, errReply := db.getAsList(key)
 	if errReply != nil {
@@ -307,14 +309,43 @@ func execLSet(db *DB, args [][]byte) redis.Reply {
 	return &reply.OkReply{}
 }
 
+func undoLSet(db *DB, args [][]byte) []CmdLine {
+	key := string(args[0])
+	index64, err := strconv.ParseInt(string(args[1]), 10, 64)
+	if err != nil {
+		return nil
+	}
+	index := int(index64)
+	list, errReply := db.getAsList(key)
+	if errReply != nil {
+		return nil
+	}
+	if list == nil {
+		return nil
+	}
+	size := list.Len() // assert: size > 0
+	if index < -1*size {
+		return nil
+	} else if index < 0 {
+		index = size + index
+	} else if index >= size {
+		return nil
+	}
+	value, _ := list.Get(index).([]byte)
+	return []CmdLine{
+		{
+			[]byte("LSET"),
+			args[0],
+			args[1],
+			value,
+		},
+	}
+}
+
 // execRPop removes last element of list then return it
 func execRPop(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	key := string(args[0])
-
-	// lock
-	db.Lock(key)
-	defer db.UnLock(key)
 
 	// get data
 	list, errReply := db.getAsList(key)
@@ -333,14 +364,38 @@ func execRPop(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeBulkReply(val)
 }
 
+var rPushCmd = []byte("RPUSH")
+
+func undoRPop(db *DB, args [][]byte) []CmdLine {
+	key := string(args[0])
+	list, errReply := db.getAsList(key)
+	if errReply != nil {
+		return nil
+	}
+	if list == nil || list.Len() == 0 {
+		return nil
+	}
+	element, _ := list.Get(list.Len() - 1).([]byte)
+	return []CmdLine{
+		{
+			rPushCmd,
+			args[0],
+			element,
+		},
+	}
+}
+
+func prepareRPopLPush(args [][]byte) ([]string, []string) {
+	return []string{
+		string(args[0]),
+		string(args[1]),
+	}, nil
+}
+
 // execRPopLPush pops last element of list-A then insert it to the head of list-B
 func execRPopLPush(db *DB, args [][]byte) redis.Reply {
 	sourceKey := string(args[0])
 	destKey := string(args[1])
-
-	// lock
-	db.Locks(sourceKey, destKey)
-	defer db.UnLocks(sourceKey, destKey)
 
 	// get source entity
 	sourceList, errReply := db.getAsList(sourceKey)
@@ -369,15 +424,34 @@ func execRPopLPush(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeBulkReply(val)
 }
 
+func undoRPopLPush(db *DB, args [][]byte) []CmdLine {
+	sourceKey := string(args[0])
+	list, errReply := db.getAsList(sourceKey)
+	if errReply != nil {
+		return nil
+	}
+	if list == nil || list.Len() == 0 {
+		return nil
+	}
+	element, _ := list.Get(list.Len() - 1).([]byte)
+	return []CmdLine{
+		{
+			rPushCmd,
+			args[0],
+			element,
+		},
+		{
+			[]byte("LPOP"),
+			args[1],
+		},
+	}
+}
+
 // execRPush inserts element at last of list
 func execRPush(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	key := string(args[0])
 	values := args[1:]
-
-	// lock
-	db.Lock(key)
-	defer db.UnLock(key)
 
 	// get or init entity
 	list, _, errReply := db.getOrInitList(key)
@@ -393,6 +467,16 @@ func execRPush(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(list.Len()))
 }
 
+func undoRPush(db *DB, args [][]byte) []CmdLine {
+	key := string(args[0])
+	count := len(args) - 1
+	cmdLines := make([]CmdLine, 0, count)
+	for i := 0; i < count; i++ {
+		cmdLines = append(cmdLines, utils.ToCmdLine("RPOP", key))
+	}
+	return cmdLines
+}
+
 // execRPushX inserts element at last of list only if list exists
 func execRPushX(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 2 {
@@ -400,10 +484,6 @@ func execRPushX(db *DB, args [][]byte) redis.Reply {
 	}
 	key := string(args[0])
 	values := args[1:]
-
-	// lock
-	db.Lock(key)
-	defer db.UnLock(key)
 
 	// get or init entity
 	list, errReply := db.getAsList(key)
@@ -424,16 +504,16 @@ func execRPushX(db *DB, args [][]byte) redis.Reply {
 }
 
 func init() {
-	RegisterCommand("LPush", execLPush, nil, -3)
-	RegisterCommand("LPushX", execLPushX, nil, -3)
-	RegisterCommand("RPush", execRPush, nil, -3)
-	RegisterCommand("RPushX", execRPushX, nil, -3)
-	RegisterCommand("LPop", execLPop, nil, 2)
-	RegisterCommand("RPop", execRPop, nil, 2)
-	RegisterCommand("RPopLPush", execRPopLPush, nil, 4)
-	RegisterCommand("LRem", execLRem, nil, 4)
-	RegisterCommand("LLen", execLLen, nil, 2)
-	RegisterCommand("LIndex", execLIndex, nil, 3)
-	RegisterCommand("LSet", execLSet, nil, 4)
-	RegisterCommand("LRange", execLRange, nil, 4)
+	RegisterCommand("LPush", execLPush, writeFirstKey, undoLPush, -3)
+	RegisterCommand("LPushX", execLPushX, writeFirstKey, undoLPush, -3)
+	RegisterCommand("RPush", execRPush, writeFirstKey, undoRPush, -3)
+	RegisterCommand("RPushX", execRPushX, writeFirstKey, undoRPush, -3)
+	RegisterCommand("LPop", execLPop, writeFirstKey, undoLPop, 2)
+	RegisterCommand("RPop", execRPop, writeFirstKey, undoRPop, 2)
+	RegisterCommand("RPopLPush", execRPopLPush, prepareRPopLPush, undoRPopLPush, 3)
+	RegisterCommand("LRem", execLRem, writeFirstKey, rollbackFirstKey, 4)
+	RegisterCommand("LLen", execLLen, readFirstKey, nil, 2)
+	RegisterCommand("LIndex", execLIndex, readFirstKey, nil, 3)
+	RegisterCommand("LSet", execLSet, writeFirstKey, undoLSet, 4)
+	RegisterCommand("LRange", execLRange, readFirstKey, nil, 4)
 }

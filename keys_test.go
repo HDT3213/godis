@@ -11,65 +11,65 @@ import (
 )
 
 func TestExists(t *testing.T) {
-	execFlushAll(testDB, [][]byte{})
+	testDB.Flush()
 	key := utils.RandString(10)
 	value := utils.RandString(10)
-	execSet(testDB, utils.ToBytesList(key, value))
-	result := execExists(testDB, utils.ToBytesList(key))
+	testDB.Exec(nil, utils.ToCmdLine("set", key, value))
+	result := testDB.Exec(nil, utils.ToCmdLine("exists", key))
 	asserts.AssertIntReply(t, result, 1)
 	key = utils.RandString(10)
-	result = execExists(testDB, utils.ToBytesList(key))
+	result = testDB.Exec(nil, utils.ToCmdLine("exists", key))
 	asserts.AssertIntReply(t, result, 0)
 }
 
 func TestType(t *testing.T) {
-	execFlushAll(testDB, [][]byte{})
+	testDB.Flush()
 	key := utils.RandString(10)
 	value := utils.RandString(10)
-	execSet(testDB, utils.ToBytesList(key, value))
-	result := execType(testDB, utils.ToBytesList(key))
+	testDB.Exec(nil, utils.ToCmdLine("set", key, value))
+	result := testDB.Exec(nil, utils.ToCmdLine("type", key))
 	asserts.AssertStatusReply(t, result, "string")
 
 	testDB.Remove(key)
-	result = execType(testDB, utils.ToBytesList(key))
+	result = testDB.Exec(nil, utils.ToCmdLine("type", key))
 	asserts.AssertStatusReply(t, result, "none")
-	execRPush(testDB, utils.ToBytesList(key, value))
-	result = execType(testDB, utils.ToBytesList(key))
+	execRPush(testDB, utils.ToCmdLine(key, value))
+	result = testDB.Exec(nil, utils.ToCmdLine("type", key))
 	asserts.AssertStatusReply(t, result, "list")
 
 	testDB.Remove(key)
-	execHSet(testDB, utils.ToBytesList(key, key, value))
-	result = execType(testDB, utils.ToBytesList(key))
+	testDB.Exec(nil, utils.ToCmdLine("hset", key, key, value))
+	result = testDB.Exec(nil, utils.ToCmdLine("type", key))
 	asserts.AssertStatusReply(t, result, "hash")
 
 	testDB.Remove(key)
-	execSAdd(testDB, utils.ToBytesList(key, value))
-	result = execType(testDB, utils.ToBytesList(key))
+	testDB.Exec(nil, utils.ToCmdLine("sadd", key, value))
+	result = testDB.Exec(nil, utils.ToCmdLine("type", key))
 	asserts.AssertStatusReply(t, result, "set")
 
 	testDB.Remove(key)
-	execZAdd(testDB, utils.ToBytesList(key, "1", value))
-	result = execType(testDB, utils.ToBytesList(key))
+	testDB.Exec(nil, utils.ToCmdLine("zadd", key, "1", value))
+	result = testDB.Exec(nil, utils.ToCmdLine("type", key))
 	asserts.AssertStatusReply(t, result, "zset")
 }
 
 func TestRename(t *testing.T) {
-	execFlushAll(testDB, [][]byte{})
+	testDB.Flush()
 	key := utils.RandString(10)
 	value := utils.RandString(10)
 	newKey := key + utils.RandString(2)
-	execSet(testDB, utils.ToBytesList(key, value, "ex", "1000"))
-	result := execRename(testDB, utils.ToBytesList(key, newKey))
+	testDB.Exec(nil, utils.ToCmdLine("set", key, value, "ex", "1000"))
+	result := testDB.Exec(nil, utils.ToCmdLine("rename", key, newKey))
 	if _, ok := result.(*reply.OkReply); !ok {
 		t.Error("expect ok")
 		return
 	}
-	result = execExists(testDB, utils.ToBytesList(key))
+	result = testDB.Exec(nil, utils.ToCmdLine("exists", key))
 	asserts.AssertIntReply(t, result, 0)
-	result = execExists(testDB, utils.ToBytesList(newKey))
+	result = testDB.Exec(nil, utils.ToCmdLine("exists", newKey))
 	asserts.AssertIntReply(t, result, 1)
 	// check ttl
-	result = execTTL(testDB, utils.ToBytesList(newKey))
+	result = testDB.Exec(nil, utils.ToCmdLine("ttl", newKey))
 	intResult, ok := result.(*reply.IntReply)
 	if !ok {
 		t.Error(fmt.Sprintf("expected int reply, actually %s", result.ToBytes()))
@@ -82,18 +82,18 @@ func TestRename(t *testing.T) {
 }
 
 func TestRenameNx(t *testing.T) {
-	execFlushAll(testDB, [][]byte{})
+	testDB.Flush()
 	key := utils.RandString(10)
 	value := utils.RandString(10)
 	newKey := key + utils.RandString(2)
-	execSet(testDB, utils.ToBytesList(key, value, "ex", "1000"))
-	result := execRenameNx(testDB, utils.ToBytesList(key, newKey))
+	testDB.Exec(nil, utils.ToCmdLine("set", key, value, "ex", "1000"))
+	result := testDB.Exec(nil, utils.ToCmdLine("RenameNx", key, newKey))
 	asserts.AssertIntReply(t, result, 1)
-	result = execExists(testDB, utils.ToBytesList(key))
+	result = testDB.Exec(nil, utils.ToCmdLine("exists", key))
 	asserts.AssertIntReply(t, result, 0)
-	result = execExists(testDB, utils.ToBytesList(newKey))
+	result = testDB.Exec(nil, utils.ToCmdLine("exists", newKey))
 	asserts.AssertIntReply(t, result, 1)
-	result = execTTL(testDB, utils.ToBytesList(newKey))
+	result = testDB.Exec(nil, utils.ToCmdLine("ttl", newKey))
 	intResult, ok := result.(*reply.IntReply)
 	if !ok {
 		t.Error(fmt.Sprintf("expected int reply, actually %s", result.ToBytes()))
@@ -106,14 +106,14 @@ func TestRenameNx(t *testing.T) {
 }
 
 func TestTTL(t *testing.T) {
-	execFlushAll(testDB, [][]byte{})
+	testDB.Flush()
 	key := utils.RandString(10)
 	value := utils.RandString(10)
-	execSet(testDB, utils.ToBytesList(key, value))
+	testDB.Exec(nil, utils.ToCmdLine("set", key, value))
 
-	result := execExpire(testDB, utils.ToBytesList(key, "1000"))
+	result := testDB.Exec(nil, utils.ToCmdLine("expire", key, "1000"))
 	asserts.AssertIntReply(t, result, 1)
-	result = execTTL(testDB, utils.ToBytesList(key))
+	result = testDB.Exec(nil, utils.ToCmdLine("ttl", key))
 	intResult, ok := result.(*reply.IntReply)
 	if !ok {
 		t.Error(fmt.Sprintf("expected int reply, actually %s", result.ToBytes()))
@@ -124,14 +124,14 @@ func TestTTL(t *testing.T) {
 		return
 	}
 
-	result = execPersist(testDB, utils.ToBytesList(key))
+	result = testDB.Exec(nil, utils.ToCmdLine("persist", key))
 	asserts.AssertIntReply(t, result, 1)
-	result = execTTL(testDB, utils.ToBytesList(key))
+	result = testDB.Exec(nil, utils.ToCmdLine("ttl", key))
 	asserts.AssertIntReply(t, result, -1)
 
-	result = execPExpire(testDB, utils.ToBytesList(key, "1000000"))
+	result = testDB.Exec(nil, utils.ToCmdLine("PExpire", key, "1000000"))
 	asserts.AssertIntReply(t, result, 1)
-	result = execPTTL(testDB, utils.ToBytesList(key))
+	result = testDB.Exec(nil, utils.ToCmdLine("PTTL", key))
 	intResult, ok = result.(*reply.IntReply)
 	if !ok {
 		t.Error(fmt.Sprintf("expected int reply, actually %s", result.ToBytes()))
@@ -143,16 +143,28 @@ func TestTTL(t *testing.T) {
 	}
 }
 
-func TestExpireAt(t *testing.T) {
-	execFlushAll(testDB, [][]byte{})
+func TestExpire(t *testing.T) {
 	key := utils.RandString(10)
 	value := utils.RandString(10)
-	execSet(testDB, utils.ToBytesList(key, value))
+	testDB.Exec(nil, utils.ToCmdLine("SET", key, value))
+	testDB.Exec(nil, utils.ToCmdLine("PEXPIRE", key, "100"))
+	time.Sleep(2 * time.Second)
+	result := testDB.Exec(nil, utils.ToCmdLine("TTL", key))
+	asserts.AssertIntReply(t, result, -2)
+
+}
+
+func TestExpireAt(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	value := utils.RandString(10)
+	testDB.Exec(nil, utils.ToCmdLine("set", key, value))
 
 	expireAt := time.Now().Add(time.Minute).Unix()
-	result := execExpireAt(testDB, utils.ToBytesList(key, strconv.FormatInt(expireAt, 10)))
+	result := testDB.Exec(nil, utils.ToCmdLine("ExpireAt", key, strconv.FormatInt(expireAt, 10)))
+
 	asserts.AssertIntReply(t, result, 1)
-	result = execTTL(testDB, utils.ToBytesList(key))
+	result = testDB.Exec(nil, utils.ToCmdLine("ttl", key))
 	intResult, ok := result.(*reply.IntReply)
 	if !ok {
 		t.Error(fmt.Sprintf("expected int reply, actually %s", result.ToBytes()))
@@ -164,9 +176,9 @@ func TestExpireAt(t *testing.T) {
 	}
 
 	expireAt = time.Now().Add(time.Minute).Unix()
-	result = execPExpireAt(testDB, utils.ToBytesList(key, strconv.FormatInt(expireAt*1000, 10)))
+	result = testDB.Exec(nil, utils.ToCmdLine("PExpireAt", key, strconv.FormatInt(expireAt*1000, 10)))
 	asserts.AssertIntReply(t, result, 1)
-	result = execTTL(testDB, utils.ToBytesList(key))
+	result = testDB.Exec(nil, utils.ToCmdLine("ttl", key))
 	intResult, ok = result.(*reply.IntReply)
 	if !ok {
 		t.Error(fmt.Sprintf("expected int reply, actually %s", result.ToBytes()))
@@ -179,17 +191,17 @@ func TestExpireAt(t *testing.T) {
 }
 
 func TestKeys(t *testing.T) {
-	execFlushAll(testDB, [][]byte{})
+	testDB.Flush()
 	key := utils.RandString(10)
 	value := utils.RandString(10)
-	execSet(testDB, utils.ToBytesList(key, value))
-	execSet(testDB, utils.ToBytesList("a:"+key, value))
-	execSet(testDB, utils.ToBytesList("b:"+key, value))
+	testDB.Exec(nil, utils.ToCmdLine("set", key, value))
+	testDB.Exec(nil, utils.ToCmdLine("set", "a:"+key, value))
+	testDB.Exec(nil, utils.ToCmdLine("set", "b:"+key, value))
 
-	result := execKeys(testDB, utils.ToBytesList("*"))
+	result := testDB.Exec(nil, utils.ToCmdLine("keys", "*"))
 	asserts.AssertMultiBulkReplySize(t, result, 3)
-	result = execKeys(testDB, utils.ToBytesList("a:*"))
+	result = testDB.Exec(nil, utils.ToCmdLine("keys", "a:*"))
 	asserts.AssertMultiBulkReplySize(t, result, 1)
-	result = execKeys(testDB, utils.ToBytesList("?:*"))
+	result = testDB.Exec(nil, utils.ToCmdLine("keys", "?:*"))
 	asserts.AssertMultiBulkReplySize(t, result, 2)
 }

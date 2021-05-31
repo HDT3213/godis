@@ -40,10 +40,6 @@ func execSAdd(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	members := args[1:]
 
-	// lock
-	db.Lock(key)
-	defer db.UnLock(key)
-
 	// get or init entity
 	set, _, errReply := db.getOrInitSet(key)
 	if errReply != nil {
@@ -61,9 +57,6 @@ func execSAdd(db *DB, args [][]byte) redis.Reply {
 func execSIsMember(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	member := string(args[1])
-
-	db.RLock(key)
-	defer db.RUnLock(key)
 
 	// get set
 	set, errReply := db.getAsSet(key)
@@ -85,10 +78,6 @@ func execSIsMember(db *DB, args [][]byte) redis.Reply {
 func execSRem(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	members := args[1:]
-
-	// lock
-	db.Lock(key)
-	defer db.UnLock(key)
 
 	set, errReply := db.getAsSet(key)
 	if errReply != nil {
@@ -114,9 +103,6 @@ func execSRem(db *DB, args [][]byte) redis.Reply {
 func execSCard(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 
-	db.RLock(key)
-	defer db.RUnLock(key)
-
 	// get or init entity
 	set, errReply := db.getAsSet(key)
 	if errReply != nil {
@@ -131,10 +117,6 @@ func execSCard(db *DB, args [][]byte) redis.Reply {
 // execSMembers gets all members in a set
 func execSMembers(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
-
-	// lock
-	db.RLock(key)
-	defer db.RUnLock(key)
 
 	// get or init entity
 	set, errReply := db.getAsSet(key)
@@ -161,10 +143,6 @@ func execSInter(db *DB, args [][]byte) redis.Reply {
 	for i, arg := range args {
 		keys[i] = string(arg)
 	}
-
-	// lock
-	db.RLocks(keys...)
-	defer db.RUnLocks(keys...)
 
 	var result *HashSet.Set
 	for _, key := range keys {
@@ -207,10 +185,6 @@ func execSInterStore(db *DB, args [][]byte) redis.Reply {
 		keys[i] = string(arg)
 	}
 
-	// lock
-	db.RWLocks([]string{dest}, keys)
-	defer db.RWUnLocks([]string{dest}, keys)
-
 	var result *HashSet.Set
 	for _, key := range keys {
 		set, errReply := db.getAsSet(key)
@@ -249,10 +223,6 @@ func execSUnion(db *DB, args [][]byte) redis.Reply {
 	for i, arg := range args {
 		keys[i] = string(arg)
 	}
-
-	// lock
-	db.RLocks(keys...)
-	defer db.RUnLocks(keys...)
 
 	var result *HashSet.Set
 	for _, key := range keys {
@@ -295,10 +265,6 @@ func execSUnionStore(db *DB, args [][]byte) redis.Reply {
 		keys[i] = string(arg)
 	}
 
-	// lock
-	db.RWLocks([]string{dest}, keys)
-	defer db.RWUnLocks([]string{dest}, keys)
-
 	var result *HashSet.Set
 	for _, key := range keys {
 		set, errReply := db.getAsSet(key)
@@ -337,10 +303,6 @@ func execSDiff(db *DB, args [][]byte) redis.Reply {
 	for i, arg := range args {
 		keys[i] = string(arg)
 	}
-
-	// lock
-	db.RLocks(keys...)
-	defer db.RUnLocks(keys...)
 
 	var result *HashSet.Set
 	for i, key := range keys {
@@ -390,10 +352,6 @@ func execSDiffStore(db *DB, args [][]byte) redis.Reply {
 		keys[i] = string(arg)
 	}
 
-	// lock
-	db.RWLocks([]string{dest}, keys)
-	defer db.RWUnLocks([]string{dest}, keys)
-
 	var result *HashSet.Set
 	for i, key := range keys {
 		set, errReply := db.getAsSet(key)
@@ -441,9 +399,6 @@ func execSRandMember(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply("ERR wrong number of arguments for 'srandmember' command")
 	}
 	key := string(args[0])
-	// lock
-	db.RLock(key)
-	defer db.RUnLock(key)
 
 	// get or init entity
 	set, errReply := db.getAsSet(key)
@@ -482,16 +437,16 @@ func execSRandMember(db *DB, args [][]byte) redis.Reply {
 }
 
 func init() {
-	RegisterCommand("SAdd", execSAdd, nil, -3)
-	RegisterCommand("SIsMember", execSIsMember, nil, 3)
-	RegisterCommand("SRem", execSRem, nil, -3)
-	RegisterCommand("SCard", execSCard, nil, 2)
-	RegisterCommand("SMembers", execSMembers, nil, 2)
-	RegisterCommand("SInter", execSInter, nil, -2)
-	RegisterCommand("SInterStore", execSInterStore, nil, -3)
-	RegisterCommand("SUnion", execSUnion, nil, -2)
-	RegisterCommand("SUnionStore", execSUnionStore, nil, -3)
-	RegisterCommand("SDiff", execSDiff, nil, -2)
-	RegisterCommand("SDiffStore", execSDiffStore, nil, -3)
-	RegisterCommand("SRandMember", execSRandMember, nil, -2)
+	RegisterCommand("SAdd", execSAdd, writeFirstKey, undoSetChange, -3)
+	RegisterCommand("SIsMember", execSIsMember, readFirstKey, nil, 3)
+	RegisterCommand("SRem", execSRem, writeFirstKey, undoSetChange, -3)
+	RegisterCommand("SCard", execSCard, readFirstKey, nil, 2)
+	RegisterCommand("SMembers", execSMembers, readFirstKey, nil, 2)
+	RegisterCommand("SInter", execSInter, prepareSetCalculate, nil, -2)
+	RegisterCommand("SInterStore", execSInterStore, prepareSetCalculateStore, rollbackFirstKey, -3)
+	RegisterCommand("SUnion", execSUnion, prepareSetCalculate, nil, -2)
+	RegisterCommand("SUnionStore", execSUnionStore, prepareSetCalculateStore, rollbackFirstKey, -3)
+	RegisterCommand("SDiff", execSDiff, prepareSetCalculate, nil, -2)
+	RegisterCommand("SDiffStore", execSDiffStore, prepareSetCalculateStore, rollbackFirstKey, -3)
+	RegisterCommand("SRandMember", execSRandMember, readFirstKey, nil, -2)
 }

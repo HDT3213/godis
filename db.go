@@ -49,18 +49,25 @@ type DB struct {
 	pausingAof sync.RWMutex
 }
 
-// PreFunc analyses command line when queued command to `multi`
-// returns related keys and undo commands
-type PreFunc func(args [][]byte) ([]string, [][][]byte)
+// DataEntity stores data bound to a key, including a string, list, hash, set and so on
+type DataEntity struct {
+	Data interface{}
+}
 
 // ExecFunc is interface for command executor
 // args don't include cmd line
 type ExecFunc func(db *DB, args [][]byte) redis.Reply
 
-// DataEntity stores data bound to a key, including a string, list, hash, set and so on
-type DataEntity struct {
-	Data interface{}
-}
+// PreFunc analyses command line when queued command to `multi`
+// returns related write keys and read keys
+type PreFunc func(args [][]byte) ([]string, []string)
+
+// CmdLine is alias for [][]byte, represents a command line
+type CmdLine = [][]byte
+
+// UndoFunc returns undo logs for the given command line
+// execute from head to tail when undo
+type UndoFunc func(db *DB, args [][]byte) []CmdLine
 
 // MakeDB create DB instance and start it
 func MakeDB() *DB {
@@ -150,6 +157,8 @@ func (db *DB) Remove(key string) {
 	db.stopWorld.Wait()
 	db.data.Remove(key)
 	db.ttlMap.Remove(key)
+	taskKey := genExpireTask(key)
+	timewheel.Cancel(taskKey)
 }
 
 // Removes the given keys from db
@@ -159,8 +168,7 @@ func (db *DB) Removes(keys ...string) (deleted int) {
 	for _, key := range keys {
 		_, exists := db.data.Get(key)
 		if exists {
-			db.data.Remove(key)
-			db.ttlMap.Remove(key)
+			db.Remove(key)
 			deleted++
 		}
 	}
@@ -179,46 +187,6 @@ func (db *DB) Flush() {
 }
 
 /* ---- Lock Function ----- */
-
-// Lock locks key for writing (exclusive lock)
-func (db *DB) Lock(key string) {
-	db.locker.Lock(key)
-}
-
-// RLock locks key for read (shared lock)
-func (db *DB) RLock(key string) {
-	db.locker.RLock(key)
-}
-
-// UnLock release exclusive lock
-func (db *DB) UnLock(key string) {
-	db.locker.UnLock(key)
-}
-
-// RUnLock release shared lock
-func (db *DB) RUnLock(key string) {
-	db.locker.RUnLock(key)
-}
-
-// Locks lock keys for writing (exclusive lock)
-func (db *DB) Locks(keys ...string) {
-	db.locker.Locks(keys...)
-}
-
-// RLocks lock keys for read (shared lock)
-func (db *DB) RLocks(keys ...string) {
-	db.locker.RLocks(keys...)
-}
-
-// UnLocks release exclusive locks
-func (db *DB) UnLocks(keys ...string) {
-	db.locker.UnLocks(keys...)
-}
-
-// RUnLocks release shared locks
-func (db *DB) RUnLocks(keys ...string) {
-	db.locker.RUnLocks(keys...)
-}
 
 // RWLocks lock keys for writing and reading
 func (db *DB) RWLocks(writeKeys []string, readKeys []string) {
@@ -242,8 +210,20 @@ func (db *DB) Expire(key string, expireTime time.Time) {
 	db.ttlMap.Put(key, expireTime)
 	taskKey := genExpireTask(key)
 	timewheel.At(expireTime, taskKey, func() {
+		keys := []string{key}
+		db.RWLocks(keys, nil)
+		defer db.RWUnLocks(keys, nil)
+		// check-lock-check, ttl may be updated during waiting lock
 		logger.Info("expire " + key)
-		db.Remove(key)
+		rawExpireTime, ok := db.ttlMap.Get(key)
+		if !ok {
+			return
+		}
+		expireTime, _ := rawExpireTime.(time.Time)
+		expired := time.Now().After(expireTime)
+		if expired {
+			db.Remove(key)
+		}
 	})
 }
 

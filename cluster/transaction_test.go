@@ -14,10 +14,10 @@ func TestRollback(t *testing.T) {
 	txIDStr := strconv.FormatInt(txID, 10)
 	keys := []string{"a", "b"}
 	groupMap := testCluster.groupBy(keys)
-	args := []string{txIDStr}
+	args := []string{txIDStr, "DEL"}
 	args = append(args, keys...)
 	testCluster.Exec(nil, toArgs("SET", "a", "a"))
-	ret := prepareDel(testCluster, nil, makeArgs("PrepareDel", args...))
+	ret := execPrepare(testCluster, nil, makeArgs("Prepare", args...))
 	asserts.AssertNotError(t, ret)
 	requestRollback(testCluster, nil, txID, groupMap)
 	ret = testCluster.Exec(nil, toArgs("GET", "a"))
@@ -27,10 +27,10 @@ func TestRollback(t *testing.T) {
 	FlushAll(testCluster, nil, toArgs("FLUSHALL"))
 	txID = rand.Int63()
 	txIDStr = strconv.FormatInt(txID, 10)
-	args = []string{txIDStr}
+	args = []string{txIDStr, "DEL"}
 	args = append(args, keys...)
 	testCluster.Exec(nil, toArgs("SET", "a", "a"))
-	ret = prepareDel(testCluster, nil, makeArgs("PrepareDel", args...))
+	ret = execPrepare(testCluster, nil, makeArgs("Prepare", args...))
 	asserts.AssertNotError(t, ret)
 	_, err := requestCommit(testCluster, nil, txID, groupMap)
 	if err != nil {

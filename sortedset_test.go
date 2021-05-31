@@ -9,7 +9,7 @@ import (
 )
 
 func TestZAdd(t *testing.T) {
-	execFlushAll(testDB, [][]byte{})
+	testDB.Flush()
 	size := 100
 
 	// add new members
@@ -22,18 +22,18 @@ func TestZAdd(t *testing.T) {
 		scores[i] = rand.Float64()
 		setArgs = append(setArgs, strconv.FormatFloat(scores[i], 'f', -1, 64), members[i])
 	}
-	result := execZAdd(testDB, utils.ToBytesList(setArgs...))
+	result := testDB.Exec(nil, utils.ToCmdLine2("zadd", setArgs...))
 	asserts.AssertIntReply(t, result, size)
 
 	// test zscore and zrank
 	for i, member := range members {
-		result := execZScore(testDB, utils.ToBytesList(key, member))
+		result = testDB.Exec(nil, utils.ToCmdLine("ZScore", key, member))
 		score := strconv.FormatFloat(scores[i], 'f', -1, 64)
 		asserts.AssertBulkReply(t, result, score)
 	}
 
 	// test zcard
-	result = execZCard(testDB, utils.ToBytesList(key))
+	result = testDB.Exec(nil, utils.ToCmdLine("zcard", key))
 	asserts.AssertIntReply(t, result, size)
 
 	// update members
@@ -42,19 +42,19 @@ func TestZAdd(t *testing.T) {
 		scores[i] = rand.Float64() + 100
 		setArgs = append(setArgs, strconv.FormatFloat(scores[i], 'f', -1, 64), members[i])
 	}
-	result = execZAdd(testDB, utils.ToBytesList(setArgs...))
+	result = testDB.Exec(nil, utils.ToCmdLine2("zadd", setArgs...))
 	asserts.AssertIntReply(t, result, 0) // return number of new members
 
 	// test updated score
 	for i, member := range members {
-		result := execZScore(testDB, utils.ToBytesList(key, member))
+		result = testDB.Exec(nil, utils.ToCmdLine("zscore", key, member))
 		score := strconv.FormatFloat(scores[i], 'f', -1, 64)
 		asserts.AssertBulkReply(t, result, score)
 	}
 }
 
 func TestZRank(t *testing.T) {
-	execFlushAll(testDB, [][]byte{})
+	testDB.Flush()
 	size := 100
 	key := utils.RandString(10)
 	members := make([]string, size)
@@ -65,32 +65,31 @@ func TestZRank(t *testing.T) {
 		scores[i] = i
 		setArgs = append(setArgs, strconv.FormatInt(int64(scores[i]), 10), members[i])
 	}
-	execZAdd(testDB, utils.ToBytesList(setArgs...))
+	testDB.Exec(nil, utils.ToCmdLine2("zadd", setArgs...))
 
 	// test  zrank
 	for i, member := range members {
-		result := execZRank(testDB, utils.ToBytesList(key, member))
+		result := testDB.Exec(nil, utils.ToCmdLine("zrank", key, member))
 		asserts.AssertIntReply(t, result, i)
-
-		result = execZRevRank(testDB, utils.ToBytesList(key, member))
+		result = testDB.Exec(nil, utils.ToCmdLine("ZRevRank", key, member))
 		asserts.AssertIntReply(t, result, size-i-1)
 	}
 }
 
 func TestZRange(t *testing.T) {
 	// prepare
-	execFlushAll(testDB, [][]byte{})
+	testDB.Flush()
 	size := 100
 	key := utils.RandString(10)
 	members := make([]string, size)
 	scores := make([]int, size)
 	setArgs := []string{key}
 	for i := 0; i < size; i++ {
-		members[i] = utils.RandString(10)
+		members[i] = strconv.Itoa(i) //utils.RandString(10)
 		scores[i] = i
 		setArgs = append(setArgs, strconv.FormatInt(int64(scores[i]), 10), members[i])
 	}
-	execZAdd(testDB, utils.ToBytesList(setArgs...))
+	testDB.Exec(nil, utils.ToCmdLine2("zadd", setArgs...))
 	reverseMembers := make([]string, size)
 	for i, v := range members {
 		reverseMembers[size-i-1] = v
@@ -98,39 +97,39 @@ func TestZRange(t *testing.T) {
 
 	start := "0"
 	end := "9"
-	result := execZRange(testDB, utils.ToBytesList(key, start, end))
+	result := testDB.Exec(nil, utils.ToCmdLine("ZRange", key, start, end))
 	asserts.AssertMultiBulkReply(t, result, members[0:10])
-	result = execZRange(testDB, utils.ToBytesList(key, start, end, "WITHSCORES"))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRange", key, start, end, "WITHSCORES"))
 	asserts.AssertMultiBulkReplySize(t, result, 20)
-	result = execZRevRange(testDB, utils.ToBytesList(key, start, end))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRevRange", key, start, end))
 	asserts.AssertMultiBulkReply(t, result, reverseMembers[0:10])
 
 	start = "0"
 	end = "200"
-	result = execZRange(testDB, utils.ToBytesList(key, start, end))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRange", key, start, end))
 	asserts.AssertMultiBulkReply(t, result, members)
-	result = execZRevRange(testDB, utils.ToBytesList(key, start, end))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRevRange", key, start, end))
 	asserts.AssertMultiBulkReply(t, result, reverseMembers)
 
 	start = "0"
 	end = "-10"
-	result = execZRange(testDB, utils.ToBytesList(key, start, end))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRange", key, start, end))
 	asserts.AssertMultiBulkReply(t, result, members[0:size-10+1])
-	result = execZRevRange(testDB, utils.ToBytesList(key, start, end))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRevRange", key, start, end))
 	asserts.AssertMultiBulkReply(t, result, reverseMembers[0:size-10+1])
 
 	start = "0"
 	end = "-200"
-	result = execZRange(testDB, utils.ToBytesList(key, start, end))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRange", key, start, end))
 	asserts.AssertMultiBulkReply(t, result, members[0:0])
-	result = execZRevRange(testDB, utils.ToBytesList(key, start, end))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRevRange", key, start, end))
 	asserts.AssertMultiBulkReply(t, result, reverseMembers[0:0])
 
 	start = "-10"
 	end = "-1"
-	result = execZRange(testDB, utils.ToBytesList(key, start, end))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRange", key, start, end))
 	asserts.AssertMultiBulkReply(t, result, members[90:])
-	result = execZRevRange(testDB, utils.ToBytesList(key, start, end))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRevRange", key, start, end))
 	asserts.AssertMultiBulkReply(t, result, reverseMembers[90:])
 }
 
@@ -144,7 +143,7 @@ func reverse(src []string) []string {
 
 func TestZRangeByScore(t *testing.T) {
 	// prepare
-	execFlushAll(testDB, [][]byte{})
+	testDB.Flush()
 	size := 100
 	key := utils.RandString(10)
 	members := make([]string, size)
@@ -155,49 +154,50 @@ func TestZRangeByScore(t *testing.T) {
 		scores[i] = i
 		setArgs = append(setArgs, strconv.FormatInt(int64(scores[i]), 10), members[i])
 	}
-	result := execZAdd(testDB, utils.ToBytesList(setArgs...))
+	result := testDB.Exec(nil, utils.ToCmdLine2("zadd", setArgs...))
 	asserts.AssertIntReply(t, result, size)
 
 	min := "20"
 	max := "30"
-	result = execZRangeByScore(testDB, utils.ToBytesList(key, min, max))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRangeByScore", key, min, max))
 	asserts.AssertMultiBulkReply(t, result, members[20:31])
-	result = execZRangeByScore(testDB, utils.ToBytesList(key, min, max, "WITHSCORES"))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRangeByScore", key, min, max, "WithScores"))
 	asserts.AssertMultiBulkReplySize(t, result, 22)
-	result = execZRevRangeByScore(testDB, utils.ToBytesList(key, max, min))
+	result = execZRevRangeByScore(testDB, utils.ToCmdLine(key, max, min))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRevRangeByScore", key, max, min))
 	asserts.AssertMultiBulkReply(t, result, reverse(members[20:31]))
 
 	min = "-10"
 	max = "10"
-	result = execZRangeByScore(testDB, utils.ToBytesList(key, min, max))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRangeByScore", key, min, max))
 	asserts.AssertMultiBulkReply(t, result, members[0:11])
-	result = execZRevRangeByScore(testDB, utils.ToBytesList(key, max, min))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRevRangeByScore", key, max, min))
 	asserts.AssertMultiBulkReply(t, result, reverse(members[0:11]))
 
 	min = "90"
 	max = "110"
-	result = execZRangeByScore(testDB, utils.ToBytesList(key, min, max))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRangeByScore", key, min, max))
 	asserts.AssertMultiBulkReply(t, result, members[90:])
-	result = execZRevRangeByScore(testDB, utils.ToBytesList(key, max, min))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRevRangeByScore", key, max, min))
 	asserts.AssertMultiBulkReply(t, result, reverse(members[90:]))
 
 	min = "(20"
 	max = "(30"
-	result = execZRangeByScore(testDB, utils.ToBytesList(key, min, max))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRangeByScore", key, min, max))
 	asserts.AssertMultiBulkReply(t, result, members[21:30])
-	result = execZRevRangeByScore(testDB, utils.ToBytesList(key, max, min))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRevRangeByScore", key, max, min))
 	asserts.AssertMultiBulkReply(t, result, reverse(members[21:30]))
 
 	min = "20"
 	max = "40"
-	result = execZRangeByScore(testDB, utils.ToBytesList(key, min, max, "LIMIT", "5", "5"))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRangeByScore", key, min, max, "LIMIT", "5", "5"))
 	asserts.AssertMultiBulkReply(t, result, members[25:30])
-	result = execZRevRangeByScore(testDB, utils.ToBytesList(key, max, min, "LIMIT", "5", "5"))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRevRangeByScore", key, max, min, "LIMIT", "5", "5"))
 	asserts.AssertMultiBulkReply(t, result, reverse(members[31:36]))
 }
 
 func TestZRem(t *testing.T) {
-	execFlushAll(testDB, [][]byte{})
+	testDB.Flush()
 	size := 100
 	key := utils.RandString(10)
 	members := make([]string, size)
@@ -208,17 +208,17 @@ func TestZRem(t *testing.T) {
 		scores[i] = i
 		setArgs = append(setArgs, strconv.FormatInt(int64(scores[i]), 10), members[i])
 	}
-	execZAdd(testDB, utils.ToBytesList(setArgs...))
+	testDB.Exec(nil, utils.ToCmdLine2("zadd", setArgs...))
 
 	args := []string{key}
 	args = append(args, members[0:10]...)
-	result := execZRem(testDB, utils.ToBytesList(args...))
+	result := testDB.Exec(nil, utils.ToCmdLine2("zrem", args...))
 	asserts.AssertIntReply(t, result, 10)
-	result = execZCard(testDB, utils.ToBytesList(key))
+	result = testDB.Exec(nil, utils.ToCmdLine("zcard", key))
 	asserts.AssertIntReply(t, result, size-10)
 
 	// test ZRemRangeByRank
-	execFlushAll(testDB, [][]byte{})
+	testDB.Flush()
 	size = 100
 	key = utils.RandString(10)
 	members = make([]string, size)
@@ -229,15 +229,15 @@ func TestZRem(t *testing.T) {
 		scores[i] = i
 		setArgs = append(setArgs, strconv.FormatInt(int64(scores[i]), 10), members[i])
 	}
-	execZAdd(testDB, utils.ToBytesList(setArgs...))
+	testDB.Exec(nil, utils.ToCmdLine2("zadd", setArgs...))
 
-	result = execZRemRangeByRank(testDB, utils.ToBytesList(key, "0", "9"))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRemRangeByRank", key, "0", "9"))
 	asserts.AssertIntReply(t, result, 10)
-	result = execZCard(testDB, utils.ToBytesList(key))
+	result = testDB.Exec(nil, utils.ToCmdLine("zcard", key))
 	asserts.AssertIntReply(t, result, size-10)
 
 	// test ZRemRangeByScore
-	execFlushAll(testDB, [][]byte{})
+	testDB.Flush()
 	size = 100
 	key = utils.RandString(10)
 	members = make([]string, size)
@@ -248,17 +248,17 @@ func TestZRem(t *testing.T) {
 		scores[i] = i
 		setArgs = append(setArgs, strconv.FormatInt(int64(scores[i]), 10), members[i])
 	}
-	execZAdd(testDB, utils.ToBytesList(setArgs...))
+	testDB.Exec(nil, utils.ToCmdLine2("zadd", setArgs...))
 
-	result = execZRemRangeByScore(testDB, utils.ToBytesList(key, "0", "9"))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRemRangeByScore", key, "0", "9"))
 	asserts.AssertIntReply(t, result, 10)
-	result = execZCard(testDB, utils.ToBytesList(key))
+	result = testDB.Exec(nil, utils.ToCmdLine("zcard", key))
 	asserts.AssertIntReply(t, result, size-10)
 }
 
 func TestZCount(t *testing.T) {
 	// prepare
-	execFlushAll(testDB, [][]byte{})
+	testDB.Flush()
 	size := 100
 	key := utils.RandString(10)
 	members := make([]string, size)
@@ -269,37 +269,37 @@ func TestZCount(t *testing.T) {
 		scores[i] = i
 		setArgs = append(setArgs, strconv.FormatInt(int64(scores[i]), 10), members[i])
 	}
-	execZAdd(testDB, utils.ToBytesList(setArgs...))
+	testDB.Exec(nil, utils.ToCmdLine2("zadd", setArgs...))
 
 	min := "20"
 	max := "30"
-	result := execZCount(testDB, utils.ToBytesList(key, min, max))
+	result := testDB.Exec(nil, utils.ToCmdLine("zcount", key, min, max))
 	asserts.AssertIntReply(t, result, 11)
 
 	min = "-10"
 	max = "10"
-	result = execZCount(testDB, utils.ToBytesList(key, min, max))
+	result = testDB.Exec(nil, utils.ToCmdLine("zcount", key, min, max))
 	asserts.AssertIntReply(t, result, 11)
 
 	min = "90"
 	max = "110"
-	result = execZCount(testDB, utils.ToBytesList(key, min, max))
+	result = testDB.Exec(nil, utils.ToCmdLine("zcount", key, min, max))
 	asserts.AssertIntReply(t, result, 10)
 
 	min = "(20"
 	max = "(30"
-	result = execZCount(testDB, utils.ToBytesList(key, min, max))
+	result = testDB.Exec(nil, utils.ToCmdLine("zcount", key, min, max))
 	asserts.AssertIntReply(t, result, 9)
 }
 
 func TestZIncrBy(t *testing.T) {
-	execFlushAll(testDB, [][]byte{})
+	testDB.Flush()
 	key := utils.RandString(10)
-	result := execZIncrBy(testDB, utils.ToBytesList(key, "10", "a"))
+	result := testDB.Exec(nil, utils.ToCmdLine("ZIncrBy", key, "10", "a"))
 	asserts.AssertBulkReply(t, result, "10")
-	result = execZIncrBy(testDB, utils.ToBytesList(key, "10", "a"))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZIncrBy", key, "10", "a"))
 	asserts.AssertBulkReply(t, result, "20")
 
-	result = execZScore(testDB, utils.ToBytesList(key, "a"))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZScore", key, "a"))
 	asserts.AssertBulkReply(t, result, "20")
 }

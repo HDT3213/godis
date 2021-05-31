@@ -173,9 +173,6 @@ func execSetEX(db *DB, args [][]byte) redis.Reply {
 		Data: value,
 	}
 
-	db.Lock(key)
-	defer db.UnLock(key)
-
 	db.PutEntity(key, entity)
 	expireTime := time.Now().Add(time.Duration(ttl) * time.Millisecond)
 	db.Expire(key, expireTime)
@@ -201,9 +198,6 @@ func execPSetEX(db *DB, args [][]byte) redis.Reply {
 		Data: value,
 	}
 
-	db.Lock(key)
-	defer db.UnLock(key)
-
 	db.PutEntity(key, entity)
 	expireTime := time.Now().Add(time.Duration(ttlArg) * time.Millisecond)
 	db.Expire(key, expireTime)
@@ -211,6 +205,20 @@ func execPSetEX(db *DB, args [][]byte) redis.Reply {
 	db.AddAof(makeExpireCmd(key, expireTime))
 
 	return &reply.OkReply{}
+}
+
+func prepareMSet(args [][]byte) ([]string, []string) {
+	size := len(args) / 2
+	keys := make([]string, size)
+	for i := 0; i < size; i++ {
+		keys[i] = string(args[2*i])
+	}
+	return keys, nil
+}
+
+func undoMSet(db *DB, args [][]byte) []CmdLine {
+	writeKeys, _ := prepareMSet(args)
+	return rollbackGivenKeys(db, writeKeys...)
 }
 
 // execMSet sets multi key-value in database
@@ -227,15 +235,20 @@ func execMSet(db *DB, args [][]byte) redis.Reply {
 		values[i] = args[2*i+1]
 	}
 
-	db.Locks(keys...)
-	defer db.UnLocks(keys...)
-
 	for i, key := range keys {
 		value := values[i]
 		db.PutEntity(key, &DataEntity{Data: value})
 	}
 	db.AddAof(makeAofCmd("mset", args))
 	return &reply.OkReply{}
+}
+
+func prepareMGet(args [][]byte) ([]string, []string) {
+	keys := make([]string, len(args))
+	for i, v := range args {
+		keys[i] = string(v)
+	}
+	return nil, keys
 }
 
 // execMGet get multi key-value from database
@@ -277,10 +290,6 @@ func execMSetNX(db *DB, args [][]byte) redis.Reply {
 		values[i] = args[2*i+1]
 	}
 
-	// lock keys
-	db.Locks(keys...)
-	defer db.UnLocks(keys...)
-
 	for _, key := range keys {
 		_, exists := db.GetEntity(key)
 		if exists {
@@ -319,9 +328,6 @@ func execGetSet(db *DB, args [][]byte) redis.Reply {
 func execIncr(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 
-	db.Lock(key)
-	defer db.UnLock(key)
-
 	bytes, err := db.getAsString(key)
 	if err != nil {
 		return err
@@ -352,9 +358,6 @@ func execIncrBy(db *DB, args [][]byte) redis.Reply {
 	if err != nil {
 		return reply.MakeErrReply("ERR value is not an integer or out of range")
 	}
-
-	db.Lock(key)
-	defer db.UnLock(key)
 
 	bytes, errReply := db.getAsString(key)
 	if errReply != nil {
@@ -388,9 +391,6 @@ func execIncrByFloat(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply("ERR value is not a valid float")
 	}
 
-	db.Lock(key)
-	defer db.UnLock(key)
-
 	bytes, errReply := db.getAsString(key)
 	if errReply != nil {
 		return errReply
@@ -417,9 +417,6 @@ func execIncrByFloat(db *DB, args [][]byte) redis.Reply {
 // execDecr decrements the integer value of a key by one
 func execDecr(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
-
-	db.Lock(key)
-	defer db.UnLock(key)
 
 	bytes, errReply := db.getAsString(key)
 	if errReply != nil {
@@ -453,9 +450,6 @@ func execDecrBy(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeErrReply("ERR value is not an integer or out of range")
 	}
 
-	db.Lock(key)
-	defer db.UnLock(key)
-
 	bytes, errReply := db.getAsString(key)
 	if errReply != nil {
 		return errReply
@@ -480,20 +474,18 @@ func execDecrBy(db *DB, args [][]byte) redis.Reply {
 }
 
 func init() {
-	RegisterCommand("Set", execSet, nil, -3)
-	RegisterCommand("SetNx", execSetNX, nil, 3)
-	RegisterCommand("SetEX", execSetEX, nil, 4)
-	RegisterCommand("PSetEX", execPSetEX, nil, 4)
-	RegisterCommand("MSet", execMSet, nil, -3)
-	RegisterCommand("MGet", execMGet, nil, -2)
-	RegisterCommand("MSetNX", execMSetNX, nil, -3)
-	RegisterCommand("Get", execGet, nil, 2)
-	RegisterCommand("MSet", execMSet, nil, -3)
-	RegisterCommand("GetSet", execGetSet, nil, 3)
-	RegisterCommand("MSet", execMSet, nil, -3)
-	RegisterCommand("Incr", execIncr, nil, 2)
-	RegisterCommand("IncrBy", execIncrBy, nil, 3)
-	RegisterCommand("IncrByFloat", execIncrByFloat, nil, 3)
-	RegisterCommand("Decr", execDecr, nil, 2)
-	RegisterCommand("DecrBy", execDecrBy, nil, 3)
+	RegisterCommand("Set", execSet, writeFirstKey, rollbackFirstKey, -3)
+	RegisterCommand("SetNx", execSetNX, writeFirstKey, rollbackFirstKey, 3)
+	RegisterCommand("SetEX", execSetEX, writeFirstKey, rollbackFirstKey, 4)
+	RegisterCommand("PSetEX", execPSetEX, writeFirstKey, rollbackFirstKey, 4)
+	RegisterCommand("MSet", execMSet, prepareMSet, undoMSet, -3)
+	RegisterCommand("MGet", execMGet, prepareMGet, nil, -2)
+	RegisterCommand("MSetNX", execMSetNX, prepareMSet, undoMSet, -3)
+	RegisterCommand("Get", execGet, readFirstKey, nil, 2)
+	RegisterCommand("GetSet", execGetSet, writeFirstKey, rollbackFirstKey, 3)
+	RegisterCommand("Incr", execIncr, writeFirstKey, rollbackFirstKey, 2)
+	RegisterCommand("IncrBy", execIncrBy, writeFirstKey, rollbackFirstKey, 3)
+	RegisterCommand("IncrByFloat", execIncrByFloat, writeFirstKey, rollbackFirstKey, 3)
+	RegisterCommand("Decr", execDecr, writeFirstKey, rollbackFirstKey, 2)
+	RegisterCommand("DecrBy", execDecrBy, writeFirstKey, rollbackFirstKey, 3)
 }

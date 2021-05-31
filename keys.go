@@ -19,14 +19,19 @@ func execDel(db *DB, args [][]byte) redis.Reply {
 		keys[i] = string(v)
 	}
 
-	db.Locks(keys...)
-	defer db.UnLocks(keys...)
-
 	deleted := db.Removes(keys...)
 	if deleted > 0 {
 		db.AddAof(makeAofCmd("del", args))
 	}
 	return reply.MakeIntReply(int64(deleted))
+}
+
+func undoDel(db *DB, args [][]byte) []CmdLine {
+	keys := make([]string, len(args))
+	for i, v := range args {
+		keys[i] = string(v)
+	}
+	return rollbackGivenKeys(db, keys...)
 }
 
 // execExists checks if a is existed in db
@@ -78,6 +83,12 @@ func execType(db *DB, args [][]byte) redis.Reply {
 	return &reply.UnknownErrReply{}
 }
 
+func prepareRename(args [][]byte) ([]string, []string) {
+	src := string(args[0])
+	dest := string(args[1])
+	return []string{dest}, []string{src}
+}
+
 // execRename a key
 func execRename(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 2 {
@@ -85,9 +96,6 @@ func execRename(db *DB, args [][]byte) redis.Reply {
 	}
 	src := string(args[0])
 	dest := string(args[1])
-
-	db.Locks(src, dest)
-	defer db.UnLocks(src, dest)
 
 	entity, ok := db.GetEntity(src)
 	if !ok {
@@ -106,13 +114,16 @@ func execRename(db *DB, args [][]byte) redis.Reply {
 	return &reply.OkReply{}
 }
 
+func undoRename(db *DB, args [][]byte) []CmdLine {
+	src := string(args[0])
+	dest := string(args[1])
+	return rollbackGivenKeys(db, src, dest)
+}
+
 // execRenameNx a key, only if the new key does not exist
 func execRenameNx(db *DB, args [][]byte) redis.Reply {
 	src := string(args[0])
 	dest := string(args[1])
-
-	db.Locks(src, dest)
-	defer db.UnLocks(src, dest)
 
 	_, ok := db.GetEntity(dest)
 	if ok {
@@ -290,20 +301,27 @@ func execKeys(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeMultiBulkReply(result)
 }
 
+func undoExpire(db *DB, args [][]byte) []CmdLine {
+	key := string(args[0])
+	return []CmdLine{
+		toTTLCmd(db, key).Args,
+	}
+}
+
 func init() {
-	RegisterCommand("Del", execDel, nil, -2)
-	RegisterCommand("Expire", execExpire, nil, 3)
-	RegisterCommand("ExpireAt", execExpireAt, nil, 3)
-	RegisterCommand("PExpire", execPExpire, nil, 3)
-	RegisterCommand("PExpireAt", execPExpireAt, nil, 3)
-	RegisterCommand("TTL", execTTL, nil, 2)
-	RegisterCommand("PTTL", execPTTL, nil, 2)
-	RegisterCommand("Persist", execPersist, nil, 2)
-	RegisterCommand("Exists", execExists, nil, -2)
-	RegisterCommand("Type", execType, nil, 2)
-	RegisterCommand("Rename", execRename, nil, 3)
-	RegisterCommand("RenameNx", execRenameNx, nil, 3)
-	RegisterCommand("FlushDB", execFlushDB, nil, -1)
-	RegisterCommand("FlushAll", execFlushAll, nil, -1)
-	RegisterCommand("Keys", execKeys, nil, 2)
+	RegisterCommand("Del", execDel, writeAllKeys, undoDel, -2)
+	RegisterCommand("Expire", execExpire, writeFirstKey, undoExpire, 3)
+	RegisterCommand("ExpireAt", execExpireAt, writeFirstKey, undoExpire, 3)
+	RegisterCommand("PExpire", execPExpire, writeFirstKey, undoExpire, 3)
+	RegisterCommand("PExpireAt", execPExpireAt, writeFirstKey, undoExpire, 3)
+	RegisterCommand("TTL", execTTL, readFirstKey, nil, 2)
+	RegisterCommand("PTTL", execPTTL, readFirstKey, nil, 2)
+	RegisterCommand("Persist", execPersist, writeFirstKey, undoExpire, 2)
+	RegisterCommand("Exists", execExists, readAllKeys, nil, -2)
+	RegisterCommand("Type", execType, readFirstKey, nil, 2)
+	RegisterCommand("Rename", execRename, prepareRename, undoRename, 3)
+	RegisterCommand("RenameNx", execRenameNx, prepareRename, undoRename, 3)
+	RegisterCommand("FlushDB", execFlushDB, noPrepare, nil, -1)
+	RegisterCommand("FlushAll", execFlushAll, noPrepare, nil, -1)
+	RegisterCommand("Keys", execKeys, noPrepare, nil, 2)
 }

@@ -33,7 +33,7 @@ func (cluster *Cluster) returnPeerClient(peer string, peerClient *client.Client)
 }
 
 // relay relays command to peer
-// cannot call Prepare, Commit, Rollback of self node
+// cannot call Prepare, Commit, execRollback of self node
 func (cluster *Cluster) relay(peer string, c redis.Connection, args [][]byte) redis.Reply {
 	if peer == cluster.self {
 		// to self db

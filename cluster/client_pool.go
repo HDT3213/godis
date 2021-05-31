@@ -21,7 +21,7 @@ func (f *connectionFactory) MakeObject(ctx context.Context) (*pool.PooledObject,
 	c.Start()
 	// all peers of cluster should use the same password
 	if config.Properties.RequirePass != "" {
-		c.Send(utils.ToBytesList("AUTH", config.Properties.RequirePass))
+		c.Send(utils.ToCmdLine("AUTH", config.Properties.RequirePass))
 	}
 	return pool.NewPooledObject(c), nil
 }

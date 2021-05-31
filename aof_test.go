@@ -2,8 +2,7 @@ package godis
 
 import (
 	"github.com/hdt3213/godis/config"
-	"github.com/hdt3213/godis/datastruct/utils"
-	utils2 "github.com/hdt3213/godis/lib/utils"
+	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/reply"
 	"io/ioutil"
 	"os"
@@ -34,31 +33,31 @@ func TestAof(t *testing.T) {
 	for i := 0; i < size; i++ {
 		key := strconv.Itoa(cursor)
 		cursor++
-		execSet(aofWriteDB, utils2.ToBytesList(key, utils2.RandString(8), "EX", "10000"))
+		execSet(aofWriteDB, utils.ToCmdLine(key, utils.RandString(8), "EX", "10000"))
 		keys = append(keys, key)
 	}
 	for i := 0; i < size; i++ {
 		key := strconv.Itoa(cursor)
 		cursor++
-		execRPush(aofWriteDB, utils2.ToBytesList(key, utils2.RandString(8)))
+		execRPush(aofWriteDB, utils.ToCmdLine(key, utils.RandString(8)))
 		keys = append(keys, key)
 	}
 	for i := 0; i < size; i++ {
 		key := strconv.Itoa(cursor)
 		cursor++
-		execHSet(aofWriteDB, utils2.ToBytesList(key, utils2.RandString(8), utils2.RandString(8)))
+		execHSet(aofWriteDB, utils.ToCmdLine(key, utils.RandString(8), utils.RandString(8)))
 		keys = append(keys, key)
 	}
 	for i := 0; i < size; i++ {
 		key := strconv.Itoa(cursor)
 		cursor++
-		execSAdd(aofWriteDB, utils2.ToBytesList(key, utils2.RandString(8)))
+		execSAdd(aofWriteDB, utils.ToCmdLine(key, utils.RandString(8)))
 		keys = append(keys, key)
 	}
 	for i := 0; i < size; i++ {
 		key := strconv.Itoa(cursor)
 		cursor++
-		execZAdd(aofWriteDB, utils2.ToBytesList(key, "10", utils2.RandString(8)))
+		execZAdd(aofWriteDB, utils.ToCmdLine(key, "10", utils.RandString(8)))
 		keys = append(keys, key)
 	}
 	aofWriteDB.Close()    // wait for aof finished
@@ -105,44 +104,44 @@ func TestRewriteAOF(t *testing.T) {
 	for i := 0; i < size; i++ {
 		key := "str" + strconv.Itoa(cursor)
 		cursor++
-		execSet(aofWriteDB, utils2.ToBytesList(key, utils2.RandString(8)))
-		execSet(aofWriteDB, utils2.ToBytesList(key, utils2.RandString(8)))
+		execSet(aofWriteDB, utils.ToCmdLine(key, utils.RandString(8)))
+		execSet(aofWriteDB, utils.ToCmdLine(key, utils.RandString(8)))
 		keys = append(keys, key)
 	}
 	// test ttl
 	for i := 0; i < size; i++ {
 		key := "str" + strconv.Itoa(cursor)
 		cursor++
-		execSet(aofWriteDB, utils2.ToBytesList(key, utils2.RandString(8), "EX", "1000"))
+		execSet(aofWriteDB, utils.ToCmdLine(key, utils.RandString(8), "EX", "1000"))
 		ttlKeys = append(ttlKeys, key)
 	}
 	for i := 0; i < size; i++ {
 		key := "list" + strconv.Itoa(cursor)
 		cursor++
-		execRPush(aofWriteDB, utils2.ToBytesList(key, utils2.RandString(8)))
-		execRPush(aofWriteDB, utils2.ToBytesList(key, utils2.RandString(8)))
+		execRPush(aofWriteDB, utils.ToCmdLine(key, utils.RandString(8)))
+		execRPush(aofWriteDB, utils.ToCmdLine(key, utils.RandString(8)))
 		keys = append(keys, key)
 	}
 	for i := 0; i < size; i++ {
 		key := "hash" + strconv.Itoa(cursor)
 		cursor++
-		field := utils2.RandString(8)
-		execHSet(aofWriteDB, utils2.ToBytesList(key, field, utils2.RandString(8)))
-		execHSet(aofWriteDB, utils2.ToBytesList(key, field, utils2.RandString(8)))
+		field := utils.RandString(8)
+		execHSet(aofWriteDB, utils.ToCmdLine(key, field, utils.RandString(8)))
+		execHSet(aofWriteDB, utils.ToCmdLine(key, field, utils.RandString(8)))
 		keys = append(keys, key)
 	}
 	for i := 0; i < size; i++ {
 		key := "set" + strconv.Itoa(cursor)
 		cursor++
-		member := utils2.RandString(8)
-		execSAdd(aofWriteDB, utils2.ToBytesList(key, member))
-		execSAdd(aofWriteDB, utils2.ToBytesList(key, member))
+		member := utils.RandString(8)
+		execSAdd(aofWriteDB, utils.ToCmdLine(key, member))
+		execSAdd(aofWriteDB, utils.ToCmdLine(key, member))
 		keys = append(keys, key)
 	}
 	for i := 0; i < size; i++ {
 		key := "zset" + strconv.Itoa(cursor)
 		cursor++
-		execZAdd(aofWriteDB, utils2.ToBytesList(key, "10", utils2.RandString(8)))
+		execZAdd(aofWriteDB, utils.ToCmdLine(key, "10", utils.RandString(8)))
 		keys = append(keys, key)
 	}
 	time.Sleep(time.Second) // wait for async goroutine finish its job
@@ -167,7 +166,7 @@ func TestRewriteAOF(t *testing.T) {
 		}
 	}
 	for _, key := range ttlKeys {
-		ret := execTTL(aofReadDB, utils2.ToBytesList(key))
+		ret := execTTL(aofReadDB, utils.ToCmdLine(key))
 		intResult, ok := ret.(*reply.IntReply)
 		if !ok {
 			t.Errorf("expected int reply, actually %s", ret.ToBytes())

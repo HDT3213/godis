@@ -2,15 +2,16 @@ package cluster
 
 import "github.com/hdt3213/godis/interface/redis"
 
+type CmdLine = [][]byte
+
 func makeRouter() map[string]CmdFunc {
 	routerMap := make(map[string]CmdFunc)
 	routerMap["ping"] = ping
 
-	routerMap["commit"] = commit
-	routerMap["rollback"] = Rollback
+	routerMap["prepare"] = execPrepare
+	routerMap["commit"] = execCommit
+	routerMap["rollback"] = execRollback
 	routerMap["del"] = Del
-	routerMap["preparedel"] = prepareDel
-	routerMap["preparemset"] = prepareMSet
 
 	routerMap["expire"] = defaultFunc
 	routerMap["expireat"] = defaultFunc
@@ -108,7 +109,7 @@ func makeRouter() map[string]CmdFunc {
 
 	routerMap["flushdb"] = FlushDB
 	routerMap["flushall"] = FlushAll
-	//routerMap["keys"] = Keys
+	//routerMap["writeKeys"] = Keys
 
 	return routerMap
 }

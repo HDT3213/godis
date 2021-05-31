@@ -11,8 +11,8 @@ import (
 )
 
 // Exec executes command
-// parameter `cmdArgs` contains command and its arguments, for example: "set key value"
-func (db *DB) Exec(c redis.Connection, cmdArgs [][]byte) (result redis.Reply) {
+// parameter `cmdLine` contains command and its arguments, for example: "set key value"
+func (db *DB) Exec(c redis.Connection, cmdLine [][]byte) (result redis.Reply) {
 	defer func() {
 		if err := recover(); err != nil {
 			logger.Warn(fmt.Sprintf("error occurs: %v\n%s", err, string(debug.Stack())))
@@ -20,44 +20,57 @@ func (db *DB) Exec(c redis.Connection, cmdArgs [][]byte) (result redis.Reply) {
 		}
 	}()
 
-	cmdName := strings.ToLower(string(cmdArgs[0]))
+	cmdName := strings.ToLower(string(cmdLine[0]))
 	// authenticate
 	if cmdName == "auth" {
-		return Auth(db, c, cmdArgs[1:])
+		return Auth(db, c, cmdLine[1:])
 	}
 	if !isAuthenticated(c) {
 		return reply.MakeErrReply("NOAUTH Authentication required")
 	}
 
 	// special commands
-	if cmdName == "subscribe" {
-		if len(cmdArgs) < 2 {
-			return reply.MakeArgNumErrReply("subscribe")
-		}
-		return pubsub.Subscribe(db.hub, c, cmdArgs[1:])
-	} else if cmdName == "publish" {
-		return pubsub.Publish(db.hub, cmdArgs[1:])
-	} else if cmdName == "unsubscribe" {
-		return pubsub.UnSubscribe(db.hub, c, cmdArgs[1:])
-	} else if cmdName == "bgrewriteaof" {
-		// aof.go imports router.go, router.go cannot import BGRewriteAOF from aof.go
-		return BGRewriteAOF(db, cmdArgs[1:])
+	done := false
+	result, done = execSpecialCmd(c, cmdLine, cmdName, db)
+	if done {
+		return result
+	}
+	if c != nil && c.InMultiState() {
+		return enqueueCmd(db, c, cmdLine)
 	}
 
 	// normal commands
-	cmd, ok := cmdTable[cmdName]
-	if !ok {
-		return reply.MakeErrReply("ERR unknown command '" + cmdName + "'")
-	}
-	if !validateArity(cmd.arity, cmdArgs) {
-		return reply.MakeArgNumErrReply(cmdName)
-	}
+	return execNormalCommand(db, cmdLine)
+}
 
-	fun := cmd.executor
-	if len(cmdArgs) > 1 {
-		result = fun(db, cmdArgs[1:])
-	} else {
-		result = fun(db, [][]byte{})
+func execSpecialCmd(c redis.Connection, cmdLine [][]byte, cmdName string, db *DB) (redis.Reply, bool) {
+	if cmdName == "subscribe" {
+		if len(cmdLine) < 2 {
+			return reply.MakeArgNumErrReply("subscribe"), true
+		}
+		return pubsub.Subscribe(db.hub, c, cmdLine[1:]), true
+	} else if cmdName == "publish" {
+		return pubsub.Publish(db.hub, cmdLine[1:]), true
+	} else if cmdName == "unsubscribe" {
+		return pubsub.UnSubscribe(db.hub, c, cmdLine[1:]), true
+	} else if cmdName == "bgrewriteaof" {
+		// aof.go imports router.go, router.go cannot import BGRewriteAOF from aof.go
+		return BGRewriteAOF(db, cmdLine[1:]), true
+	} else if cmdName == "multi" {
+		if len(cmdLine) != 1 {
+			return reply.MakeArgNumErrReply(cmdName), true
+		}
+		return startMulti(db, c), true
+	} else if cmdName == "discard" {
+		if len(cmdLine) != 1 {
+			return reply.MakeArgNumErrReply(cmdName), true
+		}
+		return discardMulti(db, c), true
+	} else if cmdName == "exec" {
+		if len(cmdLine) != 1 {
+			return reply.MakeArgNumErrReply(cmdName), true
+		}
+		return execMulti(db, c), true
 	}
-	return
+	return nil, false
 }

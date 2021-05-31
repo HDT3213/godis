@@ -20,6 +20,12 @@ func (r *OkReply) ToBytes() []byte {
 	return okBytes
 }
 
+var theOkReply = new(OkReply)
+
+func MakeOkReply() *OkReply {
+	return theOkReply
+}
+
 var nullBulkBytes = []byte("$-1\r\n")
 
 // NullBulkReply is empty string
@@ -58,4 +64,20 @@ var noBytes = []byte("")
 // ToBytes marshal redis.Reply
 func (r *NoReply) ToBytes() []byte {
 	return noBytes
+}
+
+// QueuedReply is +QUEUED
+type QueuedReply struct{}
+
+var queuedBytes = []byte("+QUEUED\r\n")
+
+// ToBytes marshal redis.Reply
+func (r *QueuedReply) ToBytes() []byte {
+	return queuedBytes
+}
+
+var theQueuedReply = new(QueuedReply)
+
+func MakeQueuedReply() *QueuedReply {
+	return theQueuedReply
 }
