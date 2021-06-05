@@ -44,13 +44,13 @@ func (c *EchoClient) Close() error {
 func (h *EchoHandler) Handle(ctx context.Context, conn net.Conn) {
 	if h.closing.Get() {
 		// closing handler refuse new connection
-		conn.Close()
+		_ = conn.Close()
 	}
 
 	client := &EchoClient{
 		Conn: conn,
 	}
-	h.activeConn.Store(client, 1)
+	h.activeConn.Store(client, struct{}{})
 
 	reader := bufio.NewReader(conn)
 	for {
@@ -69,7 +69,7 @@ func (h *EchoHandler) Handle(ctx context.Context, conn net.Conn) {
 		//logger.Info("sleeping")
 		//time.Sleep(10 * time.Second)
 		b := []byte(msg)
-		conn.Write(b)
+		_, _ = conn.Write(b)
 		client.Waiting.Done()
 	}
 }
@@ -78,10 +78,9 @@ func (h *EchoHandler) Handle(ctx context.Context, conn net.Conn) {
 func (h *EchoHandler) Close() error {
 	logger.Info("handler shutting down...")
 	h.closing.Set(true)
-	// TODO: concurrent wait
 	h.activeConn.Range(func(key interface{}, val interface{}) bool {
 		client := key.(*EchoClient)
-		client.Close()
+		_ = client.Close()
 		return true
 	})
 	return nil

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"github.com/hdt3213/godis/interface/tcp"
 	"github.com/hdt3213/godis/lib/logger"
-	"github.com/hdt3213/godis/lib/sync/atomic"
 	"net"
 	"os"
 	"os/signal"
@@ -50,11 +49,9 @@ func ListenAndServeWithSignal(cfg *Config, handler tcp.Handler) error {
 // ListenAndServe binds port and handle requests, blocking until close
 func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan struct{}) {
 	// listen signal
-	var closing atomic.Boolean
 	go func() {
 		<-closeChan
 		logger.Info("shutting down...")
-		closing.Set(true)
 		_ = listener.Close() // listener.Accept() will return err immediately
 		_ = handler.Close()  // close connections
 	}()
@@ -70,13 +67,7 @@ func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			if closing.Get() {
-				logger.Info("waiting disconnect...")
-				waitDone.Wait()
-				return // handler will be closed by defer
-			}
-			logger.Error(fmt.Sprintf("accept err: %v", err))
-			continue
+			break
 		}
 		// handle
 		logger.Info("accept link")
@@ -88,4 +79,5 @@ func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan
 			handler.Handle(ctx, conn)
 		}()
 	}
+	waitDone.Wait()
 }

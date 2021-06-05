@@ -12,7 +12,7 @@ import (
 type Connection struct {
 	conn net.Conn
 
-	// waiting util reply finished
+	// waiting until reply finished
 	waitingReply wait.Wait
 
 	// lock while server sending response
@@ -50,7 +50,11 @@ func (c *Connection) Write(b []byte) error {
 		return nil
 	}
 	c.mu.Lock()
-	defer c.mu.Unlock()
+	c.waitingReply.Add(1)
+	defer func() {
+		c.waitingReply.Done()
+		c.mu.Unlock()
+	}()
 
 	_, err := c.conn.Write(b)
 	return err
