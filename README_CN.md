@@ -66,8 +66,11 @@ redis-cli -p 6399
 环境:
 
 Go version：1.16
+
 System: macOS Catalina 10.15.7
+
 CPU: 2.6GHz 6-Core Intel Core i7
+
 Memory: 16 GB 2667 MHz DDR4
 
 redis-benchmark 测试结果:

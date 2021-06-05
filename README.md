@@ -74,8 +74,11 @@ See: [commands.md](https://github.com/HDT3213/godis/blob/master/commands.md)
 Environment:
 
 Go version：1.16
+
 System: macOS Catalina 10.15.7
+
 CPU: 2.6GHz 6-Core Intel Core i7
+
 Memory: 16 GB 2667 MHz DDR4
 
 Performance report by redis-benchmark: 
