@@ -18,7 +18,7 @@ import (
 const (
 	dataDictSize = 1 << 16
 	ttlDictSize  = 1 << 10
-	lockerSize   = 128
+	lockerSize   = 1024
 	aofQueueSize = 1 << 16
 )
 

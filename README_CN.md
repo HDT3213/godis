@@ -4,14 +4,16 @@
 [![Build Status](https://travis-ci.org/HDT3213/godis.svg?branch=master)](https://travis-ci.org/HDT3213/godis)
 [![Coverage Status](https://coveralls.io/repos/github/HDT3213/godis/badge.svg?branch=master)](https://coveralls.io/github/HDT3213/godis?branch=master)
 [![Go Report Card](https://goreportcard.com/badge/github.com/HDT3213/godis)](https://goreportcard.com/report/github.com/HDT3213/godis)
+<br>
+[![Mentioned in Awesome Go](https://awesome.re/mentioned-badge-flat.svg)](https://github.com/avelino/awesome-go)
 
 Godis 是一个用 Go 语言实现的 Redis 服务器。本项目旨在为尝试使用 Go 语言开发高并发中间件的朋友提供一些参考。
 
-**请注意：不要在生产环境使用使用此项目**
-
 Godis 实现了 Redis 的大多数功能，包括5种数据结构、TTL、发布订阅、地理位置以及 AOF 持久化。
 
-Godis 支持集群模式，集群对客户端是透明的只要连接上集群中任意一个节点就可以访问集群中所有数据
+Godis 支持集群模式，集群对客户端是透明的只要连接上集群中任意一个节点就可以访问集群中所有数据。
+
+Godis 是并行工作的, 无需担心您的操作会阻塞整个服务器.
 
 可以在[我的博客](https://www.cnblogs.com/Finley/category/1598973.html)了解更多关于
 Godis 的信息。
@@ -31,7 +33,7 @@ godis 默认监听 0.0.0.0:6399，可以使用 redis-cli 或者其它 redis 客�
 
 ![](https://i.loli.net/2021/05/15/7WquEgonzY62sZI.png)
 
-godis 首先会从CONFIG环境变量中读取配置文件路径。若环境变量中未设置配置文件路径，则会读取工作目录中的 redis.conf 文件。若 redis.conf 文件不存在则会使用自带的默认配置。
+godis 首先会从CONFIG环境变量中读取配置文件路径。若环境变量中未设置配置文件路径，则会尝试读取工作目录中的 redis.conf 文件。 若 redis.conf 文件不存在则会使用自带的默认配置。
 
 ## 集群模式
 
@@ -57,126 +59,69 @@ redis-cli -p 6399
 
 ## 支持的命令
 
-- Keys
-    - del
-    - expire
-    - expireat
-    - pexpire
-    - pexpireat
-    - ttl
-    - pttl
-    - persist
-    - exists
-    - type
-    - rename
-    - renamenx
-- Server
-    - flushdb
-    - flushall
-    - keys
-    - bgrewriteaof
-- String
-    - set
-    - setnx
-    - setex
-    - psetex
-    - mset
-    - mget
-    - msetnx
-    - get
-    - getset
-    - incr
-    - incrby
-    - incrbyfloat
-    - decr
-    - decrby
-- List
-    - lpush
-    - lpushx
-    - rpush
-    - rpushx
-    - lpop
-    - rpop
-    - rpoplpush
-    - lrem
-    - llen
-    - lindex
-    - lset
-    - lrange
-- Hash
-    - hset
-    - hsetnx
-    - hget
-    - hexists
-    - hdel
-    - hlen
-    - hmget
-    - hmset
-    - hkeys
-    - hvals
-    - hgetall
-    - hincrby
-    - hincrbyfloat
-- Set
-    - sadd
-    - sismember
-    - srem
-    - scard
-    - smembers
-    - sinter
-    - sinterstore
-    - sunion
-    - sunionstore
-    - sdiff
-    - sdiffstore
-    - srandmember
-- SortedSet
-    - zadd
-    - zscore
-    - zincrby
-    - zrank
-    - zcount
-    - zrevrank
-    - zcard
-    - zrange
-    - zrevrange
-    - zrangebyscore
-    - zrevrangebyscore
-    - zrem
-    - zremrangebyscore
-    - zremrangebyrank
-- Pub / Sub
-    - publish
-    - subscribe
-    - unsubscribe
-- Geo
-    - GeoAdd
-    - GeoPos
-    - GeoDist
-    - GeoHash
-    - GeoRadius
-    - GeoRadiusByMember
+请参考 [commands.md](https://github.com/HDT3213/godis/blob/master/commands.md)
+
+## 性能测试
+
+环境:
+
+Go version：1.16
+System: macOS Catalina 10.15.7
+CPU: 2.6GHz 6-Core Intel Core i7
+Memory: 16 GB 2667 MHz DDR4
+
+redis-benchmark 测试结果:
+
+```
+PING_INLINE: 87260.03 requests per second
+PING_BULK: 89206.06 requests per second
+SET: 85034.02 requests per second
+GET: 87565.68 requests per second
+INCR: 91157.70 requests per second
+LPUSH: 90334.23 requests per second
+RPUSH: 90334.23 requests per second
+LPOP: 90334.23 requests per second
+RPOP: 90415.91 requests per second
+SADD: 90909.09 requests per second
+HSET: 84104.29 requests per second
+SPOP: 82918.74 requests per second
+LPUSH (needed to benchmark LRANGE): 78247.26 requests per second
+LRANGE_100 (first 100 elements): 26406.13 requests per second
+LRANGE_300 (first 300 elements): 11307.10 requests per second
+LRANGE_500 (first 450 elements): 7968.13 requests per second
+LRANGE_600 (first 600 elements): 6092.73 requests per second
+MSET (10 keys): 65487.89 requests per second
+```
+
+## 开发计划
+
++ [ ] `Multi` 命令
++ [ ] `Watch` 命令和 CAS 支持
++ [ ] Stream 队列 
++ [ ] 加载 RDB 文件
++ [ ] 主从模式
++ [ ] 哨兵
 
 ## 如何阅读源码
 
 本项目的目录结构:
 
-- cmd: main 函数，执行入口
-- config: 配置文件解析
-- interface: 一些模块间的接口定义
-- lib: 各种工具，比如logger、同步和通配符
+- github.com/hdt3213/godis/cmd: main 函数，执行入口
+- github.com/hdt3213/godis/config: 配置文件解析
+- github.com/hdt3213/godis/interface: 一些模块间的接口定义
+- github.com/hdt3213/godis/lib: 各种工具，比如logger、同步和通配符
 
 建议按照下列顺序阅读各包:
 
-- tcp: tcp 服务器实现
-- redis: redis 协议解析器
-- datastruct: redis 的各类数据结构实现
+- github.com/hdt3213/godis/tcp: tcp 服务器实现
+- github.com/hdt3213/godis/redis: redis 协议解析器
+- github.com/hdt3213/godis/datastruct: redis 的各类数据结构实现
     - dict: hash 表
     - list: 链表
     - lock: 用于锁定 key 的锁组件
     - set： 基于hash表的集合
     - sortedset: 基于跳表实现的有序集合
-- db: redis 存储引擎实现
+- github.com/hdt3213/godis: 存储引擎核心
     - db.go: 引擎的基础功能
     - router.go: 将命令路由给响应的处理函数
     - keys.go: del、ttl、expire 等通用命令实现

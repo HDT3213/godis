@@ -5,16 +5,20 @@
 [![Coverage Status](https://coveralls.io/repos/github/HDT3213/godis/badge.svg?branch=master)](https://coveralls.io/github/HDT3213/godis?branch=master)
 [![Go Report Card](https://goreportcard.com/badge/github.com/HDT3213/godis)](https://goreportcard.com/report/github.com/HDT3213/godis)
 [![Go Reference](https://pkg.go.dev/badge/github.com/hdt3213/godis.svg)](https://pkg.go.dev/github.com/hdt3213/godis)
+<br>
+[![Mentioned in Awesome Go](https://awesome.re/mentioned-badge-flat.svg)](https://github.com/avelino/awesome-go)
 
 [中文版](https://github.com/hdt3213/godis/blob/master/README_CN.md)
 
-`Godis` is a simple implementation of Redis Server, which intents to provide an example of writing a high concurrent
+`Godis` is a golang implementation of Redis Server, which intents to provide an example of writing a high concurrent
 middleware using golang.
 
-Gods implemented most features of redis, including 5 data structures, ttl, publish/subscribe, geo and AOF persistence.
+Godis implemented most features of redis, including 5 data structures, ttl, publish/subscribe, geo and AOF persistence.
 
 Godis can run as a server side cluster which is transparent to client. You can connect to any node in the cluster to
-access all data in the cluster:
+access all data in the cluster.
+
+Godis has a concurrent core, so you don't have to worry about your commands blocking the server too much. 
 
 If you could read Chinese, you can find more details in [My Blog](https://www.cnblogs.com/Finley/category/1598973.html).
 
@@ -61,132 +65,74 @@ Connect to a node in the cluster to access all data in the cluster:
 redis-cli -p 6399
 ```
 
-## Commands
+## Supported Commands
 
-Supported Commands:
+See: [commands.md](https://github.com/HDT3213/godis/blob/master/commands.md)
 
-- Keys
-    - del
-    - expire
-    - expireat
-    - pexpire
-    - pexpireat
-    - ttl
-    - pttl
-    - persist
-    - exists
-    - type
-    - rename
-    - renamenx
-- Server
-    - flushdb
-    - flushall
-    - keys
-    - bgrewriteaof
-- String
-    - set
-    - setnx
-    - setex
-    - psetex
-    - mset
-    - mget
-    - msetnx
-    - get
-    - getset
-    - incr
-    - incrby
-    - incrbyfloat
-    - decr
-    - decrby
-- List
-    - lpush
-    - lpushx
-    - rpush
-    - rpushx
-    - lpop
-    - rpop
-    - rpoplpush
-    - lrem
-    - llen
-    - lindex
-    - lset
-    - lrange
-- Hash
-    - hset
-    - hsetnx
-    - hget
-    - hexists
-    - hdel
-    - hlen
-    - hmget
-    - hmset
-    - hkeys
-    - hvals
-    - hgetall
-    - hincrby
-    - hincrbyfloat
-- Set
-    - sadd
-    - sismember
-    - srem
-    - scard
-    - smembers
-    - sinter
-    - sinterstore
-    - sunion
-    - sunionstore
-    - sdiff
-    - sdiffstore
-    - srandmember
-- SortedSet
-    - zadd
-    - zscore
-    - zincrby
-    - zrank
-    - zcount
-    - zrevrank
-    - zcard
-    - zrange
-    - zrevrange
-    - zrangebyscore
-    - zrevrangebyscore
-    - zrem
-    - zremrangebyscore
-    - zremrangebyrank
-- Pub / Sub
-    - publish
-    - subscribe
-    - unsubscribe
-- Geo
-    - GeoAdd
-    - GeoPos
-    - GeoDist
-    - GeoHash
-    - GeoRadius
-    - GeoRadiusByMember
+## Benchmark
 
-# Read My Code
+Environment:
+
+Go version：1.16
+System: macOS Catalina 10.15.7
+CPU: 2.6GHz 6-Core Intel Core i7
+Memory: 16 GB 2667 MHz DDR4
+
+Performance report by redis-benchmark: 
+
+```
+PING_INLINE: 87260.03 requests per second
+PING_BULK: 89206.06 requests per second
+SET: 85034.02 requests per second
+GET: 87565.68 requests per second
+INCR: 91157.70 requests per second
+LPUSH: 90334.23 requests per second
+RPUSH: 90334.23 requests per second
+LPOP: 90334.23 requests per second
+RPOP: 90415.91 requests per second
+SADD: 90909.09 requests per second
+HSET: 84104.29 requests per second
+SPOP: 82918.74 requests per second
+LPUSH (needed to benchmark LRANGE): 78247.26 requests per second
+LRANGE_100 (first 100 elements): 26406.13 requests per second
+LRANGE_300 (first 300 elements): 11307.10 requests per second
+LRANGE_500 (first 450 elements): 7968.13 requests per second
+LRANGE_600 (first 600 elements): 6092.73 requests per second
+MSET (10 keys): 65487.89 requests per second
+```
+
+## Todo List
+
++ [ ] `Multi` Command
++ [ ] `Watch` Command and CAS support
++ [ ] Stream support
++ [ ] RDB file loader
++ [ ] Master-Slave mode
++ [ ] Sentinel
+
+## Read My Code
 
 If you want to read my code in this repository, here is a simple guidance.
 
-- cmd: only the entry point
-- config: config parser
-- interface: some interface definitions
-- lib: some utils, such as logger, sync utils and wildcard
+- github.com/hdt3213/godis/cmd: only the entry point
+- github.com/hdt3213/godis/config: config parser
+- github.com/hdt3213/godis/interface: some interface definitions
+- github.com/hdt3213/godis/lib: some utils, such as logger, sync utils and wildcard
 
 I suggest focusing on the following directories:
 
-- tcp: the tcp server
-- redis: the redis protocol parser
-- datastruct: the implements of data structures
+- github.com/hdt3213/godis/tcp: the tcp server
+- github.com/hdt3213/godis/redis: the redis protocol parser
+- github.com/hdt3213/godis/datastruct: the implements of data structures
     - dict: a concurrent hash map
     - list: a linked list
     - lock: it is used to lock keys to ensure thread safety
     - set: a hash set based on map
     - sortedset: a sorted set implements based on skiplist
-- db: the implements of the redis db
+- github.com/hdt3213/godis: the core of storage engine
     - db.go: the basement of database
-    - router.go: it find handler for commands
+    - exec,go: the gateway of database
+    - router.go: the command table
     - keys.go: handlers for keys commands
     - string.go: handlers for string commands
     - list.go: handlers for list commands
@@ -195,6 +141,7 @@ I suggest focusing on the following directories:
     - sortedset.go: handlers for sorted set commands
     - pubsub.go: implements of publish / subscribe
     - aof.go: implements of AOF persistence and rewrite
+    - geo.go: implements of geography features
 
 # License
 
