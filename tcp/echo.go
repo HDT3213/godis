@@ -76,7 +76,7 @@ func (h *EchoHandler) Handle(ctx context.Context, conn net.Conn) {
 
 // Close stops echo handler
 func (h *EchoHandler) Close() error {
-	logger.Info("handler shuting down...")
+	logger.Info("handler shutting down...")
 	h.closing.Set(true)
 	// TODO: concurrent wait
 	h.activeConn.Range(func(key interface{}, val interface{}) bool {

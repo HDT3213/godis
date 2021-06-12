@@ -103,7 +103,7 @@ func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 
 // Close stops handler
 func (h *Handler) Close() error {
-	logger.Info("handler shuting down...")
+	logger.Info("handler shutting down...")
 	h.closing.Set(true)
 	// TODO: concurrent wait
 	h.activeConn.Range(func(key interface{}, val interface{}) bool {
