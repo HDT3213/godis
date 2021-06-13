@@ -105,7 +105,7 @@ func MakeStatusReply(status string) *StatusReply {
 
 // ToBytes marshal redis.Reply
 func (r *StatusReply) ToBytes() []byte {
-	return []byte("+" + r.Status + "\r\n")
+	return []byte("+" + r.Status + CRLF)
 }
 
 /* ---- Int Reply ---- */
@@ -154,7 +154,7 @@ func IsErrorReply(reply redis.Reply) bool {
 
 // ToBytes marshal redis.Reply
 func (r *StandardErrReply) ToBytes() []byte {
-	return []byte("-" + r.Status + "\r\n")
+	return []byte("-" + r.Status + CRLF)
 }
 
 func (r *StandardErrReply) Error() string {
