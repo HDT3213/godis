@@ -226,8 +226,7 @@ func parseBulkHeader(msg []byte, state *readState) error {
 }
 
 func parseSingleLineReply(msg []byte) (redis.Reply, error) {
-	str := strings.TrimSuffix(string(msg), "\n")
-	str = strings.TrimSuffix(str, "\r")
+	str := strings.TrimSuffix(string(msg), "\r\n")
 	var result redis.Reply
 	switch msg[0] {
 	case '+': // status reply
