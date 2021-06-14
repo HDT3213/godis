@@ -12,6 +12,7 @@ Godis 是一个用 Go 语言实现的 Redis 服务器。本项目旨在为尝试
 关键功能:
 - 支持 string, list, hash, set, sorted set 数据结构
 - 自动过期功能(TTL)
+- 发布订阅
 - 地理位置
 - AOF 持久化及AOF重写
 - 事务. Multi 命令开启的事务具有`原子性`和`隔离性`. 若在执行过程中遇到错误, godis 会回滚已执行的命令

@@ -17,7 +17,7 @@ Key Features:
 
 - support string, list, hash, set, sorted set
 - ttl
-- publish/suscribe
+- publish/subscribe
 - geo
 - aof and aof rewrite
 - Transaction. The `multi` command is Atomic and Isolated. If any errors are encountered during execution, godis will rollback the executed commands

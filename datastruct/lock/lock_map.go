@@ -127,6 +127,7 @@ func (locks *Locks) RUnLocks(keys ...string) {
 	}
 }
 
+// RWLocks locks write keys and read keys together. allow duplicate keys
 func (locks *Locks) RWLocks(writeKeys []string, readKeys []string) {
 	keys := append(writeKeys, readKeys...)
 	indices := locks.toLockIndices(keys, false)
@@ -146,6 +147,7 @@ func (locks *Locks) RWLocks(writeKeys []string, readKeys []string) {
 	}
 }
 
+// RWUnLocks unlocks write keys and read keys together. allow duplicate keys
 func (locks *Locks) RWUnLocks(writeKeys []string, readKeys []string) {
 	keys := append(writeKeys, readKeys...)
 	indices := locks.toLockIndices(keys, true)
