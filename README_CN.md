@@ -1,7 +1,7 @@
 # Godis
 
 ![license](https://img.shields.io/github/license/HDT3213/godis)
-[![Build Status](https://travis-ci.org/HDT3213/godis.svg?branch=master)](https://travis-ci.org/HDT3213/godis)
+[![Build Status](https://travis-ci.com/HDT3213/godis.svg?branch=master)](https://travis-ci.com/HDT3213/godis)
 [![Coverage Status](https://coveralls.io/repos/github/HDT3213/godis/badge.svg?branch=master)](https://coveralls.io/github/HDT3213/godis?branch=master)
 [![Go Report Card](https://goreportcard.com/badge/github.com/HDT3213/godis)](https://goreportcard.com/report/github.com/HDT3213/godis)
 <br>
