@@ -18,6 +18,7 @@ func execNormalCommand(db *DB, cmdArgs [][]byte) redis.Reply {
 
 	prepare := cmd.prepare
 	write, read := prepare(cmdArgs[1:])
+	db.addVersion(write...)
 	db.RWLocks(write, read)
 	defer db.RWUnLocks(write, read)
 	fun := cmd.executor

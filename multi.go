@@ -12,6 +12,37 @@ var forbiddenInMulti = set.Make(
 	"flushall",
 )
 
+// Watch set watching keys
+func Watch(db *DB, conn redis.Connection, args [][]byte) redis.Reply {
+	watching := conn.GetWatching()
+	for _, bkey := range args {
+		key := string(bkey)
+		watching[key] = db.GetVersion(key)
+	}
+	return reply.MakeOkReply()
+}
+
+func execGetVersion(db *DB, args [][]byte) redis.Reply {
+	key := string(args[0])
+	ver := db.GetVersion(key)
+	return reply.MakeIntReply(int64(ver))
+}
+
+func init() {
+	RegisterCommand("GetVer", execGetVersion, readAllKeys, nil, 2)
+}
+
+// invoker should lock watching keys
+func isWatchingChanged(db *DB, watching map[string]uint32) bool {
+	for key, ver := range watching {
+		currentVersion := db.GetVersion(key)
+		if ver != currentVersion {
+			return true
+		}
+	}
+	return false
+}
+
 // StartMulti starts multi-command-transaction
 func StartMulti(db *DB, conn redis.Connection) redis.Reply {
 	if conn.InMultiState() {
@@ -48,11 +79,11 @@ func execMulti(db *DB, conn redis.Connection) redis.Reply {
 	}
 	defer conn.SetMultiState(false)
 	cmdLines := conn.GetQueuedCmdLine()
-	return ExecMulti(db, cmdLines)
+	return ExecMulti(db, conn, conn.GetWatching(), cmdLines)
 }
 
 // ExecMulti executes multi commands transaction Atomically and Isolated
-func ExecMulti(db *DB, cmdLines []CmdLine) redis.Reply {
+func ExecMulti(db *DB, conn redis.Connection, watching map[string]uint32, cmdLines []CmdLine) redis.Reply {
 	// prepare
 	writeKeys := make([]string, 0) // may contains duplicate
 	readKeys := make([]string, 0)
@@ -64,9 +95,18 @@ func ExecMulti(db *DB, cmdLines []CmdLine) redis.Reply {
 		writeKeys = append(writeKeys, write...)
 		readKeys = append(readKeys, read...)
 	}
+	// set watch
+	watchingKeys := make([]string, 0, len(watching))
+	for key := range watching {
+		watchingKeys = append(watchingKeys, key)
+	}
+	readKeys = append(readKeys, watchingKeys...)
 	db.RWLocks(writeKeys, readKeys)
 	defer db.RWUnLocks(writeKeys, readKeys)
 
+	if isWatchingChanged(db, watching) { // watching keys changed, abort
+		return reply.MakeEmptyMultiBulkReply()
+	}
 	// execute
 	results := make([]redis.Reply, 0, len(cmdLines))
 	aborted := false
@@ -82,7 +122,8 @@ func ExecMulti(db *DB, cmdLines []CmdLine) redis.Reply {
 		}
 		results = append(results, result)
 	}
-	if !aborted {
+	if !aborted { //success
+		db.addVersion(writeKeys...)
 		return reply.MakeMultiRawReply(results)
 	}
 	// undo if aborted

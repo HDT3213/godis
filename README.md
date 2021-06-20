@@ -114,8 +114,8 @@ MSET (10 keys): 65487.89 requests per second
 
 ## Todo List
 
-+ [ ] `Multi` Command
-+ [ ] `Watch` Command and CAS support
++ [x] `Multi` Command
++ [x] `Watch` Command and CAS support
 + [ ] Stream support
 + [ ] RDB file loader
 + [ ] Master-Slave mode

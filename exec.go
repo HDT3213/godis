@@ -71,6 +71,11 @@ func execSpecialCmd(c redis.Connection, cmdLine [][]byte, cmdName string, db *DB
 			return reply.MakeArgNumErrReply(cmdName), true
 		}
 		return execMulti(db, c), true
+	} else if cmdName == "watch" {
+		if !validateArity(-2, cmdLine) {
+			return reply.MakeArgNumErrReply(cmdName), true
+		}
+		return Watch(db, c, cmdLine[1:]), true
 	}
 	return nil, false
 }

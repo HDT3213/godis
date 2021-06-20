@@ -7,8 +7,9 @@ import (
 
 func makeTestDB() *DB {
 	return &DB{
-		data:   dict.MakeConcurrent(1),
-		ttlMap: dict.MakeConcurrent(ttlDictSize),
-		locker: lock.Make(lockerSize),
+		data:       dict.MakeConcurrent(dataDictSize),
+		versionMap: dict.MakeConcurrent(dataDictSize),
+		ttlMap:     dict.MakeConcurrent(ttlDictSize),
+		locker:     lock.Make(lockerSize),
 	}
 }

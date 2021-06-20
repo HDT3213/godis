@@ -50,24 +50,63 @@ func TestMultiExecOnOthers(t *testing.T) {
 	testCluster.Exec(conn, utils.ToCmdLine("lrange", key, "0", "-1"))
 
 	cmdLines := conn.GetQueuedCmdLine()
-	relayCmdLine := [][]byte{ // relay it to executing node
-		relayMultiBytes,
-	}
-	relayCmdLine = append(relayCmdLine, encodeCmdLine(cmdLines)...)
-	rawRelayResult := execRelayedMulti(testCluster, conn, relayCmdLine)
-	if reply.IsErrorReply(rawRelayResult) {
-		t.Error()
-	}
-	relayResult, ok := rawRelayResult.(*reply.MultiBulkReply)
-	if !ok {
-		t.Error()
-	}
-	rep, err := parseEncodedMultiRawReply(relayResult.Args)
-	if err != nil {
-		t.Error()
-	}
+	rawResp := execMultiOnOtherNode(testCluster, conn, testCluster.self, nil, cmdLines)
+	rep := rawResp.(*reply.MultiRawReply)
 	if len(rep.Replies) != 2 {
 		t.Errorf("expect 2 replies actual %d", len(rep.Replies))
 	}
 	asserts.AssertMultiBulkReply(t, rep.Replies[1], []string{value})
+}
+
+func TestWatch(t *testing.T) {
+	testCluster.db.Flush()
+	conn := new(connection.FakeConn)
+	key := utils.RandString(10)
+	value := utils.RandString(10)
+	testCluster.Exec(conn, utils.ToCmdLine("watch", key))
+	testCluster.Exec(conn, utils.ToCmdLine("set", key, value))
+	result := testCluster.Exec(conn, toArgs("MULTI"))
+	asserts.AssertNotError(t, result)
+	key2 := utils.RandString(10)
+	value2 := utils.RandString(10)
+	testCluster.Exec(conn, utils.ToCmdLine("set", key2, value2))
+	result = testCluster.Exec(conn, utils.ToCmdLine("exec"))
+	asserts.AssertNotError(t, result)
+	result = testCluster.Exec(conn, utils.ToCmdLine("get", key2))
+	asserts.AssertNullBulk(t, result)
+
+	testCluster.Exec(conn, utils.ToCmdLine("watch", key))
+	result = testCluster.Exec(conn, toArgs("MULTI"))
+	asserts.AssertNotError(t, result)
+	testCluster.Exec(conn, utils.ToCmdLine("set", key2, value2))
+	result = testCluster.Exec(conn, utils.ToCmdLine("exec"))
+	asserts.AssertNotError(t, result)
+	result = testCluster.Exec(conn, utils.ToCmdLine("get", key2))
+	asserts.AssertBulkReply(t, result, value2)
+}
+
+func TestWatch2(t *testing.T) {
+	testCluster.db.Flush()
+	conn := new(connection.FakeConn)
+	key := utils.RandString(10)
+	value := utils.RandString(10)
+	testCluster.Exec(conn, utils.ToCmdLine("watch", key))
+	testCluster.Exec(conn, utils.ToCmdLine("set", key, value))
+	result := testCluster.Exec(conn, toArgs("MULTI"))
+	asserts.AssertNotError(t, result)
+	key2 := utils.RandString(10)
+	value2 := utils.RandString(10)
+	testCluster.Exec(conn, utils.ToCmdLine("set", key2, value2))
+	cmdLines := conn.GetQueuedCmdLine()
+	execMultiOnOtherNode(testCluster, conn, testCluster.self, conn.GetWatching(), cmdLines)
+	result = testCluster.Exec(conn, utils.ToCmdLine("get", key2))
+	asserts.AssertNullBulk(t, result)
+
+	testCluster.Exec(conn, utils.ToCmdLine("watch", key))
+	result = testCluster.Exec(conn, toArgs("MULTI"))
+	asserts.AssertNotError(t, result)
+	testCluster.Exec(conn, utils.ToCmdLine("set", key2, value2))
+	execMultiOnOtherNode(testCluster, conn, testCluster.self, conn.GetWatching(), cmdLines)
+	result = testCluster.Exec(conn, utils.ToCmdLine("get", key2))
+	asserts.AssertBulkReply(t, result, value2)
 }
