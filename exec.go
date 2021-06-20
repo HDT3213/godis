@@ -36,7 +36,7 @@ func (db *DB) Exec(c redis.Connection, cmdLine [][]byte) (result redis.Reply) {
 		return result
 	}
 	if c != nil && c.InMultiState() {
-		return enqueueCmd(db, c, cmdLine)
+		return EnqueueCmd(db, c, cmdLine)
 	}
 
 	// normal commands
@@ -60,12 +60,12 @@ func execSpecialCmd(c redis.Connection, cmdLine [][]byte, cmdName string, db *DB
 		if len(cmdLine) != 1 {
 			return reply.MakeArgNumErrReply(cmdName), true
 		}
-		return startMulti(db, c), true
+		return StartMulti(db, c), true
 	} else if cmdName == "discard" {
 		if len(cmdLine) != 1 {
 			return reply.MakeArgNumErrReply(cmdName), true
 		}
-		return discardMulti(db, c), true
+		return DiscardMulti(db, c), true
 	} else if cmdName == "exec" {
 		if len(cmdLine) != 1 {
 			return reply.MakeArgNumErrReply(cmdName), true

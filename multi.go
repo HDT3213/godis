@@ -1,12 +1,19 @@
 package godis
 
 import (
+	"github.com/hdt3213/godis/datastruct/set"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/redis/reply"
 	"strings"
 )
 
-func startMulti(db *DB, conn redis.Connection) redis.Reply {
+var forbiddenInMulti = set.Make(
+	"flushdb",
+	"flushall",
+)
+
+// StartMulti starts multi-command-transaction
+func StartMulti(db *DB, conn redis.Connection) redis.Reply {
 	if conn.InMultiState() {
 		return reply.MakeErrReply("ERR MULTI calls can not be nested")
 	}
@@ -14,11 +21,15 @@ func startMulti(db *DB, conn redis.Connection) redis.Reply {
 	return reply.MakeOkReply()
 }
 
-func enqueueCmd(db *DB, conn redis.Connection, cmdLine [][]byte) redis.Reply {
+// EnqueueCmd puts command line into `multi` pending queue
+func EnqueueCmd(db *DB, conn redis.Connection, cmdLine [][]byte) redis.Reply {
 	cmdName := strings.ToLower(string(cmdLine[0]))
 	cmd, ok := cmdTable[cmdName]
 	if !ok {
 		return reply.MakeErrReply("ERR unknown command '" + cmdName + "'")
+	}
+	if forbiddenInMulti.Has(cmdName) {
+		return reply.MakeErrReply("ERR command '" + cmdName + "' cannot be used in MULTI")
 	}
 	if cmd.prepare == nil {
 		return reply.MakeErrReply("ERR command '" + cmdName + "' cannot be used in MULTI")
@@ -37,7 +48,11 @@ func execMulti(db *DB, conn redis.Connection) redis.Reply {
 	}
 	defer conn.SetMultiState(false)
 	cmdLines := conn.GetQueuedCmdLine()
+	return ExecMulti(db, cmdLines)
+}
 
+// ExecMulti executes multi commands transaction Atomically and Isolated
+func ExecMulti(db *DB, cmdLines []CmdLine) redis.Reply {
 	// prepare
 	writeKeys := make([]string, 0) // may contains duplicate
 	readKeys := make([]string, 0)
@@ -53,7 +68,7 @@ func execMulti(db *DB, conn redis.Connection) redis.Reply {
 	defer db.RWUnLocks(writeKeys, readKeys)
 
 	// execute
-	results := make([][]byte, 0, len(cmdLines))
+	results := make([]redis.Reply, 0, len(cmdLines))
 	aborted := false
 	undoCmdLines := make([][]CmdLine, 0, len(cmdLines))
 	for _, cmdLine := range cmdLines {
@@ -65,7 +80,7 @@ func execMulti(db *DB, conn redis.Connection) redis.Reply {
 			undoCmdLines = undoCmdLines[:len(undoCmdLines)-1]
 			break
 		}
-		results = append(results, result.ToBytes())
+		results = append(results, result)
 	}
 	if !aborted {
 		return reply.MakeMultiRawReply(results)
@@ -84,7 +99,8 @@ func execMulti(db *DB, conn redis.Connection) redis.Reply {
 	return reply.MakeErrReply("EXECABORT Transaction discarded because of previous errors.")
 }
 
-func discardMulti(db *DB, conn redis.Connection) redis.Reply {
+// DiscardMulti drops MULTI pending commands
+func DiscardMulti(db *DB, conn redis.Connection) redis.Reply {
 	if !conn.InMultiState() {
 		return reply.MakeErrReply("ERR DISCARD without MULTI")
 	}

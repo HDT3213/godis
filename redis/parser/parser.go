@@ -26,6 +26,27 @@ func ParseStream(reader io.Reader) <-chan *Payload {
 	return ch
 }
 
+// ParseBytes reads data from []byte and return all replies
+func ParseBytes(data []byte) ([]redis.Reply, error) {
+	ch := make(chan *Payload)
+	reader := bytes.NewReader(data)
+	go parse0(reader, ch)
+	var results []redis.Reply
+	for payload := range ch {
+		if payload == nil {
+			return nil, errors.New("no reply")
+		}
+		if payload.Err != nil {
+			if payload.Err == io.EOF {
+				break
+			}
+			return nil, payload.Err
+		}
+		results = append(results, payload.Data)
+	}
+	return results, nil
+}
+
 // ParseOne reads data from []byte and return the first payload
 func ParseOne(data []byte) (redis.Reply, error) {
 	ch := make(chan *Payload)

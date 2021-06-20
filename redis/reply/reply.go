@@ -68,23 +68,23 @@ func (r *MultiBulkReply) ToBytes() []byte {
 
 // MultiRawReply store complex list structure, for example GeoPos command
 type MultiRawReply struct {
-	Args [][]byte
+	Replies []redis.Reply
 }
 
 // MakeMultiRawReply creates MultiRawReply
-func MakeMultiRawReply(args [][]byte) *MultiRawReply {
+func MakeMultiRawReply(replies []redis.Reply) *MultiRawReply {
 	return &MultiRawReply{
-		Args: args,
+		Replies: replies,
 	}
 }
 
 // ToBytes marshal redis.Reply
 func (r *MultiRawReply) ToBytes() []byte {
-	argLen := len(r.Args)
+	argLen := len(r.Replies)
 	var buf bytes.Buffer
 	buf.WriteString("*" + strconv.Itoa(argLen) + CRLF)
-	for _, arg := range r.Args {
-		buf.Write(arg)
+	for _, arg := range r.Replies {
+		buf.Write(arg.ToBytes())
 	}
 	return buf.Bytes()
 }
