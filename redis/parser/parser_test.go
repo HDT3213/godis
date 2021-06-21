@@ -2,11 +2,12 @@ package parser
 
 import (
 	"bytes"
+	"io"
+	"testing"
+
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/reply"
-	"io"
-	"testing"
 )
 
 func TestParseStream(t *testing.T) {
@@ -18,7 +19,7 @@ func TestParseStream(t *testing.T) {
 		reply.MakeNullBulkReply(),
 		reply.MakeMultiBulkReply([][]byte{
 			[]byte("a"),
-			[]byte("\r\n"),
+			[]byte(reply.CRLF),
 		}),
 		reply.MakeEmptyMultiBulkReply(),
 	}
@@ -64,7 +65,7 @@ func TestParseOne(t *testing.T) {
 		reply.MakeNullBulkReply(),
 		reply.MakeMultiBulkReply([][]byte{
 			[]byte("a"),
-			[]byte("\r\n"),
+			[]byte(reply.CRLF),
 		}),
 		reply.MakeEmptyMultiBulkReply(),
 	}

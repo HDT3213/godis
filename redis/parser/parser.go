@@ -4,13 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
-	"github.com/hdt3213/godis/interface/redis"
-	"github.com/hdt3213/godis/lib/logger"
-	"github.com/hdt3213/godis/redis/reply"
 	"io"
 	"runtime/debug"
 	"strconv"
 	"strings"
+
+	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/lib/logger"
+	"github.com/hdt3213/godis/redis/reply"
 )
 
 // Payload stores redis.Reply or error
@@ -244,7 +245,7 @@ func parseBulkHeader(msg []byte, state *readState) error {
 }
 
 func parseSingleLineReply(msg []byte) (redis.Reply, error) {
-	str := strings.TrimSuffix(string(msg), "\r\n")
+	str := strings.TrimSuffix(string(msg), reply.CRLF)
 	var result redis.Reply
 	switch msg[0] {
 	case '+': // status reply

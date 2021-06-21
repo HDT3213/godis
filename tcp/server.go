@@ -7,14 +7,15 @@ package tcp
 import (
 	"context"
 	"fmt"
-	"github.com/hdt3213/godis/interface/tcp"
-	"github.com/hdt3213/godis/lib/logger"
 	"net"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/hdt3213/godis/interface/tcp"
+	"github.com/hdt3213/godis/lib/logger"
 )
 
 // Config stores tcp server properties
