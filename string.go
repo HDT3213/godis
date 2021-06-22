@@ -1,12 +1,14 @@
 package godis
 
 import (
-	"github.com/hdt3213/godis/interface/redis"
-	"github.com/hdt3213/godis/redis/reply"
-	"github.com/shopspring/decimal"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/redis/reply"
+	"github.com/shopspring/decimal"
 )
 
 func (db *DB) getAsString(key string) ([]byte, reply.ErrorReply) {
@@ -473,6 +475,20 @@ func execDecrBy(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(-delta)
 }
 
+// execLen returns len of string value bound to the given key
+func execLen(db *DB, args [][]byte) redis.Reply {
+	key := string(args[0])
+	bytes, err := db.getAsString(key)
+	if err != nil {
+		return err
+	}
+	if bytes == nil {
+		return &reply.NullBulkReply{}
+	}
+	str := fmt.Sprintf("%s", bytes)
+	return reply.MakeIntReply(int64(len(str)))
+}
+
 func init() {
 	RegisterCommand("Set", execSet, writeFirstKey, rollbackFirstKey, -3)
 	RegisterCommand("SetNx", execSetNX, writeFirstKey, rollbackFirstKey, 3)
@@ -488,4 +504,5 @@ func init() {
 	RegisterCommand("IncrByFloat", execIncrByFloat, writeFirstKey, rollbackFirstKey, 3)
 	RegisterCommand("Decr", execDecr, writeFirstKey, rollbackFirstKey, 2)
 	RegisterCommand("DecrBy", execDecrBy, writeFirstKey, rollbackFirstKey, 3)
+	RegisterCommand("Len", execLen, readFirstKey, nil, 2)
 }

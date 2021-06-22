@@ -2,11 +2,12 @@ package godis
 
 import (
 	"fmt"
+	"strconv"
+	"testing"
+
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/reply"
 	"github.com/hdt3213/godis/redis/reply/asserts"
-	"strconv"
-	"testing"
 )
 
 var testDB = makeTestDB()
@@ -314,4 +315,18 @@ func TestMSetNX(t *testing.T) {
 
 	result = testDB.Exec(nil, utils.ToCmdLine2("MSETNX", args[0:4]...))
 	asserts.AssertIntReply(t, result, 0)
+}
+
+func TestLen(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	testDB.Exec(nil, utils.ToCmdLine2("SET", key, key))
+
+	actual := testDB.Exec(nil, utils.ToCmdLine("Len", key))
+	len, ok := actual.(*reply.IntReply)
+	if !ok {
+		t.Errorf("expect int bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+	asserts.AssertIntReply(t, len, 10)
 }
