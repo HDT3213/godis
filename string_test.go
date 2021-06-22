@@ -330,3 +330,17 @@ func TestLen(t *testing.T) {
 	}
 	asserts.AssertIntReply(t, len, 10)
 }
+
+func TestLen_KeyNotExist(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+
+	actual := testDB.Exec(nil, utils.ToCmdLine("Len", key))
+	result, ok := actual.(*reply.NullBulkReply)
+	if !ok {
+		t.Errorf("expect null bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+
+	asserts.AssertNullBulk(t, result)
+}
