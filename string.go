@@ -1,7 +1,6 @@
 package godis
 
 import (
-	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -476,17 +475,16 @@ func execDecrBy(db *DB, args [][]byte) redis.Reply {
 }
 
 // execLen returns len of string value bound to the given key
-func execLen(db *DB, args [][]byte) redis.Reply {
+func execStrLen(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	bytes, err := db.getAsString(key)
 	if err != nil {
 		return err
 	}
 	if bytes == nil {
-		return &reply.NullBulkReply{}
+		return reply.MakeIntReply(0)
 	}
-	str := fmt.Sprintf("%s", bytes)
-	return reply.MakeIntReply(int64(len(str)))
+	return reply.MakeIntReply(int64(len(bytes)))
 }
 
 // execSet sets string value and time to live to the given key
@@ -498,14 +496,12 @@ func execAppend(db *DB, args [][]byte) redis.Reply {
 	if err != nil {
 		return err
 	}
+
 	if bytes != nil {
 		value = append(bytes, value...)
+		args[1] = value
 	}
-	db.PutEntity(key, &DataEntity{
-		Data: value,
-	})
-	db.AddAof(makeAofCmd("append", args))
-	return &reply.BulkReply{Arg: value}
+	return execSet(db, args)
 }
 
 func init() {
@@ -523,6 +519,6 @@ func init() {
 	RegisterCommand("IncrByFloat", execIncrByFloat, writeFirstKey, rollbackFirstKey, 3)
 	RegisterCommand("Decr", execDecr, writeFirstKey, rollbackFirstKey, 2)
 	RegisterCommand("DecrBy", execDecrBy, writeFirstKey, rollbackFirstKey, 3)
-	RegisterCommand("Len", execLen, readFirstKey, nil, 2)
+	RegisterCommand("StrLen", execStrLen, readFirstKey, nil, 2)
 	RegisterCommand("Append", execAppend, writeFirstKey, rollbackFirstKey, 3)
 }

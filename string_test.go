@@ -317,12 +317,12 @@ func TestMSetNX(t *testing.T) {
 	asserts.AssertIntReply(t, result, 0)
 }
 
-func TestLen(t *testing.T) {
+func TestStrLen(t *testing.T) {
 	testDB.Flush()
 	key := utils.RandString(10)
 	testDB.Exec(nil, utils.ToCmdLine2("SET", key, key))
 
-	actual := testDB.Exec(nil, utils.ToCmdLine("Len", key))
+	actual := testDB.Exec(nil, utils.ToCmdLine("StrLen", key))
 	len, ok := actual.(*reply.IntReply)
 	if !ok {
 		t.Errorf("expect int bulk reply, get: %s", string(actual.ToBytes()))
@@ -331,18 +331,18 @@ func TestLen(t *testing.T) {
 	asserts.AssertIntReply(t, len, 10)
 }
 
-func TestLen_KeyNotExist(t *testing.T) {
+func TestStrLen_KeyNotExist(t *testing.T) {
 	testDB.Flush()
 	key := utils.RandString(10)
 
-	actual := testDB.Exec(nil, utils.ToCmdLine("Len", key))
-	result, ok := actual.(*reply.NullBulkReply)
+	actual := testDB.Exec(nil, utils.ToCmdLine("StrLen", key))
+	result, ok := actual.(*reply.IntReply)
 	if !ok {
 		t.Errorf("expect null bulk reply, get: %s", string(actual.ToBytes()))
 		return
 	}
 
-	asserts.AssertNullBulk(t, result)
+	asserts.AssertIntReply(t, result, 0)
 }
 
 func TestAppend_KeyExist(t *testing.T) {
@@ -352,12 +352,12 @@ func TestAppend_KeyExist(t *testing.T) {
 	testDB.Exec(nil, utils.ToCmdLine2("SET", key, key))
 
 	actual := testDB.Exec(nil, utils.ToCmdLine("Append", key, key2))
-	val, ok := actual.(*reply.BulkReply)
+	val, ok := actual.(*reply.OkReply)
 	if !ok {
 		t.Errorf("expect nil bulk reply, get: %s", string(actual.ToBytes()))
 		return
 	}
-	asserts.AssertBulkReply(t, val, key+key2)
+	asserts.AssertStatusReply(t, val, "OK")
 }
 
 func TestAppend_KeyNotExist(t *testing.T) {
@@ -365,10 +365,10 @@ func TestAppend_KeyNotExist(t *testing.T) {
 	key := utils.RandString(10)
 
 	actual := testDB.Exec(nil, utils.ToCmdLine("Append", key, key))
-	val, ok := actual.(*reply.BulkReply)
+	val, ok := actual.(*reply.OkReply)
 	if !ok {
 		t.Errorf("expect nil bulk reply, get: %s", string(actual.ToBytes()))
 		return
 	}
-	asserts.AssertBulkReply(t, val, key)
+	asserts.AssertStatusReply(t, val, "OK")
 }
