@@ -489,6 +489,25 @@ func execLen(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(len(str)))
 }
 
+// execSet sets string value and time to live to the given key
+func execAppend(db *DB, args [][]byte) redis.Reply {
+	key := string(args[0])
+	value := args[1]
+
+	bytes, err := db.getAsString(key)
+	if err != nil {
+		return err
+	}
+	if bytes != nil {
+		value = append(bytes, value...)
+	}
+	db.PutEntity(key, &DataEntity{
+		Data: value,
+	})
+	db.AddAof(makeAofCmd("append", args))
+	return &reply.BulkReply{Arg: value}
+}
+
 func init() {
 	RegisterCommand("Set", execSet, writeFirstKey, rollbackFirstKey, -3)
 	RegisterCommand("SetNx", execSetNX, writeFirstKey, rollbackFirstKey, 3)
@@ -505,4 +524,5 @@ func init() {
 	RegisterCommand("Decr", execDecr, writeFirstKey, rollbackFirstKey, 2)
 	RegisterCommand("DecrBy", execDecrBy, writeFirstKey, rollbackFirstKey, 3)
 	RegisterCommand("Len", execLen, readFirstKey, nil, 2)
+	RegisterCommand("Append", execAppend, writeFirstKey, rollbackFirstKey, 3)
 }

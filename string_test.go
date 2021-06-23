@@ -344,3 +344,31 @@ func TestLen_KeyNotExist(t *testing.T) {
 
 	asserts.AssertNullBulk(t, result)
 }
+
+func TestAppend_KeyExist(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	key2 := utils.RandString(10)
+	testDB.Exec(nil, utils.ToCmdLine2("SET", key, key))
+
+	actual := testDB.Exec(nil, utils.ToCmdLine("Append", key, key2))
+	val, ok := actual.(*reply.BulkReply)
+	if !ok {
+		t.Errorf("expect nil bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+	asserts.AssertBulkReply(t, val, key+key2)
+}
+
+func TestAppend_KeyNotExist(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+
+	actual := testDB.Exec(nil, utils.ToCmdLine("Append", key, key))
+	val, ok := actual.(*reply.BulkReply)
+	if !ok {
+		t.Errorf("expect nil bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+	asserts.AssertBulkReply(t, val, key)
+}
