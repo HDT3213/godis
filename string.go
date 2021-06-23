@@ -1,13 +1,12 @@
 package godis
 
 import (
-	"strconv"
-	"strings"
-	"time"
-
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/redis/reply"
 	"github.com/shopspring/decimal"
+	"strconv"
+	"strings"
+	"time"
 )
 
 func (db *DB) getAsString(key string) ([]byte, reply.ErrorReply) {
