@@ -91,25 +91,45 @@ func isAuthenticated(c redis.Connection) bool {
 }
 
 // Exec executes command on cluster
-func (cluster *Cluster) Exec(c redis.Connection, cmdArgs [][]byte) (result redis.Reply) {
+func (cluster *Cluster) Exec(c redis.Connection, cmdLine [][]byte) (result redis.Reply) {
 	defer func() {
 		if err := recover(); err != nil {
 			logger.Warn(fmt.Sprintf("error occurs: %v\n%s", err, string(debug.Stack())))
 			result = &reply.UnknownErrReply{}
 		}
 	}()
-	cmd := strings.ToLower(string(cmdArgs[0]))
-	if cmd == "auth" {
-		return godis.Auth(cluster.db, c, cmdArgs[1:])
+	cmdName := strings.ToLower(string(cmdLine[0]))
+	if cmdName == "auth" {
+		return godis.Auth(cluster.db, c, cmdLine[1:])
 	}
 	if !isAuthenticated(c) {
 		return reply.MakeErrReply("NOAUTH Authentication required")
 	}
-	cmdFunc, ok := router[cmd]
-	if !ok {
-		return reply.MakeErrReply("ERR unknown command '" + cmd + "', or not supported in cluster mode")
+
+	if cmdName == "multi" {
+		if len(cmdLine) != 1 {
+			return reply.MakeArgNumErrReply(cmdName)
+		}
+		return godis.StartMulti(cluster.db, c)
+	} else if cmdName == "discard" {
+		if len(cmdLine) != 1 {
+			return reply.MakeArgNumErrReply(cmdName)
+		}
+		return godis.DiscardMulti(cluster.db, c)
+	} else if cmdName == "exec" {
+		if len(cmdLine) != 1 {
+			return reply.MakeArgNumErrReply(cmdName)
+		}
+		return execMulti(cluster, c, nil)
 	}
-	result = cmdFunc(cluster, c, cmdArgs)
+	if c != nil && c.InMultiState() {
+		return godis.EnqueueCmd(cluster.db, c, cmdLine)
+	}
+	cmdFunc, ok := router[cmdName]
+	if !ok {
+		return reply.MakeErrReply("ERR unknown command '" + cmdName + "', or not supported in cluster mode")
+	}
+	result = cmdFunc(cluster, c, cmdLine)
 	return
 }
 

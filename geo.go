@@ -82,12 +82,12 @@ func execGeoPos(db *DB, args [][]byte) redis.Reply {
 		return &reply.NullBulkReply{}
 	}
 
-	positions := make([][]byte, len(args)-1)
+	positions := make([]redis.Reply, len(args)-1)
 	for i := 0; i < len(args)-1; i++ {
 		member := string(args[i+1])
 		elem, exists := sortedSet.Get(member)
 		if !exists {
-			positions[i] = (&reply.EmptyMultiBulkReply{}).ToBytes()
+			positions[i] = (&reply.EmptyMultiBulkReply{})
 			continue
 		}
 		lat, lng := geohash.Decode(uint64(elem.Score))
@@ -95,7 +95,7 @@ func execGeoPos(db *DB, args [][]byte) redis.Reply {
 		latStr := strconv.FormatFloat(lat, 'f', -1, 64)
 		positions[i] = reply.MakeMultiBulkReply([][]byte{
 			[]byte(lngStr), []byte(latStr),
-		}).ToBytes()
+		})
 	}
 	return reply.MakeMultiRawReply(positions)
 }

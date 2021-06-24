@@ -109,7 +109,9 @@ func makeRouter() map[string]CmdFunc {
 
 	routerMap["flushdb"] = FlushDB
 	routerMap["flushall"] = FlushAll
-	//routerMap["writeKeys"] = Keys
+	routerMap[relayMulti] = execRelayedMulti
+	routerMap["getver"] = defaultFunc
+	routerMap["watch"] = execWatch
 
 	return routerMap
 }

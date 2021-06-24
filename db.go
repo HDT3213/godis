@@ -28,6 +28,8 @@ type DB struct {
 	data dict.Dict
 	// key -> expireTime (time.Time)
 	ttlMap dict.Dict
+	// key -> version(uint32)
+	versionMap dict.Dict
 
 	// dict.Dict will ensure concurrent-safety of its method
 	// use this mutex for complicated command only, eg. rpush, incr ...
@@ -72,10 +74,11 @@ type UndoFunc func(db *DB, args [][]byte) []CmdLine
 // MakeDB create DB instance and start it
 func MakeDB() *DB {
 	db := &DB{
-		data:   dict.MakeConcurrent(dataDictSize),
-		ttlMap: dict.MakeConcurrent(ttlDictSize),
-		locker: lock.Make(lockerSize),
-		hub:    pubsub.MakeHub(),
+		data:       dict.MakeConcurrent(dataDictSize),
+		ttlMap:     dict.MakeConcurrent(ttlDictSize),
+		versionMap: dict.MakeConcurrent(dataDictSize),
+		locker:     lock.Make(lockerSize),
+		hub:        pubsub.MakeHub(),
 	}
 
 	// aof
@@ -247,6 +250,23 @@ func (db *DB) IsExpired(key string) bool {
 		db.Remove(key)
 	}
 	return expired
+}
+
+/* --- add version --- */
+
+func (db *DB) addVersion(keys ...string) {
+	for _, key := range keys {
+		versionCode := db.GetVersion(key)
+		db.versionMap.Put(key, versionCode+1)
+	}
+}
+
+func (db *DB) GetVersion(key string) uint32 {
+	entity, ok := db.versionMap.Get(key)
+	if !ok {
+		return 0
+	}
+	return entity.(uint32)
 }
 
 /* ---- Subscribe Functions ---- */

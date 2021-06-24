@@ -18,4 +18,5 @@ type Connection interface {
 	GetQueuedCmdLine() [][][]byte
 	EnqueueCmd([][]byte)
 	ClearQueuedCmds()
+	GetWatching() map[string]uint32
 }

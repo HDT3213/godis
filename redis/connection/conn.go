@@ -27,6 +27,7 @@ type Connection struct {
 	// queued commands for `multi`
 	multiState bool
 	queue      [][][]byte
+	watching   map[string]uint32
 }
 
 // RemoteAddr returns the remote network address
@@ -120,6 +121,10 @@ func (c *Connection) InMultiState() bool {
 }
 
 func (c *Connection) SetMultiState(state bool) {
+	if !state { // reset data when cancel multi
+		c.watching = nil
+		c.queue = nil
+	}
 	c.multiState = state
 }
 
@@ -133,6 +138,13 @@ func (c *Connection) EnqueueCmd(cmdLine [][]byte) {
 
 func (c *Connection) ClearQueuedCmds() {
 	c.queue = nil
+}
+
+func (c *Connection) GetWatching() map[string]uint32 {
+	if c.watching == nil {
+		c.watching = make(map[string]uint32)
+	}
+	return c.watching
 }
 
 // FakeConn implements redis.Connection for test
