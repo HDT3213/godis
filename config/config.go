@@ -101,6 +101,8 @@ func Setup(configFilename string) {
 	if configFilename == "" {
 		if defaultConfigFileExists() {
 			configFilename = DefaultConfPath
+		} else {
+			return
 		}
 	}
 	file, err := os.Open(configFilename)
