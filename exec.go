@@ -55,10 +55,8 @@ func execSpecialCmd(c redis.Connection, cmdLine [][]byte, cmdName string, db *DB
 	case "unsubscribe":
 		return pubsub.UnSubscribe(db.hub, c, cmdLine[1:]), true
 	case "bgrewriteaof":
-		if len(cmdLine) != 1 {
-			return reply.MakeArgNumErrReply(cmdName), true
-		}
-		return StartMulti(db, c), true
+		// aof.go imports router.go, router.go cannot import BGRewriteAOF from aof.go
+		return BGRewriteAOF(db, cmdLine[1:]), true
 	case "multi":
 		if len(cmdLine) != 1 {
 			return reply.MakeArgNumErrReply(cmdName), true
