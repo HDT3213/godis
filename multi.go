@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-var forbiddings = map[string]int8{"flushall": 1, "flushdb": 1}
+var forbiddings = map[string]interface{}{"flushall": nil, "flushdb": nil}
 
 // Watch set watching keys
 func Watch(db *DB, conn redis.Connection, args [][]byte) redis.Reply {
