@@ -1,16 +1,12 @@
 package godis
 
 import (
-	"github.com/hdt3213/godis/datastruct/set"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/redis/reply"
 	"strings"
 )
 
-var forbiddenInMulti = set.Make(
-	"flushdb",
-	"flushall",
-)
+var forbiddens = map[string]int8{"flushall": 1, "flushdb": 1}
 
 // Watch set watching keys
 func Watch(db *DB, conn redis.Connection, args [][]byte) redis.Reply {
@@ -59,7 +55,7 @@ func EnqueueCmd(db *DB, conn redis.Connection, cmdLine [][]byte) redis.Reply {
 	if !ok {
 		return reply.MakeErrReply("ERR unknown command '" + cmdName + "'")
 	}
-	if forbiddenInMulti.Has(cmdName) {
+	if _, ok = forbiddens[cmdName]; ok {
 		return reply.MakeErrReply("ERR command '" + cmdName + "' cannot be used in MULTI")
 	}
 	if cmd.prepare == nil {
