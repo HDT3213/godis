@@ -44,7 +44,7 @@ func (db *DB) Exec(c redis.Connection, cmdLine [][]byte) (result redis.Reply) {
 }
 
 func execSpecialCmd(c redis.Connection, cmdLine [][]byte, cmdName string, db *DB) (redis.Reply, bool) {
-	switch cmdName {
+	switch strings.ToLower(cmdName) {
 	case "subscribe":
 		if len(cmdLine) < 2 {
 			return reply.MakeArgNumErrReply("subscribe"), true
