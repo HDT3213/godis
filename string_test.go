@@ -372,3 +372,278 @@ func TestAppend_KeyNotExist(t *testing.T) {
 	asserts.AssertIntReply(t, val, len(key))
 }
 
+func TestSetRange_StringExist(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	key2 := utils.RandString(3)
+	testDB.Exec(nil, utils.ToCmdLine2("SET", key, key))
+
+	actual := testDB.Exec(nil, utils.ToCmdLine("SetRange", key, fmt.Sprint(0), key2))
+	val, ok := actual.(*reply.IntReply)
+	if !ok {
+		t.Errorf("expect int bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+
+	result := len(key2 + key[3:])
+	asserts.AssertIntReply(t, val, result)
+}
+
+func TestSetRange_StringExist_OffsetOutOfLen(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	key2 := utils.RandString(3)
+	emptyByteLen := 5
+	testDB.Exec(nil, utils.ToCmdLine2("SET", key, key))
+
+	actual := testDB.Exec(nil, utils.ToCmdLine("SetRange", key, fmt.Sprint(len(key)+emptyByteLen), key2))
+	val, ok := actual.(*reply.IntReply)
+	if !ok {
+		t.Errorf("expect int bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+
+	result := len(key + string(make([]byte, emptyByteLen)) + key2)
+	asserts.AssertIntReply(t, val, result)
+}
+
+func TestSetRange_StringNotExist(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+
+	actual := testDB.Exec(nil, utils.ToCmdLine("SetRange", key, fmt.Sprint(0), key))
+	val, ok := actual.(*reply.IntReply)
+	if !ok {
+		t.Errorf("expect int bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+	asserts.AssertIntReply(t, val, len(key))
+}
+
+func TestGetRange_StringExist(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	testDB.Exec(nil, utils.ToCmdLine2("SET", key, key))
+
+	actual := testDB.Exec(nil, utils.ToCmdLine("GetRange", key, fmt.Sprint(0), fmt.Sprint(len(key))))
+	val, ok := actual.(*reply.BulkReply)
+	if !ok {
+		t.Errorf("expect bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+
+	asserts.AssertBulkReply(t, val, key)
+}
+
+func TestGetRange_RangeLargeThenDataLen(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	testDB.Exec(nil, utils.ToCmdLine2("SET", key, key))
+
+	actual := testDB.Exec(nil, utils.ToCmdLine("GetRange", key, fmt.Sprint(0), fmt.Sprint(len(key)+2)))
+	val, ok := actual.(*reply.BulkReply)
+	if !ok {
+		t.Errorf("expect bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+
+	asserts.AssertBulkReply(t, val, key)
+}
+
+func TestGetRange_StringNotExist(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	actual := testDB.Exec(nil, utils.ToCmdLine("GetRange", key, fmt.Sprint(0), fmt.Sprint(len(key))))
+	val, ok := actual.(*reply.NullBulkReply)
+	if !ok {
+		t.Errorf("expect nil bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+
+	asserts.AssertNullBulk(t, val)
+}
+
+func TestGetRange_StringExist_GetPartial(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	testDB.Exec(nil, utils.ToCmdLine2("SET", key, key))
+
+	actual := testDB.Exec(nil, utils.ToCmdLine("GetRange", key, fmt.Sprint(0), fmt.Sprint(len(key)/2)))
+	val, ok := actual.(*reply.BulkReply)
+	if !ok {
+		t.Errorf("expect bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+
+	asserts.AssertBulkReply(t, val, key[:(len(key)/2)+1])
+}
+
+func TestGetRange_StringExist_EndIdxOutOfRange(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	emptyByteLen := 2
+	testDB.Exec(nil, utils.ToCmdLine2("SET", key, key))
+
+	actual := testDB.Exec(nil, utils.ToCmdLine("GetRange", key, fmt.Sprint(0), fmt.Sprint(len(key)+emptyByteLen)))
+	val, ok := actual.(*reply.BulkReply)
+	if !ok {
+		t.Errorf("expect bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+
+	asserts.AssertBulkReply(t, val, key)
+}
+
+func TestGetRange_StringExist_StartIdxEndIdxAreSame(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	emptyByteLen := 2
+	testDB.Exec(nil, utils.ToCmdLine2("SET", key, key))
+
+	actual := testDB.Exec(nil, utils.ToCmdLine("GetRange", key, fmt.Sprint(len(key)+emptyByteLen), fmt.Sprint(len(key)+emptyByteLen)))
+	val, ok := actual.(*reply.NullBulkReply)
+	if !ok {
+		t.Errorf("expect nil bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+
+	asserts.AssertNullBulk(t, val)
+}
+
+func TestGetRange_StringExist_StartIdxGreaterThanEndIdx(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+
+	actual := testDB.Exec(nil, utils.ToCmdLine("GetRange", key, fmt.Sprint(len(key)+1), fmt.Sprint(len(key))))
+	val, ok := actual.(*reply.NullBulkReply)
+	if !ok {
+		t.Errorf("expect nil bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+
+	asserts.AssertNullBulk(t, val)
+}
+
+func TestGetRange_StringExist_StartIdxEndIdxAreNegative(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	testDB.Exec(nil, utils.ToCmdLine2("SET", key, key))
+
+	actual := testDB.Exec(nil, utils.ToCmdLine("GetRange", key, fmt.Sprint(-1*len(key)), fmt.Sprint(-1)))
+	val, ok := actual.(*reply.BulkReply)
+	if !ok {
+		t.Errorf("expect bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+
+	asserts.AssertBulkReply(t, val, key)
+}
+
+func TestGetRange_StringExist_StartIdxNegative(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	testDB.Exec(nil, utils.ToCmdLine2("SET", key, key))
+
+	actual := testDB.Exec(nil, utils.ToCmdLine("GetRange", key, fmt.Sprint(-1*len(key)), fmt.Sprint(len(key)/2)))
+	val, ok := actual.(*reply.BulkReply)
+	if !ok {
+		t.Errorf("expect bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+
+	asserts.AssertBulkReply(t, val, key[0:(len(key)/2)+1])
+}
+
+func TestGetRange_StringExist_EndIdxNegative(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	testDB.Exec(nil, utils.ToCmdLine2("SET", key, key))
+
+	actual := testDB.Exec(nil, utils.ToCmdLine("GetRange", key, fmt.Sprint(0), fmt.Sprint(-len(key)/2)))
+	val, ok := actual.(*reply.BulkReply)
+	if !ok {
+		t.Errorf("expect bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+
+	asserts.AssertBulkReply(t, val, key[0:(len(key)/2)+1])
+}
+
+func TestGetRange_StringExist_StartIsOutOfRange(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	testDB.Exec(nil, utils.ToCmdLine2("SET", key, key))
+
+	actual := testDB.Exec(nil, utils.ToCmdLine("GetRange", key, fmt.Sprint(-len(key)-3), fmt.Sprint(len(key))))
+	val, ok := actual.(*reply.NullBulkReply)
+	if !ok {
+		t.Errorf("expect bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+
+	asserts.AssertNullBulk(t, val)
+}
+
+func TestGetRange_StringExist_EndIdxIsOutOfRange(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	testDB.Exec(nil, utils.ToCmdLine2("SET", key, key))
+
+	actual := testDB.Exec(nil, utils.ToCmdLine("GetRange", key, fmt.Sprint(0), fmt.Sprint(-len(key)-3)))
+	val, ok := actual.(*reply.NullBulkReply)
+	if !ok {
+		t.Errorf("expect bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+
+	asserts.AssertNullBulk(t, val)
+}
+
+func TestGetRange_StringExist_StartIdxGreaterThanDataLen(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	testDB.Exec(nil, utils.ToCmdLine2("SET", key, key))
+
+	actual := testDB.Exec(nil, utils.ToCmdLine("GetRange", key, fmt.Sprint(len(key)+1), fmt.Sprint(0)))
+	val, ok := actual.(*reply.NullBulkReply)
+	if !ok {
+		t.Errorf("expect bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+
+	asserts.AssertNullBulk(t, val)
+}
+
+func TestGetRange_StringExist_StartIdxIncorrectFormat(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	testDB.Exec(nil, utils.ToCmdLine2("SET", key, key))
+	incorrectValue := "incorrect"
+
+	actual := testDB.Exec(nil, utils.ToCmdLine("GetRange", key, incorrectValue, fmt.Sprint(0)))
+	val, ok := actual.(*reply.StandardErrReply)
+	if !ok {
+		t.Errorf("expect standart bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+
+	errorMsg := fmt.Sprintf("strconv.ParseInt: parsing \"%s\": invalid syntax", incorrectValue)
+	asserts.AssertErrReply(t, val, errorMsg)
+}
+
+func TestGetRange_StringExist_EndIdxIncorrectFormat(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	testDB.Exec(nil, utils.ToCmdLine2("SET", key, key))
+	incorrectValue := "incorrect"
+
+	actual := testDB.Exec(nil, utils.ToCmdLine("GetRange", key, fmt.Sprint(0), incorrectValue))
+	val, ok := actual.(*reply.StandardErrReply)
+	if !ok {
+		t.Errorf("expect standart bulk reply, get: %s", string(actual.ToBytes()))
+		return
+	}
+
+	errorMsg := fmt.Sprintf("strconv.ParseInt: parsing \"%s\": invalid syntax", incorrectValue)
+	asserts.AssertErrReply(t, val, errorMsg)
+}
