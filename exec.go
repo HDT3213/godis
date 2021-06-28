@@ -44,38 +44,37 @@ func (db *DB) Exec(c redis.Connection, cmdLine [][]byte) (result redis.Reply) {
 }
 
 func execSpecialCmd(c redis.Connection, cmdLine [][]byte, cmdName string, db *DB) (redis.Reply, bool) {
-	if cmdName == "subscribe" {
+	switch cmdName {
+	case "subscribe":
 		if len(cmdLine) < 2 {
 			return reply.MakeArgNumErrReply("subscribe"), true
 		}
 		return pubsub.Subscribe(db.hub, c, cmdLine[1:]), true
-	} else if cmdName == "publish" {
+	case "publish":
 		return pubsub.Publish(db.hub, cmdLine[1:]), true
-	} else if cmdName == "unsubscribe" {
+	case "unsubscribe":
 		return pubsub.UnSubscribe(db.hub, c, cmdLine[1:]), true
-	} else if cmdName == "bgrewriteaof" {
-		// aof.go imports router.go, router.go cannot import BGRewriteAOF from aof.go
-		return BGRewriteAOF(db, cmdLine[1:]), true
-	} else if cmdName == "multi" {
+	case "bgrewriteaof":
 		if len(cmdLine) != 1 {
 			return reply.MakeArgNumErrReply(cmdName), true
 		}
 		return StartMulti(db, c), true
-	} else if cmdName == "discard" {
+	case "discard":
 		if len(cmdLine) != 1 {
 			return reply.MakeArgNumErrReply(cmdName), true
 		}
 		return DiscardMulti(db, c), true
-	} else if cmdName == "exec" {
+	case "exec":
 		if len(cmdLine) != 1 {
 			return reply.MakeArgNumErrReply(cmdName), true
 		}
 		return execMulti(db, c), true
-	} else if cmdName == "watch" {
+	case "watch":
 		if !validateArity(-2, cmdLine) {
 			return reply.MakeArgNumErrReply(cmdName), true
 		}
 		return Watch(db, c, cmdLine[1:]), true
+	default:
+		return nil, false
 	}
-	return nil, false
 }
