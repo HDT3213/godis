@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-func startServe(t *testing.T, ch chan struct{}) string {
+func startServer(t *testing.T, ch chan struct{}) string {
 	var err error
 	listener, err := net.Listen("tcp", "127.0.0.1:9999")
 	if err != nil {
@@ -60,7 +60,7 @@ func TestListenAndServe(t *testing.T) {
 func TestAuthButNoPasswordSet(t *testing.T) {
 	var err error
 	closeChan := make(chan struct{})
-	addr := startServe(t, closeChan)
+	addr := startServer(t, closeChan)
 
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
@@ -88,7 +88,7 @@ func TestAuthButNoPasswordSet(t *testing.T) {
 func TestAuthWrongArgs(t *testing.T) {
 	var err error
 	closeChan := make(chan struct{})
-	addr := startServe(t, closeChan)
+	addr := startServer(t, closeChan)
 
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
@@ -116,7 +116,7 @@ func TestAuthWrongArgs(t *testing.T) {
 func TestAuthRequired(t *testing.T) {
 	var err error
 	closeChan := make(chan struct{})
-	addr := startServe(t, closeChan)
+	addr := startServer(t, closeChan)
 
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
