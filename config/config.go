@@ -10,6 +10,11 @@ import (
 	"strings"
 )
 
+const DefaultConfPath = "redis.conf"
+
+// Properties holds global config properties
+var Properties *ServerProperties
+
 // ServerProperties defines global config properties
 type ServerProperties struct {
 	Bind           string `cfg:"bind"`
@@ -23,15 +28,14 @@ type ServerProperties struct {
 	Self  string   `cfg:"self"`
 }
 
-// Properties holds global config properties
-var Properties *ServerProperties
-
 func init() {
 	// default config
 	Properties = &ServerProperties{
-		Bind:       "127.0.0.1",
-		Port:       6379,
-		AppendOnly: false,
+		Bind:           "0.0.0.0",
+		Port:           6399,
+		AppendOnly:     false,
+		AppendFilename: "",
+		MaxClients:     1000,
 	}
 }
 
@@ -80,8 +84,7 @@ func parse(src io.Reader) *ServerProperties {
 					fieldVal.SetInt(intValue)
 				}
 			case reflect.Bool:
-				boolValue := "yes" == value
-				fieldVal.SetBool(boolValue)
+				fieldVal.SetBool(toBool(value))
 			case reflect.Slice:
 				if field.Type.Elem().Kind() == reflect.String {
 					slice := strings.Split(value, ",")
@@ -93,12 +96,32 @@ func parse(src io.Reader) *ServerProperties {
 	return config
 }
 
-// SetupConfig read config file and store properties into Properties
-func SetupConfig(configFilename string) {
+// Setup read config file and store properties into Properties
+func Setup(configFilename string) {
+	if configFilename == "" {
+		if defaultConfigFileExists() {
+			configFilename = DefaultConfPath
+		}
+	}
 	file, err := os.Open(configFilename)
 	if err != nil {
 		panic(err)
 	}
 	defer file.Close()
 	Properties = parse(file)
+}
+
+func defaultConfigFileExists() bool {
+	info, err := os.Stat(DefaultConfPath)
+	return err == nil && !info.IsDir()
+}
+
+func toBool(s string) bool {
+	ls := strings.ToLower(s)
+	switch ls {
+	case "true", "yes", "t", "y":
+		return true
+	default:
+		return false
+	}
 }
