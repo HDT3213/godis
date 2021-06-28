@@ -59,6 +59,11 @@ func execSpecialCmd(c redis.Connection, cmdLine [][]byte, cmdName string, db *DB
 			return reply.MakeArgNumErrReply(cmdName), true
 		}
 		return StartMulti(db, c), true
+	case "multi":
+		if len(cmdLine) != 1 {
+			return reply.MakeArgNumErrReply(cmdName), true
+		}
+		return StartMulti(db, c), true
 	case "discard":
 		if len(cmdLine) != 1 {
 			return reply.MakeArgNumErrReply(cmdName), true
