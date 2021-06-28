@@ -486,7 +486,7 @@ func execStrLen(db *DB, args [][]byte) redis.Reply {
 	return reply.MakeIntReply(int64(len(bytes)))
 }
 
-// execAppend sets string value and time to live to the given key
+// execAppend sets string value to the given key
 func execAppend(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	bytes, err := db.getAsString(key)
@@ -499,6 +499,85 @@ func execAppend(db *DB, args [][]byte) redis.Reply {
 	})
 	db.AddAof(makeAofCmd("append", args))
 	return reply.MakeIntReply(int64(len(bytes)))
+}
+
+// execSetRange overwrites part of the string stored at key, starting at the specified offset.
+// If the offset is larger than the current length of the string at key, the string is padded with zero-bytes.
+func execSetRange(db *DB, args [][]byte) redis.Reply {
+	key := string(args[0])
+	offset, errNative := strconv.ParseInt(string(args[1]), 10, 64)
+	if errNative != nil {
+		return reply.MakeErrReply(errNative.Error())
+	}
+	value := args[2]
+	bytes, err := db.getAsString(key)
+	if err != nil {
+		return err
+	}
+	bytesLen := int64(len(bytes))
+	if bytesLen < offset {
+		diff := offset - bytesLen
+		diffArray := make([]byte, diff)
+		bytes = append(bytes, diffArray...)
+		bytesLen = int64(len(bytes))
+	}
+	for i := 0; i < len(value); i++ {
+		idx := offset + int64(i)
+		if idx >= bytesLen {
+			bytes = append(bytes, value[i])
+		} else {
+			bytes[idx] = value[i]
+		}
+	}
+	db.PutEntity(key, &DataEntity{
+		Data: bytes,
+	})
+	db.AddAof(makeAofCmd("setRange", args))
+	return reply.MakeIntReply(int64(len(bytes)))
+}
+
+func execGetRange(db *DB, args [][]byte) redis.Reply {
+	key := string(args[0])
+	startIdx, errNative := strconv.ParseInt(string(args[1]), 10, 64)
+	if errNative != nil {
+		return reply.MakeErrReply(errNative.Error())
+	}
+	endIdx, errNative := strconv.ParseInt(string(args[2]), 10, 64)
+	if errNative != nil {
+		return reply.MakeErrReply(errNative.Error())
+	}
+
+	bytes, err := db.getAsString(key)
+	if err != nil {
+		return err
+	}
+
+	if bytes == nil {
+		return reply.MakeNullBulkReply()
+	}
+
+	bytesLen := int64(len(bytes))
+	if startIdx < -1*bytesLen {
+		return &reply.NullBulkReply{}
+	} else if startIdx < 0 {
+		startIdx = bytesLen + startIdx
+	} else if startIdx >= bytesLen {
+		return &reply.NullBulkReply{}
+	}
+	if endIdx < -1*bytesLen {
+		return &reply.NullBulkReply{}
+	} else if endIdx < 0 {
+		endIdx = bytesLen + endIdx + 1
+	} else if endIdx < bytesLen {
+		endIdx = endIdx + 1
+	} else {
+		endIdx = bytesLen
+	}
+	if startIdx > endIdx {
+		return reply.MakeNullBulkReply()
+	}
+
+	return reply.MakeBulkReply(bytes[startIdx:endIdx])
 }
 
 func init() {
@@ -518,4 +597,6 @@ func init() {
 	RegisterCommand("DecrBy", execDecrBy, writeFirstKey, rollbackFirstKey, 3)
 	RegisterCommand("StrLen", execStrLen, readFirstKey, nil, 2)
 	RegisterCommand("Append", execAppend, writeFirstKey, rollbackFirstKey, 3)
+	RegisterCommand("SetRange", execSetRange, writeFirstKey, rollbackFirstKey, 4)
+	RegisterCommand("GetRange", execGetRange, readFirstKey, nil, 4)
 }
