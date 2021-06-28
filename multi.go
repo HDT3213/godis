@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-var forbiddens = map[string]int8{"flushall": 1, "flushdb": 1}
+var forbiddings = map[string]int8{"flushall": 1, "flushdb": 1}
 
 // Watch set watching keys
 func Watch(db *DB, conn redis.Connection, args [][]byte) redis.Reply {
@@ -55,7 +55,7 @@ func EnqueueCmd(db *DB, conn redis.Connection, cmdLine [][]byte) redis.Reply {
 	if !ok {
 		return reply.MakeErrReply("ERR unknown command '" + cmdName + "'")
 	}
-	if _, ok = forbiddens[cmdName]; ok {
+	if _, ok = forbiddings[cmdName]; ok {
 		return reply.MakeErrReply("ERR command '" + cmdName + "' cannot be used in MULTI")
 	}
 	if cmd.prepare == nil {
