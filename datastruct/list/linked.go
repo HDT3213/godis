@@ -156,24 +156,14 @@ func (list *LinkedList) RemoveAllByVal(val interface{}) int {
 	}
 	n := list.first
 	removed := 0
+	var nextNode *node
 	for n != nil {
-		var toRemoveNode *node
+		nextNode = n.next
 		if utils.Equals(n.val, val) {
-			toRemoveNode = n
-		}
-		if n.next == nil {
-			if toRemoveNode != nil {
-				removed++
-				list.removeNode(toRemoveNode)
-			}
-			break
-		} else {
-			n = n.next
-		}
-		if toRemoveNode != nil {
+			list.removeNode(n)
 			removed++
-			list.removeNode(toRemoveNode)
 		}
+		n = nextNode
 	}
 	return removed
 }
@@ -186,28 +176,17 @@ func (list *LinkedList) RemoveByVal(val interface{}, count int) int {
 	}
 	n := list.first
 	removed := 0
+	var nextNode *node
 	for n != nil {
-		var toRemoveNode *node
+		nextNode = n.next
 		if utils.Equals(n.val, val) {
-			toRemoveNode = n
-		}
-		if n.next == nil {
-			if toRemoveNode != nil {
-				removed++
-				list.removeNode(toRemoveNode)
-			}
-			break
-		} else {
-			n = n.next
-		}
-
-		if toRemoveNode != nil {
+			list.removeNode(n)
 			removed++
-			list.removeNode(toRemoveNode)
 		}
 		if removed == count {
 			break
 		}
+		n = nextNode
 	}
 	return removed
 }
@@ -220,28 +199,17 @@ func (list *LinkedList) ReverseRemoveByVal(val interface{}, count int) int {
 	}
 	n := list.last
 	removed := 0
+	var prevNode *node
 	for n != nil {
-		var toRemoveNode *node
+		prevNode = n.prev
 		if utils.Equals(n.val, val) {
-			toRemoveNode = n
-		}
-		if n.prev == nil {
-			if toRemoveNode != nil {
-				removed++
-				list.removeNode(toRemoveNode)
-			}
-			break
-		} else {
-			n = n.prev
-		}
-
-		if toRemoveNode != nil {
+			list.removeNode(n)
 			removed++
-			list.removeNode(toRemoveNode)
 		}
 		if removed == count {
 			break
 		}
+		n = prevNode
 	}
 	return removed
 }
@@ -264,12 +232,11 @@ func (list *LinkedList) ForEach(consumer func(int, interface{}) bool) {
 	i := 0
 	for n != nil {
 		goNext := consumer(i, n.val)
-		if !goNext || n.next == nil {
+		if !goNext {
 			break
-		} else {
-			i++
-			n = n.next
 		}
+		i++
+		n = n.next
 	}
 }
 
@@ -310,12 +277,8 @@ func (list *LinkedList) Range(start int, stop int) []interface{} {
 		} else if i >= stop {
 			break
 		}
-		if n.next == nil {
-			break
-		} else {
-			i++
-			n = n.next
-		}
+		i++
+		n = n.next
 	}
 	return slice
 }
