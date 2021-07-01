@@ -168,6 +168,7 @@ func (dict *ConcurrentDict) Remove(key string) (result int) {
 
 	if _, ok := shard.m[key]; ok {
 		delete(shard.m, key)
+		dict.decreaseCount()
 		return 1
 	}
 	return 0
@@ -175,6 +176,10 @@ func (dict *ConcurrentDict) Remove(key string) (result int) {
 
 func (dict *ConcurrentDict) addCount() int32 {
 	return atomic.AddInt32(&dict.count, 1)
+}
+
+func (dict *ConcurrentDict) decreaseCount() int32 {
+	return atomic.AddInt32(&dict.count, -1)
 }
 
 // ForEach traversal the dict

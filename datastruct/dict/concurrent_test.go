@@ -116,14 +116,17 @@ func TestConcurrentPutIfExists(t *testing.T) {
 
 func TestConcurrentRemove(t *testing.T) {
 	d := MakeConcurrent(0)
-
+	totalCount := 100
 	// remove head node
-	for i := 0; i < 100; i++ {
+	for i := 0; i < totalCount; i++ {
 		// insert
 		key := "k" + strconv.Itoa(i)
 		d.Put(key, i)
 	}
-	for i := 0; i < 100; i++ {
+	if d.Len()!=totalCount{
+		t.Error("put test failed: expected len is 100, actual: " + strconv.Itoa(d.Len()))
+	}
+	for i := 0; i < totalCount; i++ {
 		key := "k" + strconv.Itoa(i)
 
 		val, ok := d.Get(key)
@@ -140,6 +143,9 @@ func TestConcurrentRemove(t *testing.T) {
 		if ret != 1 {
 			t.Error("remove test failed: expected result 1, actual: " + strconv.Itoa(ret) + ", key:" + key)
 		}
+		if d.Len()!=totalCount-i-1{
+			t.Error("put test failed: expected len is 99, actual: " + strconv.Itoa(d.Len()))
+		}
 		_, ok = d.Get(key)
 		if ok {
 			t.Error("remove test failed: expected true, actual false")
@@ -147,6 +153,9 @@ func TestConcurrentRemove(t *testing.T) {
 		ret = d.Remove(key)
 		if ret != 0 {
 			t.Error("remove test failed: expected result 0 actual: " + strconv.Itoa(ret))
+		}
+		if d.Len()!=totalCount-i-1{
+			t.Error("put test failed: expected len is 99, actual: " + strconv.Itoa(d.Len()))
 		}
 	}
 
