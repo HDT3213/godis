@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"sync"
 	"time"
 )
 
@@ -23,6 +24,7 @@ var (
 	defaultPrefix      = ""
 	defaultCallerDepth = 2
 	logger             *log.Logger
+	mu                 sync.Mutex
 	logPrefix          = ""
 	levelFlags         = []string{"DEBUG", "INFO", "WARN", "ERROR", "FATAL"}
 )
@@ -75,30 +77,40 @@ func setPrefix(level logLevel) {
 
 // Debug prints debug log
 func Debug(v ...interface{}) {
+	mu.Lock()
+	defer mu.Unlock()
 	setPrefix(DEBUG)
 	logger.Println(v...)
 }
 
 // Info prints normal log
 func Info(v ...interface{}) {
+	mu.Lock()
+	defer mu.Unlock()
 	setPrefix(INFO)
 	logger.Println(v...)
 }
 
 // Warn prints warning log
 func Warn(v ...interface{}) {
+	mu.Lock()
+	defer mu.Unlock()
 	setPrefix(WARNING)
 	logger.Println(v...)
 }
 
 // Error prints error log
 func Error(v ...interface{}) {
+	mu.Lock()
+	defer mu.Unlock()
 	setPrefix(ERROR)
 	logger.Println(v...)
 }
 
 // Fatal prints error log then stop the program
 func Fatal(v ...interface{}) {
+	mu.Lock()
+	defer mu.Unlock()
 	setPrefix(FATAL)
 	logger.Fatalln(v...)
 }

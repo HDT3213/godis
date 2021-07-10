@@ -5,7 +5,6 @@ import (
 	"github.com/hdt3213/godis/datastruct/dict"
 	"github.com/hdt3213/godis/datastruct/lock"
 	"github.com/hdt3213/godis/lib/logger"
-	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/parser"
 	"github.com/hdt3213/godis/redis/reply"
 	"io"
@@ -78,7 +77,12 @@ func (db *DB) loadAof(maxBytes int) {
 	}
 	defer file.Close()
 
-	reader := utils.NewLimitedReader(file, maxBytes)
+	var reader io.Reader
+	if maxBytes > 0 {
+		reader = io.LimitReader(file, int64(maxBytes))
+	} else {
+		reader = file
+	}
 	ch := parser.ParseStream(reader)
 	for p := range ch {
 		if p.Err != nil {
