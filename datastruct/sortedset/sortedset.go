@@ -27,7 +27,7 @@ func (sortedSet *SortedSet) Add(member string, score float64) bool {
 	}
 	if ok {
 		if score != element.Score {
-			sortedSet.skiplist.remove(member, score)
+			sortedSet.skiplist.remove(member, element.Score)
 			sortedSet.skiplist.insert(member, score)
 		}
 		return false
