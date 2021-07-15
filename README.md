@@ -142,7 +142,7 @@ I suggest focusing on the following directories:
     - sortedset: a sorted set implements based on skiplist
 - github.com/hdt3213/godis: the core of storage engine
     - db.go: the basement of database
-    - exec,go: the gateway of database
+    - exec.go: the gateway of database
     - router.go: the command table
     - keys.go: handlers for keys commands
     - string.go: handlers for string commands
