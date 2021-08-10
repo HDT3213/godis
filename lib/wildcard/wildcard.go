@@ -1,10 +1,12 @@
 package wildcard
 
 const (
-	normal    = iota
-	all       // *
-	any       // ?
-	setSymbol // []
+	normal     = iota
+	all        // *
+	any        // ?
+	setSymbol  // []
+	rangSymbol // [a-b]
+	negSymbol  // [^a]
 )
 
 type item struct {
@@ -14,8 +16,30 @@ type item struct {
 }
 
 func (i *item) contains(c byte) bool {
-	_, ok := i.set[c]
-	return ok
+	if i.typeCode == setSymbol {
+		_, ok := i.set[c]
+		return ok
+	} else if i.typeCode == rangSymbol {
+		if _, ok := i.set[c]; ok {
+			return true
+		}
+		var (
+			min uint8 = 255
+			max uint8 = 0
+		)
+		for k, _ := range i.set {
+			if min > k {
+				min = k
+			}
+			if max < k {
+				max = k
+			}
+		}
+		return c >= min && c <= max
+	} else {
+		_, ok := i.set[c]
+		return !ok
+	}
 }
 
 // Pattern represents a wildcard pattern
@@ -50,7 +74,16 @@ func CompilePattern(src string) *Pattern {
 		} else if c == ']' {
 			if inSet {
 				inSet = false
-				items = append(items, &item{typeCode: setSymbol, set: set})
+				typeCode := setSymbol
+				if _, ok := set['-']; ok {
+					typeCode = rangSymbol
+					delete(set, '-')
+				}
+				if _, ok := set['^']; ok {
+					typeCode = negSymbol
+					delete(set, '^')
+				}
+				items = append(items, &item{typeCode: typeCode, set: set})
 			} else {
 				items = append(items, &item{typeCode: normal, character: c})
 			}
@@ -90,7 +123,7 @@ func (p *Pattern) IsMatch(s string) bool {
 				table[i][j] = table[i-1][j-1] &&
 					(p.items[j-1].typeCode == any ||
 						(p.items[j-1].typeCode == normal && uint8(s[i-1]) == p.items[j-1].character) ||
-						(p.items[j-1].typeCode == setSymbol && p.items[j-1].contains(s[i-1])))
+						(p.items[j-1].typeCode >= setSymbol && p.items[j-1].contains(s[i-1])))
 			}
 		}
 	}
