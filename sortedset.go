@@ -2,7 +2,9 @@ package godis
 
 import (
 	SortedSet "github.com/hdt3213/godis/datastruct/sortedset"
+	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/reply"
 	"strconv"
 	"strings"
@@ -28,7 +30,7 @@ func (db *DB) getOrInitSortedSet(key string) (sortedSet *SortedSet.SortedSet, in
 	inited = false
 	if sortedSet == nil {
 		sortedSet = SortedSet.Make()
-		db.PutEntity(key, &DataEntity{
+		db.PutEntity(key, &database.DataEntity{
 			Data: sortedSet,
 		})
 		inited = true
@@ -70,7 +72,7 @@ func execZAdd(db *DB, args [][]byte) redis.Reply {
 		}
 	}
 
-	db.AddAof(makeAofCmd("zadd", args))
+	db.addAof(utils.ToCmdLine3("zadd", args...))
 
 	return reply.MakeIntReply(int64(i))
 }
@@ -456,7 +458,7 @@ func execZRemRangeByScore(db *DB, args [][]byte) redis.Reply {
 
 	removed := sortedSet.RemoveByScore(min, max)
 	if removed > 0 {
-		db.AddAof(makeAofCmd("zremrangebyscore", args))
+		db.addAof(utils.ToCmdLine3("zremrangebyscore", args...))
 	}
 	return reply.MakeIntReply(removed)
 }
@@ -507,7 +509,7 @@ func execZRemRangeByRank(db *DB, args [][]byte) redis.Reply {
 	// assert: start in [0, size - 1], stop in [start, size]
 	removed := sortedSet.RemoveByRank(start, stop)
 	if removed > 0 {
-		db.AddAof(makeAofCmd("zremrangebyrank", args))
+		db.addAof(utils.ToCmdLine3("zremrangebyrank", args...))
 	}
 	return reply.MakeIntReply(removed)
 }
@@ -538,7 +540,7 @@ func execZRem(db *DB, args [][]byte) redis.Reply {
 		}
 	}
 	if deleted > 0 {
-		db.AddAof(makeAofCmd("zrem", args))
+		db.addAof(utils.ToCmdLine3("zrem", args...))
 	}
 	return reply.MakeIntReply(deleted)
 }
@@ -572,13 +574,13 @@ func execZIncrBy(db *DB, args [][]byte) redis.Reply {
 	element, exists := sortedSet.Get(field)
 	if !exists {
 		sortedSet.Add(field, delta)
-		db.AddAof(makeAofCmd("zincrby", args))
+		db.addAof(utils.ToCmdLine3("zincrby", args...))
 		return reply.MakeBulkReply(args[1])
 	}
 	score := element.Score + delta
 	sortedSet.Add(field, score)
 	bytes := []byte(strconv.FormatFloat(score, 'f', -1, 64))
-	db.AddAof(makeAofCmd("zincrby", args))
+	db.addAof(utils.ToCmdLine3("zincrby", args...))
 	return reply.MakeBulkReply(bytes)
 }
 

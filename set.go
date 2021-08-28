@@ -2,7 +2,9 @@ package godis
 
 import (
 	HashSet "github.com/hdt3213/godis/datastruct/set"
+	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/reply"
 	"strconv"
 )
@@ -27,7 +29,7 @@ func (db *DB) getOrInitSet(key string) (set *HashSet.Set, inited bool, errReply 
 	inited = false
 	if set == nil {
 		set = HashSet.Make()
-		db.PutEntity(key, &DataEntity{
+		db.PutEntity(key, &database.DataEntity{
 			Data: set,
 		})
 		inited = true
@@ -49,7 +51,7 @@ func execSAdd(db *DB, args [][]byte) redis.Reply {
 	for _, member := range members {
 		counter += set.Add(string(member))
 	}
-	db.AddAof(makeAofCmd("sadd", args))
+	db.addAof(utils.ToCmdLine3("sadd", args...))
 	return reply.MakeIntReply(int64(counter))
 }
 
@@ -94,7 +96,7 @@ func execSRem(db *DB, args [][]byte) redis.Reply {
 		db.Remove(key)
 	}
 	if counter > 0 {
-		db.AddAof(makeAofCmd("srem", args))
+		db.addAof(utils.ToCmdLine3("srem", args...))
 	}
 	return reply.MakeIntReply(int64(counter))
 }
@@ -210,10 +212,10 @@ func execSInterStore(db *DB, args [][]byte) redis.Reply {
 	}
 
 	set := HashSet.Make(result.ToSlice()...)
-	db.PutEntity(dest, &DataEntity{
+	db.PutEntity(dest, &database.DataEntity{
 		Data: set,
 	})
-	db.AddAof(makeAofCmd("sinterstore", args))
+	db.addAof(utils.ToCmdLine3("sinterstore", args...))
 	return reply.MakeIntReply(int64(set.Len()))
 }
 
@@ -289,11 +291,11 @@ func execSUnionStore(db *DB, args [][]byte) redis.Reply {
 	}
 
 	set := HashSet.Make(result.ToSlice()...)
-	db.PutEntity(dest, &DataEntity{
+	db.PutEntity(dest, &database.DataEntity{
 		Data: set,
 	})
 
-	db.AddAof(makeAofCmd("sunionstore", args))
+	db.addAof(utils.ToCmdLine3("sunionstore", args...))
 	return reply.MakeIntReply(int64(set.Len()))
 }
 
@@ -385,11 +387,11 @@ func execSDiffStore(db *DB, args [][]byte) redis.Reply {
 		return &reply.EmptyMultiBulkReply{}
 	}
 	set := HashSet.Make(result.ToSlice()...)
-	db.PutEntity(dest, &DataEntity{
+	db.PutEntity(dest, &database.DataEntity{
 		Data: set,
 	})
 
-	db.AddAof(makeAofCmd("sdiffstore", args))
+	db.addAof(utils.ToCmdLine3("sdiffstore", args...))
 	return reply.MakeIntReply(int64(set.Len()))
 }
 

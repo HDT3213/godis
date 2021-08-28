@@ -18,6 +18,15 @@ func ToCmdLine2(commandName string, args ...string) [][]byte {
 	return result
 }
 
+func ToCmdLine3(commandName string, args ...[]byte) [][]byte {
+	result := make([][]byte, len(args)+1)
+	result[0] = []byte(commandName)
+	for i, s := range args {
+		result[i+1] = s
+	}
+	return result
+}
+
 // Equals check whether the given value is equal
 func Equals(a interface{}, b interface{}) bool {
 	sliceA, okA := a.([]byte)

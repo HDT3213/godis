@@ -1,18 +1,18 @@
-package godis
+package aof
 
 import (
 	"github.com/hdt3213/godis/datastruct/dict"
 	List "github.com/hdt3213/godis/datastruct/list"
 	"github.com/hdt3213/godis/datastruct/set"
 	SortedSet "github.com/hdt3213/godis/datastruct/sortedset"
-	"github.com/hdt3213/godis/lib/utils"
+	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/redis/reply"
 	"strconv"
 	"time"
 )
 
 // EntityToCmd serialize data entity to redis command
-func EntityToCmd(key string, entity *DataEntity) *reply.MultiBulkReply {
+func EntityToCmd(key string, entity *database.DataEntity) *reply.MultiBulkReply {
 	if entity == nil {
 		return nil
 	}
@@ -30,18 +30,6 @@ func EntityToCmd(key string, entity *DataEntity) *reply.MultiBulkReply {
 		cmd = zSetToCmd(key, val)
 	}
 	return cmd
-}
-
-// toTTLCmd serialize ttl config
-func toTTLCmd(db *DB, key string) *reply.MultiBulkReply {
-	raw, exists := db.ttlMap.Get(key)
-	if !exists {
-		// 无 TTL
-		return reply.MakeMultiBulkReply(utils.ToCmdLine("PERSIST", key))
-	}
-	expireTime, _ := raw.(time.Time)
-	timestamp := strconv.FormatInt(expireTime.UnixNano()/1000/1000, 10)
-	return reply.MakeMultiBulkReply(utils.ToCmdLine("PEXPIREAT", key, timestamp))
 }
 
 var setCmd = []byte("SET")
@@ -114,5 +102,16 @@ func zSetToCmd(key string, zset *SortedSet.SortedSet) *reply.MultiBulkReply {
 		i++
 		return true
 	})
+	return reply.MakeMultiBulkReply(args)
+}
+
+var pExpireAtBytes = []byte("PEXPIREAT")
+
+// MakeExpireCmd generates command line to set expiration for the given key
+func MakeExpireCmd(key string, expireAt time.Time) *reply.MultiBulkReply {
+	args := make([][]byte, 3)
+	args[0] = pExpireAtBytes
+	args[1] = []byte(key)
+	args[2] = []byte(strconv.FormatInt(expireAt.UnixNano()/1e6, 10))
 	return reply.MakeMultiBulkReply(args)
 }

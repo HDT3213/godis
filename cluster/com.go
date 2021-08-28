@@ -4,16 +4,18 @@ import (
 	"context"
 	"errors"
 	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/client"
 	"github.com/hdt3213/godis/redis/reply"
+	"strconv"
 )
 
 func (cluster *Cluster) getPeerClient(peer string) (*client.Client, error) {
-	connectionFactory, ok := cluster.peerConnection[peer]
+	factory, ok := cluster.peerConnection[peer]
 	if !ok {
 		return nil, errors.New("connection factory not found")
 	}
-	raw, err := connectionFactory.BorrowObject(context.Background())
+	raw, err := factory.BorrowObject(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -33,6 +35,7 @@ func (cluster *Cluster) returnPeerClient(peer string, peerClient *client.Client)
 }
 
 // relay relays command to peer
+// select db by c.GetDBIndex()
 // cannot call Prepare, Commit, execRollback of self node
 func (cluster *Cluster) relay(peer string, c redis.Connection, args [][]byte) redis.Reply {
 	if peer == cluster.self {
@@ -46,6 +49,7 @@ func (cluster *Cluster) relay(peer string, c redis.Connection, args [][]byte) re
 	defer func() {
 		_ = cluster.returnPeerClient(peer, peerClient)
 	}()
+	peerClient.Send(utils.ToCmdLine("SELECT", strconv.Itoa(c.GetDBIndex())))
 	return peerClient.Send(args)
 }
 

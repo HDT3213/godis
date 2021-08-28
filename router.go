@@ -11,6 +11,7 @@ type command struct {
 	prepare  PreFunc // return related keys command
 	undo     UndoFunc
 	arity    int // allow number of args, arity < 0 means len(args) >= -arity
+	flags    int
 }
 
 // RegisterCommand registers a new command

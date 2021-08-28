@@ -10,6 +10,7 @@ import (
 )
 
 var testDB = makeTestDB()
+var testServer = NewStandaloneServer()
 
 func TestSet2(t *testing.T) {
 	key := utils.RandString(10)

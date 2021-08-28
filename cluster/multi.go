@@ -24,7 +24,7 @@ func execMulti(cluster *Cluster, conn redis.Connection, cmdLine CmdLine) redis.R
 	// analysis related keys
 	keys := make([]string, 0) // may contains duplicate
 	for _, cl := range cmdLines {
-		wKeys, rKeys := cluster.db.GetRelatedKeys(cl)
+		wKeys, rKeys := godis.GetRelatedKeys(cl)
 		keys = append(keys, wKeys...)
 		keys = append(keys, rKeys...)
 	}
@@ -36,7 +36,7 @@ func execMulti(cluster *Cluster, conn redis.Connection, cmdLine CmdLine) redis.R
 	keys = append(keys, watchingKeys...)
 	if len(keys) == 0 {
 		// empty transaction or only `PING`s
-		return godis.ExecMulti(cluster.db, conn, watching, cmdLines)
+		return cluster.db.ExecMulti(conn, watching, cmdLines)
 	}
 	groupMap := cluster.groupBy(keys)
 	if len(groupMap) > 1 {
@@ -50,7 +50,7 @@ func execMulti(cluster *Cluster, conn redis.Connection, cmdLine CmdLine) redis.R
 
 	// out parser not support reply.MultiRawReply, so we have to encode it
 	if peer == cluster.self {
-		return godis.ExecMulti(cluster.db, conn, watching, cmdLines)
+		return cluster.db.ExecMulti(conn, watching, cmdLines)
 	}
 	return execMultiOnOtherNode(cluster, conn, peer, watching, cmdLines)
 }
@@ -74,7 +74,7 @@ func execMultiOnOtherNode(cluster *Cluster, conn redis.Connection, peer string, 
 	var rawRelayResult redis.Reply
 	if peer == cluster.self {
 		// this branch just for testing
-		rawRelayResult = execRelayedMulti(cluster, nil, relayCmdLine)
+		rawRelayResult = execRelayedMulti(cluster, conn, relayCmdLine)
 	} else {
 		rawRelayResult = cluster.relay(peer, conn, relayCmdLine)
 	}
@@ -126,7 +126,7 @@ func execRelayedMulti(cluster *Cluster, conn redis.Connection, cmdLine CmdLine) 
 		}
 		watching[key] = uint32(ver)
 	}
-	rawResult := godis.ExecMulti(cluster.db, conn, watching, txCmdLines[1:])
+	rawResult := cluster.db.ExecMulti(conn, watching, txCmdLines[1:])
 	_, ok := rawResult.(*reply.EmptyMultiBulkReply)
 	if ok {
 		return rawResult

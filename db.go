@@ -2,15 +2,14 @@
 package godis
 
 import (
-	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/datastruct/dict"
 	"github.com/hdt3213/godis/datastruct/lock"
+	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/timewheel"
-	"github.com/hdt3213/godis/pubsub"
 	"github.com/hdt3213/godis/redis/reply"
-	"os"
+	"strings"
 	"sync"
 	"time"
 )
@@ -19,11 +18,11 @@ const (
 	dataDictSize = 1 << 16
 	ttlDictSize  = 1 << 10
 	lockerSize   = 1024
-	aofQueueSize = 1 << 16
 )
 
 // DB stores data and execute user's commands
 type DB struct {
+	index int
 	// key -> DataEntity
 	data dict.Dict
 	// key -> expireTime (time.Time)
@@ -36,24 +35,7 @@ type DB struct {
 	locker *lock.Locks
 	// stop all data access for execFlushDB
 	stopWorld sync.WaitGroup
-	// handle publish/subscribe
-	hub *pubsub.Hub
-
-	// main goroutine send commands to aof goroutine through aofChan
-	aofChan     chan *reply.MultiBulkReply
-	aofFile     *os.File
-	aofFilename string
-	// aof goroutine will send msg to main goroutine through this channel when aof tasks finished and ready to shutdown
-	aofFinished chan struct{}
-	// buffer commands received during aof rewrite progress
-	aofRewriteBuffer chan *reply.MultiBulkReply
-	// pause aof for start/finish aof rewrite progress
-	pausingAof sync.RWMutex
-}
-
-// DataEntity stores data bound to a key, including a string, list, hash, set and so on
-type DataEntity struct {
-	Data interface{}
+	addAof    func(CmdLine)
 }
 
 // ExecFunc is interface for command executor
@@ -71,45 +53,80 @@ type CmdLine = [][]byte
 // execute from head to tail when undo
 type UndoFunc func(db *DB, args [][]byte) []CmdLine
 
-// MakeDB create DB instance and start it
-func MakeDB() *DB {
+// makeDB create DB instance
+func makeDB() *DB {
 	db := &DB{
 		data:       dict.MakeConcurrent(dataDictSize),
 		ttlMap:     dict.MakeConcurrent(ttlDictSize),
 		versionMap: dict.MakeConcurrent(dataDictSize),
 		locker:     lock.Make(lockerSize),
-		hub:        pubsub.MakeHub(),
-	}
-
-	// aof
-	if config.Properties.AppendOnly {
-		db.aofFilename = config.Properties.AppendFilename
-		db.loadAof(0)
-		aofFile, err := os.OpenFile(db.aofFilename, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0600)
-		if err != nil {
-			logger.Warn(err)
-		} else {
-			db.aofFile = aofFile
-			db.aofChan = make(chan *reply.MultiBulkReply, aofQueueSize)
-		}
-		db.aofFinished = make(chan struct{})
-		go func() {
-			db.handleAof()
-		}()
+		addAof:     func(line CmdLine) {},
 	}
 	return db
 }
 
-// Close graceful shutdown database
-func (db *DB) Close() {
-	if db.aofFile != nil {
-		close(db.aofChan)
-		<-db.aofFinished // wait for aof finished
-		err := db.aofFile.Close()
-		if err != nil {
-			logger.Warn(err)
-		}
+// makeBasicDB create DB instance only with basic abilities.
+// It is not concurrent safe
+func makeBasicDB() *DB {
+	db := &DB{
+		data:       dict.MakeSimple(),
+		ttlMap:     dict.MakeSimple(),
+		versionMap: dict.MakeSimple(),
+		locker:     lock.Make(1),
+		addAof:     func(line CmdLine) {},
 	}
+	return db
+}
+
+// Exec executes command within one database
+func (db *DB) Exec(c redis.Connection, cmdLine [][]byte) redis.Reply {
+	cmdName := strings.ToLower(string(cmdLine[0]))
+	if cmdName == "multi" {
+		if len(cmdLine) != 1 {
+			return reply.MakeArgNumErrReply(cmdName)
+		}
+		return StartMulti(c)
+	} else if cmdName == "discard" {
+		if len(cmdLine) != 1 {
+			return reply.MakeArgNumErrReply(cmdName)
+		}
+		return DiscardMulti(c)
+	} else if cmdName == "exec" {
+		if len(cmdLine) != 1 {
+			return reply.MakeArgNumErrReply(cmdName)
+		}
+		return execMulti(db, c)
+	} else if cmdName == "watch" {
+		if !validateArity(-2, cmdLine) {
+			return reply.MakeArgNumErrReply(cmdName)
+		}
+		return Watch(db, c, cmdLine[1:])
+	}
+	if c != nil && c.InMultiState() {
+		EnqueueCmd(c, cmdLine)
+		return reply.MakeQueuedReply()
+	}
+
+	return db.execNormalCommand(cmdLine)
+}
+
+func (db *DB) execNormalCommand(cmdLine [][]byte) redis.Reply {
+	cmdName := strings.ToLower(string(cmdLine[0]))
+	cmd, ok := cmdTable[cmdName]
+	if !ok {
+		return reply.MakeErrReply("ERR unknown command '" + cmdName + "'")
+	}
+	if !validateArity(cmd.arity, cmdLine) {
+		return reply.MakeArgNumErrReply(cmdName)
+	}
+
+	prepare := cmd.prepare
+	write, read := prepare(cmdLine[1:])
+	db.addVersion(write...)
+	db.RWLocks(write, read)
+	defer db.RWUnLocks(write, read)
+	fun := cmd.executor
+	return fun(db, cmdLine[1:])
 }
 
 func validateArity(arity int, cmdArgs [][]byte) bool {
@@ -123,7 +140,7 @@ func validateArity(arity int, cmdArgs [][]byte) bool {
 /* ---- Data Access ----- */
 
 // GetEntity returns DataEntity bind to given key
-func (db *DB) GetEntity(key string) (*DataEntity, bool) {
+func (db *DB) GetEntity(key string) (*database.DataEntity, bool) {
 	db.stopWorld.Wait()
 
 	raw, ok := db.data.Get(key)
@@ -133,24 +150,24 @@ func (db *DB) GetEntity(key string) (*DataEntity, bool) {
 	if db.IsExpired(key) {
 		return nil, false
 	}
-	entity, _ := raw.(*DataEntity)
+	entity, _ := raw.(*database.DataEntity)
 	return entity, true
 }
 
 // PutEntity a DataEntity into DB
-func (db *DB) PutEntity(key string, entity *DataEntity) int {
+func (db *DB) PutEntity(key string, entity *database.DataEntity) int {
 	db.stopWorld.Wait()
 	return db.data.Put(key, entity)
 }
 
 // PutIfExists edit an existing DataEntity
-func (db *DB) PutIfExists(key string, entity *DataEntity) int {
+func (db *DB) PutIfExists(key string, entity *database.DataEntity) int {
 	db.stopWorld.Wait()
 	return db.data.PutIfExists(key, entity)
 }
 
 // PutIfAbsent insert an DataEntity only if the key not exists
-func (db *DB) PutIfAbsent(key string, entity *DataEntity) int {
+func (db *DB) PutIfAbsent(key string, entity *database.DataEntity) int {
 	db.stopWorld.Wait()
 	return db.data.PutIfAbsent(key, entity)
 }
@@ -183,8 +200,8 @@ func (db *DB) Flush() {
 	db.stopWorld.Add(1)
 	defer db.stopWorld.Done()
 
-	db.data = dict.MakeConcurrent(dataDictSize)
-	db.ttlMap = dict.MakeConcurrent(ttlDictSize)
+	db.data.Clear()
+	db.ttlMap.Clear()
 	db.locker = lock.Make(lockerSize)
 
 }
@@ -269,9 +286,15 @@ func (db *DB) GetVersion(key string) uint32 {
 	return entity.(uint32)
 }
 
-/* ---- Subscribe Functions ---- */
-
-// AfterClientClose does some clean after client close connection
-func (db *DB) AfterClientClose(c redis.Connection) {
-	pubsub.UnsubscribeAll(db.hub, c)
+func (db *DB) ForEach(cb func(key string, data *database.DataEntity, expiration *time.Time) bool) {
+	db.data.ForEach(func(key string, raw interface{}) bool {
+		entity, _ := raw.(*database.DataEntity)
+		var expiration *time.Time
+		rawExpireTime, ok := db.ttlMap.Get(key)
+		if ok {
+			expireTime, _ := rawExpireTime.(time.Time)
+			expiration = &expireTime
+		}
+		return cb(key, entity, expiration)
+	})
 }

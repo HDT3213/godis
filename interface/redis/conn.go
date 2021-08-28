@@ -19,4 +19,8 @@ type Connection interface {
 	EnqueueCmd([][]byte)
 	ClearQueuedCmds()
 	GetWatching() map[string]uint32
+
+	// used for multi database
+	GetDBIndex() int
+	SelectDB(int)
 }

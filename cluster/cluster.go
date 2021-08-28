@@ -7,6 +7,7 @@ import (
 	"github.com/hdt3213/godis"
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/datastruct/dict"
+	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/consistenthash"
 	"github.com/hdt3213/godis/lib/idgenerator"
@@ -14,6 +15,7 @@ import (
 	"github.com/hdt3213/godis/redis/reply"
 	"github.com/jolestar/go-commons-pool/v2"
 	"runtime/debug"
+	"strconv"
 	"strings"
 )
 
@@ -26,7 +28,7 @@ type Cluster struct {
 	peerPicker     *consistenthash.Map
 	peerConnection map[string]*pool.ObjectPool
 
-	db           *godis.DB
+	db           database.EmbedDB
 	transactions *dict.SimpleDict // id -> Transaction
 
 	idGenerator *idgenerator.IDGenerator
@@ -45,7 +47,7 @@ func MakeCluster() *Cluster {
 	cluster := &Cluster{
 		self: config.Properties.Self,
 
-		db:             godis.MakeDB(),
+		db:             godis.NewStandaloneServer(),
 		transactions:   dict.MakeSimple(),
 		peerPicker:     consistenthash.New(replicas, nil),
 		peerConnection: make(map[string]*pool.ObjectPool),
@@ -100,7 +102,7 @@ func (cluster *Cluster) Exec(c redis.Connection, cmdLine [][]byte) (result redis
 	}()
 	cmdName := strings.ToLower(string(cmdLine[0]))
 	if cmdName == "auth" {
-		return godis.Auth(cluster.db, c, cmdLine[1:])
+		return godis.Auth(c, cmdLine[1:])
 	}
 	if !isAuthenticated(c) {
 		return reply.MakeErrReply("NOAUTH Authentication required")
@@ -110,20 +112,25 @@ func (cluster *Cluster) Exec(c redis.Connection, cmdLine [][]byte) (result redis
 		if len(cmdLine) != 1 {
 			return reply.MakeArgNumErrReply(cmdName)
 		}
-		return godis.StartMulti(cluster.db, c)
+		return godis.StartMulti(c)
 	} else if cmdName == "discard" {
 		if len(cmdLine) != 1 {
 			return reply.MakeArgNumErrReply(cmdName)
 		}
-		return godis.DiscardMulti(cluster.db, c)
+		return godis.DiscardMulti(c)
 	} else if cmdName == "exec" {
 		if len(cmdLine) != 1 {
 			return reply.MakeArgNumErrReply(cmdName)
 		}
 		return execMulti(cluster, c, nil)
+	} else if cmdName == "select" {
+		if len(cmdLine) != 2 {
+			return reply.MakeArgNumErrReply(cmdName)
+		}
+		return execSelect(c, cmdLine)
 	}
 	if c != nil && c.InMultiState() {
-		return godis.EnqueueCmd(cluster.db, c, cmdLine)
+		return godis.EnqueueCmd(c, cmdLine)
 	}
 	cmdFunc, ok := router[cmdName]
 	if !ok {
@@ -138,8 +145,8 @@ func (cluster *Cluster) AfterClientClose(c redis.Connection) {
 	cluster.db.AfterClientClose(c)
 }
 
-func ping(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
-	return godis.Ping(cluster.db, args[1:])
+func ping(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
+	return cluster.db.Exec(c, cmdLine)
 }
 
 /*----- utils -------*/
@@ -166,4 +173,16 @@ func (cluster *Cluster) groupBy(keys []string) map[string][]string {
 		result[peer] = group
 	}
 	return result
+}
+
+func execSelect(c redis.Connection, args [][]byte) redis.Reply {
+	dbIndex, err := strconv.Atoi(string(args[1]))
+	if err != nil {
+		return reply.MakeErrReply("ERR invalid DB index")
+	}
+	if dbIndex >= config.Properties.Databases {
+		return reply.MakeErrReply("ERR DB index is out of range")
+	}
+	c.SelectDB(dbIndex)
+	return reply.MakeOkReply()
 }

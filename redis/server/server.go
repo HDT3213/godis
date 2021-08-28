@@ -9,7 +9,7 @@ import (
 	"github.com/hdt3213/godis"
 	"github.com/hdt3213/godis/cluster"
 	"github.com/hdt3213/godis/config"
-	"github.com/hdt3213/godis/interface/db"
+	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/sync/atomic"
 	"github.com/hdt3213/godis/redis/connection"
@@ -28,18 +28,18 @@ var (
 // Handler implements tcp.Handler and serves as a redis server
 type Handler struct {
 	activeConn sync.Map // *client -> placeholder
-	db         db.DB
+	db         database.DB
 	closing    atomic.Boolean // refusing new client and new request
 }
 
 // MakeHandler creates a Handler instance
 func MakeHandler() *Handler {
-	var db db.DB
+	var db database.DB
 	if config.Properties.Self != "" &&
 		len(config.Properties.Peers) > 0 {
 		db = cluster.MakeCluster()
 	} else {
-		db = godis.MakeDB()
+		db = godis.NewStandaloneServer()
 	}
 	return &Handler{
 		db: db,

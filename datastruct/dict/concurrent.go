@@ -9,8 +9,9 @@ import (
 
 // ConcurrentDict is thread safe map using sharding lock
 type ConcurrentDict struct {
-	table []*shard
-	count int32
+	table      []*shard
+	count      int32
+	shardCount int
 }
 
 type shard struct {
@@ -44,8 +45,9 @@ func MakeConcurrent(shardCount int) *ConcurrentDict {
 		}
 	}
 	d := &ConcurrentDict{
-		count: 0,
-		table: table,
+		count:      0,
+		table:      table,
+		shardCount: shardCount,
 	}
 	return d
 }
@@ -283,4 +285,8 @@ func (dict *ConcurrentDict) RandomDistinctKeys(limit int) []string {
 		i++
 	}
 	return arr
+}
+
+func (dict *ConcurrentDict) Clear() {
+	*dict = *MakeConcurrent(dict.shardCount)
 }

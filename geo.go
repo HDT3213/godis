@@ -5,6 +5,7 @@ import (
 	"github.com/hdt3213/godis/datastruct/sortedset"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/geohash"
+	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/reply"
 	"strconv"
 	"strings"
@@ -51,9 +52,7 @@ func execGeoAdd(db *DB, args [][]byte) redis.Reply {
 			i++
 		}
 	}
-
-	db.AddAof(makeAofCmd("geoadd", args))
-
+	db.addAof(utils.ToCmdLine3("geoadd", args...))
 	return reply.MakeIntReply(int64(i))
 }
 
@@ -87,7 +86,7 @@ func execGeoPos(db *DB, args [][]byte) redis.Reply {
 		member := string(args[i+1])
 		elem, exists := sortedSet.Get(member)
 		if !exists {
-			positions[i] = (&reply.EmptyMultiBulkReply{})
+			positions[i] = &reply.EmptyMultiBulkReply{}
 			continue
 		}
 		lat, lng := geohash.Decode(uint64(elem.Score))

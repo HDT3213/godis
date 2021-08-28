@@ -2,6 +2,7 @@ package cluster
 
 import (
 	"fmt"
+	"github.com/hdt3213/godis"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/timewheel"
@@ -17,6 +18,7 @@ type Transaction struct {
 	cmdLine [][]byte // cmd cmdLine
 	cluster *Cluster
 	conn    redis.Connection
+	dbIndex int
 
 	writeKeys  []string
 	readKeys   []string
@@ -48,6 +50,7 @@ func NewTransaction(cluster *Cluster, c redis.Connection, id string, cmdLine [][
 		cmdLine: cmdLine,
 		cluster: cluster,
 		conn:    c,
+		dbIndex: c.GetDBIndex(),
 		status:  createdStatus,
 		mu:      new(sync.Mutex),
 	}
@@ -57,14 +60,14 @@ func NewTransaction(cluster *Cluster, c redis.Connection, id string, cmdLine [][
 // invoker should hold tx.mu
 func (tx *Transaction) lockKeys() {
 	if !tx.keysLocked {
-		tx.cluster.db.RWLocks(tx.writeKeys, tx.readKeys)
+		tx.cluster.db.RWLocks(tx.dbIndex, tx.writeKeys, tx.readKeys)
 		tx.keysLocked = true
 	}
 }
 
 func (tx *Transaction) unLockKeys() {
 	if tx.keysLocked {
-		tx.cluster.db.RWUnLocks(tx.writeKeys, tx.readKeys)
+		tx.cluster.db.RWUnLocks(tx.dbIndex, tx.writeKeys, tx.readKeys)
 		tx.keysLocked = false
 	}
 }
@@ -74,12 +77,12 @@ func (tx *Transaction) prepare() error {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
-	tx.writeKeys, tx.readKeys = tx.cluster.db.GetRelatedKeys(tx.cmdLine)
+	tx.writeKeys, tx.readKeys = godis.GetRelatedKeys(tx.cmdLine)
 	// lock writeKeys
 	tx.lockKeys()
 
 	// build undoLog
-	tx.undoLog = tx.cluster.db.GetUndoLogs(tx.cmdLine)
+	tx.undoLog = tx.cluster.db.GetUndoLogs(tx.dbIndex, tx.cmdLine)
 	tx.status = preparedStatus
 	taskKey := genTaskKey(tx.id)
 	timewheel.Delay(maxLockTime, taskKey, func() {
@@ -104,7 +107,7 @@ func (tx *Transaction) rollback() error {
 	}
 	tx.lockKeys()
 	for _, cmdLine := range tx.undoLog {
-		tx.cluster.db.ExecWithLock(cmdLine)
+		tx.cluster.db.ExecWithLock(tx.conn, cmdLine)
 	}
 	tx.unLockKeys()
 	tx.status = rolledBackStatus
@@ -163,7 +166,7 @@ func execCommit(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Rep
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
-	result := cluster.db.ExecWithLock(tx.cmdLine)
+	result := cluster.db.ExecWithLock(c, tx.cmdLine)
 
 	if reply.IsErrorReply(result) {
 		// failed

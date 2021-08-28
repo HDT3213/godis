@@ -1,6 +1,7 @@
 package godis
 
 import (
+	"github.com/hdt3213/godis/aof"
 	"github.com/hdt3213/godis/lib/utils"
 	"strconv"
 )
@@ -52,7 +53,7 @@ func rollbackGivenKeys(db *DB, keys ...string) []CmdLine {
 		} else {
 			undoCmdLines = append(undoCmdLines,
 				utils.ToCmdLine("DEL", key), // clean existed first
-				EntityToCmd(key, entity).Args,
+				aof.EntityToCmd(key, entity).Args,
 				toTTLCmd(db, key).Args,
 			)
 		}

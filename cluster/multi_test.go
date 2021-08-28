@@ -9,8 +9,8 @@ import (
 )
 
 func TestMultiExecOnSelf(t *testing.T) {
-	testCluster.db.Flush()
 	conn := new(connection.FakeConn)
+	testCluster.db.Exec(conn, utils.ToCmdLine("FLUSHALL"))
 	result := testCluster.Exec(conn, toArgs("MULTI"))
 	asserts.AssertNotError(t, result)
 	key := utils.RandString(10)
@@ -27,8 +27,8 @@ func TestMultiExecOnSelf(t *testing.T) {
 }
 
 func TestEmptyMulti(t *testing.T) {
-	testCluster.db.Flush()
 	conn := new(connection.FakeConn)
+	testCluster.db.Exec(conn, utils.ToCmdLine("FLUSHALL"))
 	result := testCluster.Exec(conn, toArgs("MULTI"))
 	asserts.AssertNotError(t, result)
 	result = testCluster.Exec(conn, utils.ToCmdLine("PING"))
@@ -40,8 +40,8 @@ func TestEmptyMulti(t *testing.T) {
 }
 
 func TestMultiExecOnOthers(t *testing.T) {
-	testCluster.db.Flush()
 	conn := new(connection.FakeConn)
+	testCluster.db.Exec(conn, utils.ToCmdLine("FLUSHALL"))
 	result := testCluster.Exec(conn, toArgs("MULTI"))
 	asserts.AssertNotError(t, result)
 	key := utils.RandString(10)
@@ -59,8 +59,8 @@ func TestMultiExecOnOthers(t *testing.T) {
 }
 
 func TestWatch(t *testing.T) {
-	testCluster.db.Flush()
 	conn := new(connection.FakeConn)
+	testCluster.db.Exec(conn, utils.ToCmdLine("FLUSHALL"))
 	key := utils.RandString(10)
 	value := utils.RandString(10)
 	testCluster.Exec(conn, utils.ToCmdLine("watch", key))
@@ -86,8 +86,8 @@ func TestWatch(t *testing.T) {
 }
 
 func TestWatch2(t *testing.T) {
-	testCluster.db.Flush()
 	conn := new(connection.FakeConn)
+	testCluster.db.Exec(conn, utils.ToCmdLine("FLUSHALL"))
 	key := utils.RandString(10)
 	value := utils.RandString(10)
 	testCluster.Exec(conn, utils.ToCmdLine("watch", key))

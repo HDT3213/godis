@@ -1,21 +1,24 @@
 package cluster
 
 import (
+	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/reply/asserts"
 	"testing"
 )
 
 func TestMSet(t *testing.T) {
+	conn := &connection.FakeConn{}
 	allowFastTransaction = false
-	ret := MSet(testCluster, nil, toArgs("MSET", "a", "a", "b", "b"))
+	ret := MSet(testCluster, conn, toArgs("MSET", "a", "a", "b", "b"))
 	asserts.AssertNotError(t, ret)
-	ret = testCluster.Exec(nil, toArgs("MGET", "a", "b"))
+	ret = testCluster.Exec(conn, toArgs("MGET", "a", "b"))
 	asserts.AssertMultiBulkReply(t, ret, []string{"a", "b"})
 }
 
 func TestMSetNx(t *testing.T) {
+	conn := &connection.FakeConn{}
 	allowFastTransaction = false
-	FlushAll(testCluster, nil, toArgs("FLUSHALL"))
-	ret := MSetNX(testCluster, nil, toArgs("MSETNX", "a", "a", "b", "b"))
+	FlushAll(testCluster, conn, toArgs("FLUSHALL"))
+	ret := MSetNX(testCluster, conn, toArgs("MSETNX", "a", "a", "b", "b"))
 	asserts.AssertNotError(t, ret)
 }

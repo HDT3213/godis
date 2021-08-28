@@ -2,7 +2,9 @@ package godis
 
 import (
 	Dict "github.com/hdt3213/godis/datastruct/dict"
+	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/reply"
 	"github.com/shopspring/decimal"
 	"strconv"
@@ -28,7 +30,7 @@ func (db *DB) getOrInitDict(key string) (dict Dict.Dict, inited bool, errReply r
 	inited = false
 	if dict == nil {
 		dict = Dict.MakeSimple()
-		db.PutEntity(key, &DataEntity{
+		db.PutEntity(key, &database.DataEntity{
 			Data: dict,
 		})
 		inited = true
@@ -50,7 +52,7 @@ func execHSet(db *DB, args [][]byte) redis.Reply {
 	}
 
 	result := dict.Put(field, value)
-	db.AddAof(makeAofCmd("hset", args))
+	db.addAof(utils.ToCmdLine3("hset", args...))
 	return reply.MakeIntReply(int64(result))
 }
 
@@ -74,7 +76,7 @@ func execHSetNX(db *DB, args [][]byte) redis.Reply {
 
 	result := dict.PutIfAbsent(field, value)
 	if result > 0 {
-		db.AddAof(makeAofCmd("hsetnx", args))
+		db.addAof(utils.ToCmdLine3("hsetnx", args...))
 
 	}
 	return reply.MakeIntReply(int64(result))
@@ -153,7 +155,7 @@ func execHDel(db *DB, args [][]byte) redis.Reply {
 		db.Remove(key)
 	}
 	if deleted > 0 {
-		db.AddAof(makeAofCmd("hdel", args))
+		db.addAof(utils.ToCmdLine3("hdel", args...))
 	}
 
 	return reply.MakeIntReply(int64(deleted))
@@ -210,7 +212,7 @@ func execHMSet(db *DB, args [][]byte) redis.Reply {
 		value := values[i]
 		dict.Put(field, value)
 	}
-	db.AddAof(makeAofCmd("hmset", args))
+	db.addAof(utils.ToCmdLine3("hmset", args...))
 	return &reply.OkReply{}
 }
 
@@ -344,7 +346,7 @@ func execHIncrBy(db *DB, args [][]byte) redis.Reply {
 	value, exists := dict.Get(field)
 	if !exists {
 		dict.Put(field, args[2])
-		db.AddAof(makeAofCmd("hincrby", args))
+		db.addAof(utils.ToCmdLine3("hincrby", args...))
 		return reply.MakeBulkReply(args[2])
 	}
 	val, err := strconv.ParseInt(string(value.([]byte)), 10, 64)
@@ -354,7 +356,7 @@ func execHIncrBy(db *DB, args [][]byte) redis.Reply {
 	val += delta
 	bytes := []byte(strconv.FormatInt(val, 10))
 	dict.Put(field, bytes)
-	db.AddAof(makeAofCmd("hincrby", args))
+	db.addAof(utils.ToCmdLine3("hincrby", args...))
 	return reply.MakeBulkReply(bytes)
 }
 
@@ -392,7 +394,7 @@ func execHIncrByFloat(db *DB, args [][]byte) redis.Reply {
 	result := val.Add(delta)
 	resultBytes := []byte(result.String())
 	dict.Put(field, resultBytes)
-	db.AddAof(makeAofCmd("hincrbyfloat", args))
+	db.addAof(utils.ToCmdLine3("hincrbyfloat", args...))
 	return reply.MakeBulkReply(resultBytes)
 }
 

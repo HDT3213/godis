@@ -2,6 +2,7 @@ package godis
 
 import (
 	List "github.com/hdt3213/godis/datastruct/list"
+	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/reply"
@@ -28,7 +29,7 @@ func (db *DB) getOrInitList(key string) (list *List.LinkedList, isNew bool, errR
 	isNew = false
 	if list == nil {
 		list = &List.LinkedList{}
-		db.PutEntity(key, &DataEntity{
+		db.PutEntity(key, &database.DataEntity{
 			Data: list,
 		})
 		isNew = true
@@ -103,7 +104,7 @@ func execLPop(db *DB, args [][]byte) redis.Reply {
 	if list.Len() == 0 {
 		db.Remove(key)
 	}
-	db.AddAof(makeAofCmd("lpop", args))
+	db.addAof(utils.ToCmdLine3("lpop", args...))
 	return reply.MakeBulkReply(val)
 }
 
@@ -144,7 +145,7 @@ func execLPush(db *DB, args [][]byte) redis.Reply {
 		list.Insert(0, value)
 	}
 
-	db.AddAof(makeAofCmd("lpush", args))
+	db.addAof(utils.ToCmdLine3("lpush", args...))
 	return reply.MakeIntReply(int64(list.Len()))
 }
 
@@ -176,7 +177,7 @@ func execLPushX(db *DB, args [][]byte) redis.Reply {
 	for _, value := range values {
 		list.Insert(0, value)
 	}
-	db.AddAof(makeAofCmd("lpushx", args))
+	db.addAof(utils.ToCmdLine3("lpushx", args...))
 	return reply.MakeIntReply(int64(list.Len()))
 }
 
@@ -269,7 +270,7 @@ func execLRem(db *DB, args [][]byte) redis.Reply {
 		db.Remove(key)
 	}
 	if removed > 0 {
-		db.AddAof(makeAofCmd("lrem", args))
+		db.addAof(utils.ToCmdLine3("lrem", args...))
 	}
 
 	return reply.MakeIntReply(int64(removed))
@@ -305,7 +306,7 @@ func execLSet(db *DB, args [][]byte) redis.Reply {
 	}
 
 	list.Set(index, value)
-	db.AddAof(makeAofCmd("lset", args))
+	db.addAof(utils.ToCmdLine3("lset", args...))
 	return &reply.OkReply{}
 }
 
@@ -360,7 +361,7 @@ func execRPop(db *DB, args [][]byte) redis.Reply {
 	if list.Len() == 0 {
 		db.Remove(key)
 	}
-	db.AddAof(makeAofCmd("rpop", args))
+	db.addAof(utils.ToCmdLine3("rpop", args...))
 	return reply.MakeBulkReply(val)
 }
 
@@ -420,7 +421,7 @@ func execRPopLPush(db *DB, args [][]byte) redis.Reply {
 		db.Remove(sourceKey)
 	}
 
-	db.AddAof(makeAofCmd("rpoplpush", args))
+	db.addAof(utils.ToCmdLine3("rpoplpush", args...))
 	return reply.MakeBulkReply(val)
 }
 
@@ -463,7 +464,7 @@ func execRPush(db *DB, args [][]byte) redis.Reply {
 	for _, value := range values {
 		list.Add(value)
 	}
-	db.AddAof(makeAofCmd("rpush", args))
+	db.addAof(utils.ToCmdLine3("rpush", args...))
 	return reply.MakeIntReply(int64(list.Len()))
 }
 
@@ -498,7 +499,7 @@ func execRPushX(db *DB, args [][]byte) redis.Reply {
 	for _, value := range values {
 		list.Add(value)
 	}
-	db.AddAof(makeAofCmd("rpushx", args))
+	db.addAof(utils.ToCmdLine3("rpushx", args...))
 
 	return reply.MakeIntReply(int64(list.Len()))
 }

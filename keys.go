@@ -1,11 +1,13 @@
 package godis
 
 import (
+	"github.com/hdt3213/godis/aof"
 	"github.com/hdt3213/godis/datastruct/dict"
 	"github.com/hdt3213/godis/datastruct/list"
 	"github.com/hdt3213/godis/datastruct/set"
 	"github.com/hdt3213/godis/datastruct/sortedset"
 	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/lib/wildcard"
 	"github.com/hdt3213/godis/redis/reply"
 	"strconv"
@@ -21,7 +23,7 @@ func execDel(db *DB, args [][]byte) redis.Reply {
 
 	deleted := db.Removes(keys...)
 	if deleted > 0 {
-		db.AddAof(makeAofCmd("del", args))
+		db.addAof(utils.ToCmdLine3("del", args...))
 	}
 	return reply.MakeIntReply(int64(deleted))
 }
@@ -50,14 +52,7 @@ func execExists(db *DB, args [][]byte) redis.Reply {
 // execFlushDB removes all data in current db
 func execFlushDB(db *DB, args [][]byte) redis.Reply {
 	db.Flush()
-	db.AddAof(makeAofCmd("flushdb", args))
-	return &reply.OkReply{}
-}
-
-// execFlushAll removes all data in all db
-func execFlushAll(db *DB, args [][]byte) redis.Reply {
-	db.Flush()
-	db.AddAof(makeAofCmd("flushdb", args))
+	db.addAof(utils.ToCmdLine3("flushdb", args...))
 	return &reply.OkReply{}
 }
 
@@ -110,7 +105,7 @@ func execRename(db *DB, args [][]byte) redis.Reply {
 		expireTime, _ := rawTTL.(time.Time)
 		db.Expire(dest, expireTime)
 	}
-	db.AddAof(makeAofCmd("rename", args))
+	db.addAof(utils.ToCmdLine3("rename", args...))
 	return &reply.OkReply{}
 }
 
@@ -143,7 +138,7 @@ func execRenameNx(db *DB, args [][]byte) redis.Reply {
 		expireTime, _ := rawTTL.(time.Time)
 		db.Expire(dest, expireTime)
 	}
-	db.AddAof(makeAofCmd("renamenx", args))
+	db.addAof(utils.ToCmdLine3("renamenx", args...))
 	return reply.MakeIntReply(1)
 }
 
@@ -164,7 +159,7 @@ func execExpire(db *DB, args [][]byte) redis.Reply {
 
 	expireAt := time.Now().Add(ttl)
 	db.Expire(key, expireAt)
-	db.AddAof(makeExpireCmd(key, expireAt))
+	db.addAof(aof.MakeExpireCmd(key, expireAt).Args)
 	return reply.MakeIntReply(1)
 }
 
@@ -176,15 +171,15 @@ func execExpireAt(db *DB, args [][]byte) redis.Reply {
 	if err != nil {
 		return reply.MakeErrReply("ERR value is not an integer or out of range")
 	}
-	expireTime := time.Unix(raw, 0)
+	expireAt := time.Unix(raw, 0)
 
 	_, exists := db.GetEntity(key)
 	if !exists {
 		return reply.MakeIntReply(0)
 	}
 
-	db.Expire(key, expireTime)
-	db.AddAof(makeExpireCmd(key, expireTime))
+	db.Expire(key, expireAt)
+	db.addAof(aof.MakeExpireCmd(key, expireAt).Args)
 	return reply.MakeIntReply(1)
 }
 
@@ -203,9 +198,9 @@ func execPExpire(db *DB, args [][]byte) redis.Reply {
 		return reply.MakeIntReply(0)
 	}
 
-	expireTime := time.Now().Add(ttl)
-	db.Expire(key, expireTime)
-	db.AddAof(makeExpireCmd(key, expireTime))
+	expireAt := time.Now().Add(ttl)
+	db.Expire(key, expireAt)
+	db.addAof(aof.MakeExpireCmd(key, expireAt).Args)
 	return reply.MakeIntReply(1)
 }
 
@@ -217,16 +212,16 @@ func execPExpireAt(db *DB, args [][]byte) redis.Reply {
 	if err != nil {
 		return reply.MakeErrReply("ERR value is not an integer or out of range")
 	}
-	expireTime := time.Unix(0, raw*int64(time.Millisecond))
+	expireAt := time.Unix(0, raw*int64(time.Millisecond))
 
 	_, exists := db.GetEntity(key)
 	if !exists {
 		return reply.MakeIntReply(0)
 	}
 
-	db.Expire(key, expireTime)
+	db.Expire(key, expireAt)
 
-	db.AddAof(makeExpireCmd(key, expireTime))
+	db.addAof(aof.MakeExpireCmd(key, expireAt).Args)
 	return reply.MakeIntReply(1)
 }
 
@@ -278,14 +273,8 @@ func execPersist(db *DB, args [][]byte) redis.Reply {
 	}
 
 	db.Persist(key)
-	db.AddAof(makeAofCmd("persist", args))
+	db.addAof(utils.ToCmdLine3("persist", args...))
 	return reply.MakeIntReply(1)
-}
-
-// BGRewriteAOF asynchronously rewrites Append-Only-File
-func BGRewriteAOF(db *DB, args [][]byte) redis.Reply {
-	go db.aofRewrite()
-	return reply.MakeStatusReply("Background append only file rewriting started")
 }
 
 // execKeys returns all keys matching the given pattern
@@ -299,6 +288,17 @@ func execKeys(db *DB, args [][]byte) redis.Reply {
 		return true
 	})
 	return reply.MakeMultiBulkReply(result)
+}
+
+func toTTLCmd(db *DB, key string) *reply.MultiBulkReply {
+	raw, exists := db.ttlMap.Get(key)
+	if !exists {
+		// 无 TTL
+		return reply.MakeMultiBulkReply(utils.ToCmdLine("PERSIST", key))
+	}
+	expireTime, _ := raw.(time.Time)
+	timestamp := strconv.FormatInt(expireTime.UnixNano()/1000/1000, 10)
+	return reply.MakeMultiBulkReply(utils.ToCmdLine("PEXPIREAT", key, timestamp))
 }
 
 func undoExpire(db *DB, args [][]byte) []CmdLine {
@@ -322,6 +322,5 @@ func init() {
 	RegisterCommand("Rename", execRename, prepareRename, undoRename, 3)
 	RegisterCommand("RenameNx", execRenameNx, prepareRename, undoRename, 3)
 	RegisterCommand("FlushDB", execFlushDB, noPrepare, nil, -1)
-	RegisterCommand("FlushAll", execFlushAll, noPrepare, nil, -1)
 	RegisterCommand("Keys", execKeys, noPrepare, nil, 2)
 }

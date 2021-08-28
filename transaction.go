@@ -44,7 +44,7 @@ func isWatchingChanged(db *DB, watching map[string]uint32) bool {
 }
 
 // StartMulti starts multi-command-transaction
-func StartMulti(db *DB, conn redis.Connection) redis.Reply {
+func StartMulti(conn redis.Connection) redis.Reply {
 	if conn.InMultiState() {
 		return reply.MakeErrReply("ERR MULTI calls can not be nested")
 	}
@@ -53,7 +53,7 @@ func StartMulti(db *DB, conn redis.Connection) redis.Reply {
 }
 
 // EnqueueCmd puts command line into `multi` pending queue
-func EnqueueCmd(db *DB, conn redis.Connection, cmdLine [][]byte) redis.Reply {
+func EnqueueCmd(conn redis.Connection, cmdLine [][]byte) redis.Reply {
 	cmdName := strings.ToLower(string(cmdLine[0]))
 	cmd, ok := cmdTable[cmdName]
 	if !ok {
@@ -79,11 +79,11 @@ func execMulti(db *DB, conn redis.Connection) redis.Reply {
 	}
 	defer conn.SetMultiState(false)
 	cmdLines := conn.GetQueuedCmdLine()
-	return ExecMulti(db, conn, conn.GetWatching(), cmdLines)
+	return db.ExecMulti(conn, conn.GetWatching(), cmdLines)
 }
 
 // ExecMulti executes multi commands transaction Atomically and Isolated
-func ExecMulti(db *DB, conn redis.Connection, watching map[string]uint32, cmdLines []CmdLine) redis.Reply {
+func (db *DB) ExecMulti(conn redis.Connection, watching map[string]uint32, cmdLines []CmdLine) redis.Reply {
 	// prepare
 	writeKeys := make([]string, 0) // may contains duplicate
 	readKeys := make([]string, 0)
@@ -113,7 +113,7 @@ func ExecMulti(db *DB, conn redis.Connection, watching map[string]uint32, cmdLin
 	undoCmdLines := make([][]CmdLine, 0, len(cmdLines))
 	for _, cmdLine := range cmdLines {
 		undoCmdLines = append(undoCmdLines, db.GetUndoLogs(cmdLine))
-		result := db.ExecWithLock(cmdLine)
+		result := db.execWithLock(cmdLine)
 		if reply.IsErrorReply(result) {
 			aborted = true
 			// don't rollback failed commands
@@ -134,18 +134,60 @@ func ExecMulti(db *DB, conn redis.Connection, watching map[string]uint32, cmdLin
 			continue
 		}
 		for _, cmdLine := range curCmdLines {
-			db.ExecWithLock(cmdLine)
+			db.execWithLock(cmdLine)
 		}
 	}
 	return reply.MakeErrReply("EXECABORT Transaction discarded because of previous errors.")
 }
 
 // DiscardMulti drops MULTI pending commands
-func DiscardMulti(db *DB, conn redis.Connection) redis.Reply {
+func DiscardMulti(conn redis.Connection) redis.Reply {
 	if !conn.InMultiState() {
 		return reply.MakeErrReply("ERR DISCARD without MULTI")
 	}
 	conn.ClearQueuedCmds()
 	conn.SetMultiState(false)
 	return reply.MakeQueuedReply()
+}
+
+// GetUndoLogs return rollback commands
+func (db *DB) GetUndoLogs(cmdLine [][]byte) []CmdLine {
+	cmdName := strings.ToLower(string(cmdLine[0]))
+	cmd, ok := cmdTable[cmdName]
+	if !ok {
+		return nil
+	}
+	undo := cmd.undo
+	if undo == nil {
+		return nil
+	}
+	return undo(db, cmdLine[1:])
+}
+
+// execWithLock executes normal commands, invoker should provide locks
+func (db *DB) execWithLock(cmdLine [][]byte) redis.Reply {
+	cmdName := strings.ToLower(string(cmdLine[0]))
+	cmd, ok := cmdTable[cmdName]
+	if !ok {
+		return reply.MakeErrReply("ERR unknown command '" + cmdName + "'")
+	}
+	if !validateArity(cmd.arity, cmdLine) {
+		return reply.MakeArgNumErrReply(cmdName)
+	}
+	fun := cmd.executor
+	return fun(db, cmdLine[1:])
+}
+
+// GetRelatedKeys analysis related keys
+func GetRelatedKeys(cmdLine [][]byte) ([]string, []string) {
+	cmdName := strings.ToLower(string(cmdLine[0]))
+	cmd, ok := cmdTable[cmdName]
+	if !ok {
+		return nil, nil
+	}
+	prepare := cmd.prepare
+	if prepare == nil {
+		return nil, nil
+	}
+	return prepare(cmdLine[1:])
 }

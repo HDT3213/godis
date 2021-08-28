@@ -28,6 +28,9 @@ type Connection struct {
 	multiState bool
 	queue      [][][]byte
 	watching   map[string]uint32
+
+	// selected db
+	selectedDB int
 }
 
 // RemoteAddr returns the remote network address
@@ -145,6 +148,14 @@ func (c *Connection) GetWatching() map[string]uint32 {
 		c.watching = make(map[string]uint32)
 	}
 	return c.watching
+}
+
+func (c *Connection) GetDBIndex() int {
+	return c.selectedDB
+}
+
+func (c *Connection) SelectDB(dbNum int) {
+	c.selectedDB = dbNum
 }
 
 // FakeConn implements redis.Connection for test
