@@ -147,7 +147,7 @@ func DiscardMulti(conn redis.Connection) redis.Reply {
 	}
 	conn.ClearQueuedCmds()
 	conn.SetMultiState(false)
-	return reply.MakeQueuedReply()
+	return reply.MakeOkReply()
 }
 
 // GetUndoLogs return rollback commands
