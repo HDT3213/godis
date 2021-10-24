@@ -1,5 +1,7 @@
 language: go
 
+go:
+  - 1.16.x
 before_install:
   - sudo apt-get install redis-server; redis-server &
   - go install github.com/mattn/goveralls@latest
