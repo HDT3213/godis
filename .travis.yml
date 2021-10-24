@@ -1,11 +1,8 @@
 language: go
 
-go:
-  - tip
-
 before_install:
   - go get -t -v ./...
   - sudo apt-get install redis-server; redis-server &
-  - go get github.com/mattn/goveralls
+  - go install github.com/mattn/goveralls@latest
 script:
   - $GOPATH/bin/goveralls -service=travis-ci

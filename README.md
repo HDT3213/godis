@@ -1,7 +1,7 @@
 # Godis
 
 ![license](https://img.shields.io/github/license/HDT3213/godis)
-[![Build Status](https://travis-ci.com/HDT3213/godis.svg?branch=master)](https://travis-ci.com/HDT3213/godis)
+[![Build Status](https://travis-ci.com/HDT3213/godis.svg?branch=master)](https://app.travis-ci.com/github/HDT3213/godis)
 [![Coverage Status](https://coveralls.io/repos/github/HDT3213/godis/badge.svg?branch=master)](https://coveralls.io/github/HDT3213/godis?branch=master)
 [![Go Report Card](https://goreportcard.com/badge/github.com/HDT3213/godis)](https://goreportcard.com/report/github.com/HDT3213/godis)
 [![Go Reference](https://pkg.go.dev/badge/github.com/hdt3213/godis.svg)](https://pkg.go.dev/github.com/hdt3213/godis)
@@ -16,6 +16,7 @@ middleware using golang.
 Key Features:
 
 - Support string, list, hash, set, sorted set
+- Multi Database and `SELECT` command  
 - TTL
 - Publish/Subscribe
 - GEO
@@ -141,7 +142,8 @@ I suggest focusing on the following directories:
     - set: a hash set based on map
     - sortedset: a sorted set implements based on skiplist
 - github.com/hdt3213/godis: the core of storage engine
-    - db.go: the basement of database
+    - server.go: a standalone redis server, 
+    - db.go: the basement function of database
     - exec.go: the gateway of database
     - router.go: the command table
     - keys.go: handlers for keys commands
