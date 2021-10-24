@@ -1,7 +1,6 @@
 language: go
 
 before_install:
-  - go get -t -v ./...
   - sudo apt-get install redis-server; redis-server &
   - go install github.com/mattn/goveralls@latest
 script:
