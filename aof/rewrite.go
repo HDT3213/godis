@@ -6,6 +6,7 @@ import (
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/reply"
+	"io"
 	"io/ioutil"
 	"os"
 	"strconv"
@@ -19,16 +20,34 @@ func (handler *Handler) newRewriteHandler() *Handler {
 	return h
 }
 
+type rewriteCtx struct {
+	tmpFile  *os.File
+	fileSize int64
+	dbIdx    int // selected db index when startRewrite
+}
+
 func (handler *Handler) Rewrite() {
-	tmpFile, fileSize, err := handler.startRewrite()
+	ctx, err := handler.StartRewrite()
 	if err != nil {
 		logger.Warn(err)
 		return
 	}
+	err = handler.DoRewrite(ctx)
+	if err != nil {
+		logger.Error(err)
+		return
+	}
+
+	handler.FinishRewrite(ctx)
+}
+
+// DoRewrite actually rewrite aof file, returns
+func (handler *Handler) DoRewrite(ctx *rewriteCtx) error {
+	tmpFile := ctx.tmpFile
 
 	// load aof tmpFile
 	tmpAof := handler.newRewriteHandler()
-	tmpAof.LoadAof(int(fileSize))
+	tmpAof.LoadAof(int(ctx.fileSize))
 
 	// rewrite aof tmpFile
 	for i := 0; i < config.Properties.Databases; i++ {
@@ -36,8 +55,7 @@ func (handler *Handler) Rewrite() {
 		data := reply.MakeMultiBulkReply(utils.ToCmdLine("SELECT", strconv.Itoa(i))).ToBytes()
 		_, err := tmpFile.Write(data)
 		if err != nil {
-			logger.Warn(err)
-			return
+			return err
 		}
 		// dump db
 		tmpAof.db.ForEach(i, func(key string, entity *database.DataEntity, expiration *time.Time) bool {
@@ -54,69 +72,71 @@ func (handler *Handler) Rewrite() {
 			return true
 		})
 	}
-
-	handler.finishRewrite(tmpFile)
+	return nil
 }
 
-func (handler *Handler) startRewrite() (*os.File, int64, error) {
+// StartRewrite prepares rewrite procedure
+func (handler *Handler) StartRewrite() (*rewriteCtx, error) {
 	handler.pausingAof.Lock() // pausing aof
 	defer handler.pausingAof.Unlock()
 
 	err := handler.aofFile.Sync()
 	if err != nil {
 		logger.Warn("fsync failed")
-		return nil, 0, err
+		return nil, err
 	}
-	// create rewrite channel
-	handler.aofRewriteBuffer = make(chan *payload, aofQueueSize)
 
 	// get current aof file size
 	fileInfo, _ := os.Stat(handler.aofFilename)
 	filesize := fileInfo.Size()
 
 	// create tmp file
-	file, err := ioutil.TempFile("", "aof")
+	file, err := ioutil.TempFile("", "*.aof")
 	if err != nil {
 		logger.Warn("tmp file create failed")
-		return nil, 0, err
+		return nil, err
 	}
-	return file, filesize, nil
+	return &rewriteCtx{
+		tmpFile:  file,
+		fileSize: filesize,
+		dbIdx:    handler.currentDB,
+	}, nil
 }
 
-func (handler *Handler) finishRewrite(tmpFile *os.File) {
+// FinishRewrite finish rewrite procedure
+func (handler *Handler) FinishRewrite(ctx *rewriteCtx) {
 	handler.pausingAof.Lock() // pausing aof
 	defer handler.pausingAof.Unlock()
 
-	// write commands created during rewriting to tmp file
-	currentDB := -1
-loop:
-	for {
-		// aof is pausing, there won't be any new commands in aofRewriteBuffer
-		select {
-		case p := <-handler.aofRewriteBuffer:
-			if p.dbIndex != currentDB {
-				// select db
-				// always do `select` during first loop 第一次进入循环时必须执行一次 select 确保数据库一致
-				data := reply.MakeMultiBulkReply(utils.ToCmdLine("SELECT", strconv.Itoa(p.dbIndex))).ToBytes()
-				_, err := tmpFile.Write(data)
-				if err != nil {
-					logger.Warn(err)
-					continue // skip this command
-				}
-				currentDB = p.dbIndex
-			}
-			data := reply.MakeMultiBulkReply(p.cmdLine).ToBytes()
-			_, err := tmpFile.Write(data)
-			if err != nil {
-				logger.Warn(err)
-			}
-		default:
-			// channel is empty, break loop
-			break loop
-		}
+	tmpFile := ctx.tmpFile
+	// write commands executed during rewriting to tmp file
+	src, err := os.Open(handler.aofFilename)
+	if err != nil {
+		logger.Error("open aofFilename failed: " + err.Error())
+		return
 	}
-	close(handler.aofRewriteBuffer)
-	handler.aofRewriteBuffer = nil
+	defer func() {
+		_ = src.Close()
+	}()
+	_, err = src.Seek(ctx.fileSize, 0)
+	if err != nil {
+		logger.Error("seek failed: " + err.Error())
+		return
+	}
+
+	// sync tmpFile's db index with online aofFile
+	data := reply.MakeMultiBulkReply(utils.ToCmdLine("SELECT", strconv.Itoa(ctx.dbIdx))).ToBytes()
+	_, err = tmpFile.Write(data)
+	if err != nil {
+		logger.Error("tmp file rewrite failed: " + err.Error())
+		return
+	}
+	// copy data
+	_, err = io.Copy(tmpFile, src)
+	if err != nil {
+		logger.Error("copy aof filed failed: " + err.Error())
+		return
+	}
 
 	// replace current aof file by tmp file
 	_ = handler.aofFile.Close()
@@ -130,7 +150,7 @@ loop:
 	handler.aofFile = aofFile
 
 	// reset selected db 重新写入一次 select 指令保证 aof 中的数据库与 handler.currentDB 一致
-	data := reply.MakeMultiBulkReply(utils.ToCmdLine("SELECT", strconv.Itoa(handler.currentDB))).ToBytes()
+	data = reply.MakeMultiBulkReply(utils.ToCmdLine("SELECT", strconv.Itoa(handler.currentDB))).ToBytes()
 	_, err = handler.aofFile.Write(data)
 	if err != nil {
 		panic(err)

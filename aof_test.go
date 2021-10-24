@@ -160,3 +160,56 @@ func TestRewriteAOF(t *testing.T) {
 	}
 	aofReadDB.Close()
 }
+
+// TestRewriteAOF2 tests execute commands during rewrite procedure
+func TestRewriteAOF2(t *testing.T) {
+	tmpFile, err := ioutil.TempFile("", "*.aof")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	aofFilename := tmpFile.Name()
+	defer func() {
+		_ = os.Remove(aofFilename)
+	}()
+	config.Properties = &config.ServerProperties{
+		AppendOnly:     true,
+		AppendFilename: aofFilename,
+	}
+	aofWriteDB := NewStandaloneServer()
+	dbNum := 4
+	conn := &connection.FakeConn{}
+	for i := 0; i < dbNum; i++ {
+		conn.SelectDB(i)
+		key := strconv.Itoa(i)
+		aofWriteDB.Exec(conn, utils.ToCmdLine("SET", key, key))
+	}
+
+	ctx, err := aofWriteDB.aofHandler.StartRewrite()
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	// add data during rewrite
+	for i := 0; i < dbNum; i++ {
+		conn.SelectDB(i)
+		key := "a" + strconv.Itoa(i)
+		aofWriteDB.Exec(conn, utils.ToCmdLine("SET", key, key))
+	}
+	aofWriteDB.aofHandler.DoRewrite(ctx)
+	aofWriteDB.aofHandler.FinishRewrite(ctx)
+
+	aofWriteDB.Close()                 // wait for aof finished
+	aofReadDB := NewStandaloneServer() // start new db and read aof file
+	for i := 0; i < dbNum; i++ {
+		conn.SelectDB(i)
+		key := strconv.Itoa(i)
+		ret := aofReadDB.Exec(conn, utils.ToCmdLine("GET", key))
+		asserts.AssertBulkReply(t, ret, key)
+
+		key = "a" + strconv.Itoa(i)
+		ret = aofReadDB.Exec(conn, utils.ToCmdLine("GET", key))
+		asserts.AssertBulkReply(t, ret, key)
+	}
+	aofReadDB.Close()
+}

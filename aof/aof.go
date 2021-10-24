@@ -33,8 +33,6 @@ type Handler struct {
 	aofFilename string
 	// aof goroutine will send msg to main goroutine through this channel when aof tasks finished and ready to shutdown
 	aofFinished chan struct{}
-	// buffer commands received during aof rewrite progress
-	aofRewriteBuffer chan *payload
 	// pause aof for start/finish aof rewrite progress
 	pausingAof sync.RWMutex
 	currentDB  int
@@ -75,10 +73,6 @@ func (handler *Handler) handleAof() {
 	handler.currentDB = 0
 	for p := range handler.aofChan {
 		handler.pausingAof.RLock() // prevent other goroutines from pausing aof
-		if handler.aofRewriteBuffer != nil {
-			// replica during rewrite
-			handler.aofRewriteBuffer <- p
-		}
 		if p.dbIndex != handler.currentDB {
 			// select db
 			data := reply.MakeMultiBulkReply(utils.ToCmdLine("SELECT", strconv.Itoa(p.dbIndex))).ToBytes()
