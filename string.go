@@ -109,38 +109,33 @@ func execSet(db *DB, args [][]byte) redis.Reply {
 		Data: value,
 	}
 
-	db.Persist(key) // clean ttl
 	var result int
 	switch policy {
 	case upsertPolicy:
-		result = db.PutEntity(key, entity)
+		db.PutEntity(key, entity)
+		result = 1
 	case insertPolicy:
 		result = db.PutIfAbsent(key, entity)
 	case updatePolicy:
 		result = db.PutIfExists(key, entity)
 	}
-	/*
-	 *   如果设置了ttl 则以最新的ttl为准
-	 *   如果没有设置ttl 是新增key的情况，不设置ttl。
-	 *   如果没有设置ttl 且已存在key的 不修改ttl 但需要增加aof
-	 */
-	if ttl != unlimitedTTL {
-		expireTime := time.Now().Add(time.Duration(ttl) * time.Millisecond)
-		db.Expire(key, expireTime)
-		db.addAof(CmdLine{
-			[]byte("SET"),
-			args[0],
-			args[1],
-		})
-		db.addAof(aof.MakeExpireCmd(key, expireTime).Args)
-	} else if result > 0 {
-		db.Persist(key) // override ttl
-		db.addAof(utils.ToCmdLine3("set", args...))
-	} else {
-		db.addAof(utils.ToCmdLine3("set", args...))
+	if result > 0 {
+		if ttl != unlimitedTTL {
+			expireTime := time.Now().Add(time.Duration(ttl) * time.Millisecond)
+			db.Expire(key, expireTime)
+			db.addAof(CmdLine{
+				[]byte("SET"),
+				args[0],
+				args[1],
+			})
+			db.addAof(aof.MakeExpireCmd(key, expireTime).Args)
+		} else {
+			db.Persist(key) // override ttl
+			db.addAof(utils.ToCmdLine3("set", args...))
+		}
 	}
 
-	if policy == upsertPolicy || result > 0 {
+	if result > 0 {
 		return &reply.OkReply{}
 	}
 	return &reply.NullBulkReply{}
