@@ -2,7 +2,7 @@ package cluster
 
 import (
 	"fmt"
-	"github.com/hdt3213/godis"
+	"github.com/hdt3213/godis/database"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/timewheel"
@@ -77,7 +77,7 @@ func (tx *Transaction) prepare() error {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
-	tx.writeKeys, tx.readKeys = godis.GetRelatedKeys(tx.cmdLine)
+	tx.writeKeys, tx.readKeys = database.GetRelatedKeys(tx.cmdLine)
 	// lock writeKeys
 	tx.lockKeys()
 

@@ -4,8 +4,8 @@ package cluster
 import (
 	"context"
 	"fmt"
-	"github.com/hdt3213/godis"
 	"github.com/hdt3213/godis/config"
+	database2 "github.com/hdt3213/godis/database"
 	"github.com/hdt3213/godis/datastruct/dict"
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/interface/redis"
@@ -47,7 +47,7 @@ func MakeCluster() *Cluster {
 	cluster := &Cluster{
 		self: config.Properties.Self,
 
-		db:             godis.NewStandaloneServer(),
+		db:             database2.NewStandaloneServer(),
 		transactions:   dict.MakeSimple(),
 		peerPicker:     consistenthash.New(replicas, nil),
 		peerConnection: make(map[string]*pool.ObjectPool),
@@ -102,7 +102,7 @@ func (cluster *Cluster) Exec(c redis.Connection, cmdLine [][]byte) (result redis
 	}()
 	cmdName := strings.ToLower(string(cmdLine[0]))
 	if cmdName == "auth" {
-		return godis.Auth(c, cmdLine[1:])
+		return database2.Auth(c, cmdLine[1:])
 	}
 	if !isAuthenticated(c) {
 		return reply.MakeErrReply("NOAUTH Authentication required")
@@ -112,12 +112,12 @@ func (cluster *Cluster) Exec(c redis.Connection, cmdLine [][]byte) (result redis
 		if len(cmdLine) != 1 {
 			return reply.MakeArgNumErrReply(cmdName)
 		}
-		return godis.StartMulti(c)
+		return database2.StartMulti(c)
 	} else if cmdName == "discard" {
 		if len(cmdLine) != 1 {
 			return reply.MakeArgNumErrReply(cmdName)
 		}
-		return godis.DiscardMulti(c)
+		return database2.DiscardMulti(c)
 	} else if cmdName == "exec" {
 		if len(cmdLine) != 1 {
 			return reply.MakeArgNumErrReply(cmdName)
@@ -130,7 +130,7 @@ func (cluster *Cluster) Exec(c redis.Connection, cmdLine [][]byte) (result redis
 		return execSelect(c, cmdLine)
 	}
 	if c != nil && c.InMultiState() {
-		return godis.EnqueueCmd(c, cmdLine)
+		return database2.EnqueueCmd(c, cmdLine)
 	}
 	cmdFunc, ok := router[cmdName]
 	if !ok {

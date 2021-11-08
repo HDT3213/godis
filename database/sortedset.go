@@ -1,4 +1,4 @@
-package godis
+package database
 
 import (
 	SortedSet "github.com/hdt3213/godis/datastruct/sortedset"

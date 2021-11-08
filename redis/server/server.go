@@ -6,9 +6,9 @@ package server
 
 import (
 	"context"
-	"github.com/hdt3213/godis"
 	"github.com/hdt3213/godis/cluster"
 	"github.com/hdt3213/godis/config"
+	database2 "github.com/hdt3213/godis/database"
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/sync/atomic"
@@ -39,7 +39,7 @@ func MakeHandler() *Handler {
 		len(config.Properties.Peers) > 0 {
 		db = cluster.MakeCluster()
 	} else {
-		db = godis.NewStandaloneServer()
+		db = database2.NewStandaloneServer()
 	}
 	return &Handler{
 		db: db,

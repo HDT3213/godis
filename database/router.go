@@ -1,4 +1,4 @@
-package godis
+package database
 
 import (
 	"strings"
