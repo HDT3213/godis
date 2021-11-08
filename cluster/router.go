@@ -2,6 +2,7 @@ package cluster
 
 import "github.com/hdt3213/godis/interface/redis"
 
+// CmdLine is alias for [][]byte, represents a command line
 type CmdLine = [][]byte
 
 func makeRouter() map[string]CmdFunc {

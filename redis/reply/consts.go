@@ -22,6 +22,7 @@ func (r *OkReply) ToBytes() []byte {
 
 var theOkReply = new(OkReply)
 
+// MakeOkReply returns a ok reply
 func MakeOkReply() *OkReply {
 	return theOkReply
 }
@@ -78,6 +79,7 @@ func (r *QueuedReply) ToBytes() []byte {
 
 var theQueuedReply = new(QueuedReply)
 
+// MakeQueuedReply returns a QUEUED reply
 func MakeQueuedReply() *QueuedReply {
 	return theQueuedReply
 }

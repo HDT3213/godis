@@ -14,6 +14,7 @@ import (
 	"sync"
 )
 
+// CmdLine is alias for [][]byte, represents a command line
 type CmdLine = [][]byte
 
 const (
@@ -25,6 +26,7 @@ type payload struct {
 	dbIndex int
 }
 
+// Handler receive msgs from channel and write to AOF file
 type Handler struct {
 	db          database.EmbedDB
 	tmpDBMaker  func() database.EmbedDB
@@ -38,6 +40,7 @@ type Handler struct {
 	currentDB  int
 }
 
+// NewAOFHandler creates a new aof.Handler
 func NewAOFHandler(db database.EmbedDB, tmpDBMaker func() database.EmbedDB) (*Handler, error) {
 	handler := &Handler{}
 	handler.aofFilename = config.Properties.AppendFilename
@@ -144,6 +147,7 @@ func (handler *Handler) LoadAof(maxBytes int) {
 	}
 }
 
+// Close gracefully stops aof persistence procedure
 func (handler *Handler) Close() {
 	if handler.aofFile != nil {
 		close(handler.aofChan)

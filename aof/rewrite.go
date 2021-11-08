@@ -20,12 +20,14 @@ func (handler *Handler) newRewriteHandler() *Handler {
 	return h
 }
 
-type rewriteCtx struct {
+// RewriteCtx holds context of an AOF rewriting procedure
+type RewriteCtx struct {
 	tmpFile  *os.File
 	fileSize int64
 	dbIdx    int // selected db index when startRewrite
 }
 
+// Rewrite carries out AOF rewrite
 func (handler *Handler) Rewrite() {
 	ctx, err := handler.StartRewrite()
 	if err != nil {
@@ -41,8 +43,9 @@ func (handler *Handler) Rewrite() {
 	handler.FinishRewrite(ctx)
 }
 
-// DoRewrite actually rewrite aof file, returns
-func (handler *Handler) DoRewrite(ctx *rewriteCtx) error {
+// DoRewrite actually rewrite aof file
+// makes DoRewrite public for testing only, please use Rewrite instead
+func (handler *Handler) DoRewrite(ctx *RewriteCtx) error {
 	tmpFile := ctx.tmpFile
 
 	// load aof tmpFile
@@ -76,7 +79,7 @@ func (handler *Handler) DoRewrite(ctx *rewriteCtx) error {
 }
 
 // StartRewrite prepares rewrite procedure
-func (handler *Handler) StartRewrite() (*rewriteCtx, error) {
+func (handler *Handler) StartRewrite() (*RewriteCtx, error) {
 	handler.pausingAof.Lock() // pausing aof
 	defer handler.pausingAof.Unlock()
 
@@ -96,7 +99,7 @@ func (handler *Handler) StartRewrite() (*rewriteCtx, error) {
 		logger.Warn("tmp file create failed")
 		return nil, err
 	}
-	return &rewriteCtx{
+	return &RewriteCtx{
 		tmpFile:  file,
 		fileSize: filesize,
 		dbIdx:    handler.currentDB,
@@ -104,7 +107,7 @@ func (handler *Handler) StartRewrite() (*rewriteCtx, error) {
 }
 
 // FinishRewrite finish rewrite procedure
-func (handler *Handler) FinishRewrite(ctx *rewriteCtx) {
+func (handler *Handler) FinishRewrite(ctx *RewriteCtx) {
 	handler.pausingAof.Lock() // pausing aof
 	defer handler.pausingAof.Unlock()
 

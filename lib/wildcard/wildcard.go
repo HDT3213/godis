@@ -27,7 +27,7 @@ func (i *item) contains(c byte) bool {
 			min uint8 = 255
 			max uint8 = 0
 		)
-		for k, _ := range i.set {
+		for k := range i.set {
 			if min > k {
 				min = k
 			}
