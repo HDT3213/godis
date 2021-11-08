@@ -157,7 +157,7 @@ I suggest focusing on the following directories:
     - geo.go: implements of geography features
     - sys.go: authentication and other system function
     - transaction.go: local transaction
-- cluster: 集群
+- cluster: 
     - cluster.go: entrance of cluster mode
     - com.go: communication within nodes
     - del.go: atomic implementation of `delete` command in cluster
