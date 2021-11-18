@@ -126,22 +126,22 @@ MSET (10 keys): 65487.89 requests per second
 
 If you want to read my code in this repository, here is a simple guidance.
 
-- github.com/hdt3213/godis/cmd: only the entry point
-- github.com/hdt3213/godis/config: config parser
-- github.com/hdt3213/godis/interface: some interface definitions
-- github.com/hdt3213/godis/lib: some utils, such as logger, sync utils and wildcard
+- project root: only the entry point
+- config: config parser
+- interface: some interface definitions
+- lib: some utils, such as logger, sync utils and wildcard
 
 I suggest focusing on the following directories:
 
-- github.com/hdt3213/godis/tcp: the tcp server
-- github.com/hdt3213/godis/redis: the redis protocol parser
-- github.com/hdt3213/godis/datastruct: the implements of data structures
+- tcp: the tcp server
+- redis: the redis protocol parser
+- datastruct: the implements of data structures
     - dict: a concurrent hash map
     - list: a linked list
     - lock: it is used to lock keys to ensure thread safety
     - set: a hash set based on map
     - sortedset: a sorted set implements based on skiplist
-- github.com/hdt3213/godis: the core of storage engine
+- database: the core of storage engine
     - server.go: a standalone redis server, 
     - db.go: the basement function of database
     - exec.go: the gateway of database
@@ -155,6 +155,19 @@ I suggest focusing on the following directories:
     - pubsub.go: implements of publish / subscribe
     - aof.go: implements of AOF persistence and rewrite
     - geo.go: implements of geography features
+    - sys.go: authentication and other system function
+    - transaction.go: local transaction
+- cluster: 
+    - cluster.go: entrance of cluster mode
+    - com.go: communication within nodes
+    - del.go: atomic implementation of `delete` command in cluster
+    - keys.go: keys command
+    - mset.go: atomic implementation of `mset` command in cluster
+    - multi.go: entrance of distributed transaction
+    - pubsub.go: pub/sub in cluster
+    - rename.go: `rename` command in cluster 
+    - tcc.go: try-commit-catch distributed transaction implementation
+- aof: AOF persistence
 
 # License
 

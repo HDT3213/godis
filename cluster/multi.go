@@ -1,7 +1,7 @@
 package cluster
 
 import (
-	"github.com/hdt3213/godis"
+	"github.com/hdt3213/godis/database"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/reply"
@@ -24,7 +24,7 @@ func execMulti(cluster *Cluster, conn redis.Connection, cmdLine CmdLine) redis.R
 	// analysis related keys
 	keys := make([]string, 0) // may contains duplicate
 	for _, cl := range cmdLines {
-		wKeys, rKeys := godis.GetRelatedKeys(cl)
+		wKeys, rKeys := database.GetRelatedKeys(cl)
 		keys = append(keys, wKeys...)
 		keys = append(keys, rKeys...)
 	}

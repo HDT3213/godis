@@ -1,4 +1,4 @@
-package godis
+package database
 
 import (
 	List "github.com/hdt3213/godis/datastruct/list"

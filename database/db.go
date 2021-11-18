@@ -1,5 +1,5 @@
-// Package godis is a memory database with redis compatible interface
-package godis
+// Package database is a memory database with redis compatible interface
+package database
 
 import (
 	"github.com/hdt3213/godis/datastruct/dict"
@@ -278,6 +278,7 @@ func (db *DB) addVersion(keys ...string) {
 	}
 }
 
+// GetVersion returns version code for given key
 func (db *DB) GetVersion(key string) uint32 {
 	entity, ok := db.versionMap.Get(key)
 	if !ok {
@@ -286,6 +287,7 @@ func (db *DB) GetVersion(key string) uint32 {
 	return entity.(uint32)
 }
 
+// ForEach traverses all the keys in the database
 func (db *DB) ForEach(cb func(key string, data *database.DataEntity, expiration *time.Time) bool) {
 	db.data.ForEach(func(key string, raw interface{}) bool {
 		entity, _ := raw.(*database.DataEntity)

@@ -119,10 +119,12 @@ func (c *Connection) GetPassword() string {
 	return c.password
 }
 
+// InMultiState tells is connection in an uncommitted transaction
 func (c *Connection) InMultiState() bool {
 	return c.multiState
 }
 
+// SetMultiState sets transaction flag
 func (c *Connection) SetMultiState(state bool) {
 	if !state { // reset data when cancel multi
 		c.watching = nil
@@ -131,18 +133,22 @@ func (c *Connection) SetMultiState(state bool) {
 	c.multiState = state
 }
 
+// GetQueuedCmdLine returns queued commands of current transaction
 func (c *Connection) GetQueuedCmdLine() [][][]byte {
 	return c.queue
 }
 
+// EnqueueCmd  enqueues command of current transaction
 func (c *Connection) EnqueueCmd(cmdLine [][]byte) {
 	c.queue = append(c.queue, cmdLine)
 }
 
+// ClearQueuedCmds clears queued commands of current transaction
 func (c *Connection) ClearQueuedCmds() {
 	c.queue = nil
 }
 
+// GetWatching returns watching keys and their version code when started watching
 func (c *Connection) GetWatching() map[string]uint32 {
 	if c.watching == nil {
 		c.watching = make(map[string]uint32)
@@ -150,10 +156,12 @@ func (c *Connection) GetWatching() map[string]uint32 {
 	return c.watching
 }
 
+// GetDBIndex returns selected db
 func (c *Connection) GetDBIndex() int {
 	return c.selectedDB
 }
 
+// SelectDB selects a database
 func (c *Connection) SelectDB(dbNum int) {
 	c.selectedDB = dbNum
 }

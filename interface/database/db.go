@@ -5,6 +5,7 @@ import (
 	"time"
 )
 
+// CmdLine is alias for [][]byte, represents a command line
 type CmdLine = [][]byte
 
 // DB is the interface for redis style storage engine

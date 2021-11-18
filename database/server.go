@@ -1,4 +1,4 @@
-package godis
+package database
 
 import (
 	"fmt"
@@ -16,6 +16,7 @@ import (
 	"time"
 )
 
+// MultiDB is a set of multiple database set
 type MultiDB struct {
 	dbSet []*DB
 
@@ -157,6 +158,7 @@ func (mdb *MultiDB) flushAll() redis.Reply {
 	return &reply.OkReply{}
 }
 
+// ForEach traverses all the keys in the given database
 func (mdb *MultiDB) ForEach(dbIndex int, cb func(key string, data *database.DataEntity, expiration *time.Time) bool) {
 	if dbIndex >= len(mdb.dbSet) {
 		return
@@ -165,6 +167,7 @@ func (mdb *MultiDB) ForEach(dbIndex int, cb func(key string, data *database.Data
 	db.ForEach(cb)
 }
 
+// ExecMulti executes multi commands transaction Atomically and Isolated
 func (mdb *MultiDB) ExecMulti(conn redis.Connection, watching map[string]uint32, cmdLines []CmdLine) redis.Reply {
 	if conn.GetDBIndex() >= len(mdb.dbSet) {
 		return reply.MakeErrReply("ERR DB index is out of range")
@@ -173,6 +176,7 @@ func (mdb *MultiDB) ExecMulti(conn redis.Connection, watching map[string]uint32,
 	return db.ExecMulti(conn, watching, cmdLines)
 }
 
+// RWLocks lock keys for writing and reading
 func (mdb *MultiDB) RWLocks(dbIndex int, writeKeys []string, readKeys []string) {
 	if dbIndex >= len(mdb.dbSet) {
 		panic("ERR DB index is out of range")
@@ -181,6 +185,7 @@ func (mdb *MultiDB) RWLocks(dbIndex int, writeKeys []string, readKeys []string) 
 	db.RWLocks(writeKeys, readKeys)
 }
 
+// RWUnLocks unlock keys for writing and reading
 func (mdb *MultiDB) RWUnLocks(dbIndex int, writeKeys []string, readKeys []string) {
 	if dbIndex >= len(mdb.dbSet) {
 		panic("ERR DB index is out of range")
@@ -189,6 +194,7 @@ func (mdb *MultiDB) RWUnLocks(dbIndex int, writeKeys []string, readKeys []string
 	db.RWUnLocks(writeKeys, readKeys)
 }
 
+// GetUndoLogs return rollback commands
 func (mdb *MultiDB) GetUndoLogs(dbIndex int, cmdLine [][]byte) []CmdLine {
 	if dbIndex >= len(mdb.dbSet) {
 		panic("ERR DB index is out of range")
@@ -197,6 +203,7 @@ func (mdb *MultiDB) GetUndoLogs(dbIndex int, cmdLine [][]byte) []CmdLine {
 	return db.GetUndoLogs(cmdLine)
 }
 
+// ExecWithLock executes normal commands, invoker should provide locks
 func (mdb *MultiDB) ExecWithLock(conn redis.Connection, cmdLine [][]byte) redis.Reply {
 	if conn.GetDBIndex() >= len(mdb.dbSet) {
 		panic("ERR DB index is out of range")
@@ -211,6 +218,7 @@ func BGRewriteAOF(db *MultiDB, args [][]byte) redis.Reply {
 	return reply.MakeStatusReply("Background append only file rewriting started")
 }
 
+// RewriteAOF start Append-Only-File rewriting and blocked until it finished
 func RewriteAOF(db *MultiDB, args [][]byte) redis.Reply {
 	db.aofHandler.Rewrite()
 	return reply.MakeStatusReply("Background append only file rewriting started")

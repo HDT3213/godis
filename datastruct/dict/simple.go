@@ -115,6 +115,7 @@ func (dict *SimpleDict) RandomDistinctKeys(limit int) []string {
 	return result
 }
 
+// Clear removes all keys in dict
 func (dict *SimpleDict) Clear() {
 	*dict = *MakeSimple()
 }

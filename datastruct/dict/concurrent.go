@@ -287,6 +287,7 @@ func (dict *ConcurrentDict) RandomDistinctKeys(limit int) []string {
 	return arr
 }
 
+// Clear removes all keys in dict
 func (dict *ConcurrentDict) Clear() {
 	*dict = *MakeConcurrent(dict.shardCount)
 }

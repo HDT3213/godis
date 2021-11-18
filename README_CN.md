@@ -116,22 +116,22 @@ MSET (10 keys): 65487.89 requests per second
 
 本项目的目录结构:
 
-- github.com/hdt3213/godis/cmd: main 函数，执行入口
-- github.com/hdt3213/godis/config: 配置文件解析
-- github.com/hdt3213/godis/interface: 一些模块间的接口定义
-- github.com/hdt3213/godis/lib: 各种工具，比如logger、同步和通配符
+- 根目录: main 函数，执行入口
+- config: 配置文件解析
+- interface: 一些模块间的接口定义
+- lib: 各种工具，比如logger、同步和通配符
 
 建议按照下列顺序阅读各包:
 
-- github.com/hdt3213/godis/tcp: tcp 服务器实现
-- github.com/hdt3213/godis/redis: redis 协议解析器
-- github.com/hdt3213/godis/datastruct: redis 的各类数据结构实现
+- tcp: tcp 服务器实现
+- redis: redis 协议解析器
+- datastruct: redis 的各类数据结构实现
     - dict: hash 表
     - list: 链表
     - lock: 用于锁定 key 的锁组件
     - set： 基于hash表的集合
     - sortedset: 基于跳表实现的有序集合
-- github.com/hdt3213/godis: 存储引擎核心
+- database: 存储引擎核心
     - db.go: 引擎的基础功能
     - router.go: 将命令路由给响应的处理函数
     - keys.go: del、ttl、expire 等通用命令实现
@@ -141,4 +141,17 @@ MSET (10 keys): 65487.89 requests per second
     - set.go: sadd 等集合命令实现
     - sortedset.go: zadd 等有序集合命令实现
     - pubsub.go: 发布订阅命令实现
-    - aof.go: aof持久化实现
+    - geo.go: GEO 相关命令实现
+    - sys.go: Auth 等系统功能实现
+    - transaction.go: 单机事务实现
+- cluster: 集群
+  - cluster.go: 集群入口
+  - com.go: 节点间通信
+  - del.go: delete 命令原子性实现
+  - keys.go: key 相关命令集群中实现
+  - mset.go: mset 命令原子性实现
+  - multi.go: 集群内事务实现
+  - pubsub.go: 发布订阅实现
+  - rename.go: rename 命令集群实现
+  - tcc.go: tcc 分布式事务底层实现
+- aof: AOF 持久化实现 
