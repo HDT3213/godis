@@ -34,9 +34,7 @@ func Auth(c redis.Connection, args [][]byte) redis.Reply {
 }
 
 func isAuthenticated(c redis.Connection) bool {
-	if config.Properties.RequirePass == "" {
-		return true
-	}
+
 	return c.GetPassword() == config.Properties.RequirePass
 }
 
