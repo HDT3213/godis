@@ -57,6 +57,7 @@ func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 	if h.closing.Get() {
 		// closing handler refuse new connection
 		_ = conn.Close()
+		return
 	}
 
 	client := connection.NewConn(conn)
