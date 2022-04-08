@@ -132,7 +132,7 @@ MSET (10 keys): 65487.89 requests per second
     - set： 基于hash表的集合
     - sortedset: 基于跳表实现的有序集合
 - database: 存储引擎核心
-    - db.go: 引擎的基础功能
+    - db.go: 单个 database 的数据结构和基本功能
     - router.go: 将命令路由给响应的处理函数
     - keys.go: del、ttl、expire 等通用命令实现
     - string.go: get、set 等字符串命令实现

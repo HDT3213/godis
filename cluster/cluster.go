@@ -76,7 +76,7 @@ func MakeCluster() *Cluster {
 }
 
 // CmdFunc represents the handler of a redis command
-type CmdFunc func(cluster *Cluster, c redis.Connection, cmdAndArgs [][]byte) redis.Reply
+type CmdFunc func(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply
 
 // Close stops current node of cluster
 func (cluster *Cluster) Close() {

@@ -8,9 +8,14 @@ import (
 	"github.com/hdt3213/godis/lib/timewheel"
 	"github.com/hdt3213/godis/redis/reply"
 	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
+
+// prepareFuncMap executed after related key locked, and use additional logic to determine whether the transaction can be committed
+// For example, prepareMSetNX  will return error to prevent MSetNx transaction from committing if any related key already exists
+var prepareFuncMap = make(map[string]CmdFunc)
 
 // Transaction stores state and data for a try-commit-catch distributed transaction
 type Transaction struct {
@@ -72,7 +77,7 @@ func (tx *Transaction) unLockKeys() {
 	}
 }
 
-// t should contains Keys and Id field
+// t should contain Keys and ID field
 func (tx *Transaction) prepare() error {
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
@@ -117,14 +122,19 @@ func (tx *Transaction) rollback() error {
 // cmdLine: Prepare id cmdName args...
 func execPrepare(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 	if len(cmdLine) < 3 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'preparedel' command")
+		return reply.MakeErrReply("ERR wrong number of arguments for 'prepare' command")
 	}
 	txID := string(cmdLine[1])
+	cmdName := strings.ToLower(string(cmdLine[2]))
 	tx := NewTransaction(cluster, c, txID, cmdLine[2:])
 	cluster.transactions.Put(txID, tx)
 	err := tx.prepare()
 	if err != nil {
 		return reply.MakeErrReply(err.Error())
+	}
+	prepareFunc, ok := prepareFuncMap[cmdName]
+	if ok {
+		return prepareFunc(cluster, c, cmdLine[2:])
 	}
 	return &reply.OkReply{}
 }

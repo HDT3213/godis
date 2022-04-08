@@ -142,8 +142,8 @@ I suggest focusing on the following directories:
     - set: a hash set based on map
     - sortedset: a sorted set implements based on skiplist
 - database: the core of storage engine
-    - server.go: a standalone redis server, 
-    - db.go: the basement function of database
+    - server.go: a standalone redis server, with multiple database 
+    - db.go: data structure and base functions of single database
     - exec.go: the gateway of database
     - router.go: the command table
     - keys.go: handlers for keys commands
