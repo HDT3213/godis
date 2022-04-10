@@ -3,8 +3,8 @@ package cluster
 import (
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/connection"
-	"github.com/hdt3213/godis/redis/reply"
-	"github.com/hdt3213/godis/redis/reply/asserts"
+	"github.com/hdt3213/godis/redis/protocol"
+	"github.com/hdt3213/godis/redis/protocol/asserts"
 	"testing"
 )
 
@@ -35,7 +35,7 @@ func TestEmptyMulti(t *testing.T) {
 	asserts.AssertNotError(t, result)
 	result = testCluster.Exec(conn, utils.ToCmdLine("EXEC"))
 	asserts.AssertNotError(t, result)
-	mbr := result.(*reply.MultiRawReply)
+	mbr := result.(*protocol.MultiRawReply)
 	asserts.AssertStatusReply(t, mbr.Replies[0], "PONG")
 }
 
@@ -51,7 +51,7 @@ func TestMultiExecOnOthers(t *testing.T) {
 
 	cmdLines := conn.GetQueuedCmdLine()
 	rawResp := execMultiOnOtherNode(testCluster, conn, testCluster.self, nil, cmdLines)
-	rep := rawResp.(*reply.MultiRawReply)
+	rep := rawResp.(*protocol.MultiRawReply)
 	if len(rep.Replies) != 2 {
 		t.Errorf("expect 2 replies actual %d", len(rep.Replies))
 	}

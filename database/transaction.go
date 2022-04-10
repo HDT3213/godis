@@ -3,7 +3,7 @@ package database
 import (
 	"github.com/hdt3213/godis/datastruct/set"
 	"github.com/hdt3213/godis/interface/redis"
-	"github.com/hdt3213/godis/redis/reply"
+	"github.com/hdt3213/godis/redis/protocol"
 	"strings"
 )
 
@@ -19,13 +19,13 @@ func Watch(db *DB, conn redis.Connection, args [][]byte) redis.Reply {
 		key := string(bkey)
 		watching[key] = db.GetVersion(key)
 	}
-	return reply.MakeOkReply()
+	return protocol.MakeOkReply()
 }
 
 func execGetVersion(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	ver := db.GetVersion(key)
-	return reply.MakeIntReply(int64(ver))
+	return protocol.MakeIntReply(int64(ver))
 }
 
 func init() {
@@ -46,10 +46,10 @@ func isWatchingChanged(db *DB, watching map[string]uint32) bool {
 // StartMulti starts multi-command-transaction
 func StartMulti(conn redis.Connection) redis.Reply {
 	if conn.InMultiState() {
-		return reply.MakeErrReply("ERR MULTI calls can not be nested")
+		return protocol.MakeErrReply("ERR MULTI calls can not be nested")
 	}
 	conn.SetMultiState(true)
-	return reply.MakeOkReply()
+	return protocol.MakeOkReply()
 }
 
 // EnqueueCmd puts command line into `multi` pending queue
@@ -57,25 +57,25 @@ func EnqueueCmd(conn redis.Connection, cmdLine [][]byte) redis.Reply {
 	cmdName := strings.ToLower(string(cmdLine[0]))
 	cmd, ok := cmdTable[cmdName]
 	if !ok {
-		return reply.MakeErrReply("ERR unknown command '" + cmdName + "'")
+		return protocol.MakeErrReply("ERR unknown command '" + cmdName + "'")
 	}
 	if forbiddenInMulti.Has(cmdName) {
-		return reply.MakeErrReply("ERR command '" + cmdName + "' cannot be used in MULTI")
+		return protocol.MakeErrReply("ERR command '" + cmdName + "' cannot be used in MULTI")
 	}
 	if cmd.prepare == nil {
-		return reply.MakeErrReply("ERR command '" + cmdName + "' cannot be used in MULTI")
+		return protocol.MakeErrReply("ERR command '" + cmdName + "' cannot be used in MULTI")
 	}
 	if !validateArity(cmd.arity, cmdLine) {
 		// difference with redis: we won't enqueue command line with wrong arity
-		return reply.MakeArgNumErrReply(cmdName)
+		return protocol.MakeArgNumErrReply(cmdName)
 	}
 	conn.EnqueueCmd(cmdLine)
-	return reply.MakeQueuedReply()
+	return protocol.MakeQueuedReply()
 }
 
 func execMulti(db *DB, conn redis.Connection) redis.Reply {
 	if !conn.InMultiState() {
-		return reply.MakeErrReply("ERR EXEC without MULTI")
+		return protocol.MakeErrReply("ERR EXEC without MULTI")
 	}
 	defer conn.SetMultiState(false)
 	cmdLines := conn.GetQueuedCmdLine()
@@ -105,7 +105,7 @@ func (db *DB) ExecMulti(conn redis.Connection, watching map[string]uint32, cmdLi
 	defer db.RWUnLocks(writeKeys, readKeys)
 
 	if isWatchingChanged(db, watching) { // watching keys changed, abort
-		return reply.MakeEmptyMultiBulkReply()
+		return protocol.MakeEmptyMultiBulkReply()
 	}
 	// execute
 	results := make([]redis.Reply, 0, len(cmdLines))
@@ -114,7 +114,7 @@ func (db *DB) ExecMulti(conn redis.Connection, watching map[string]uint32, cmdLi
 	for _, cmdLine := range cmdLines {
 		undoCmdLines = append(undoCmdLines, db.GetUndoLogs(cmdLine))
 		result := db.execWithLock(cmdLine)
-		if reply.IsErrorReply(result) {
+		if protocol.IsErrorReply(result) {
 			aborted = true
 			// don't rollback failed commands
 			undoCmdLines = undoCmdLines[:len(undoCmdLines)-1]
@@ -124,7 +124,7 @@ func (db *DB) ExecMulti(conn redis.Connection, watching map[string]uint32, cmdLi
 	}
 	if !aborted { //success
 		db.addVersion(writeKeys...)
-		return reply.MakeMultiRawReply(results)
+		return protocol.MakeMultiRawReply(results)
 	}
 	// undo if aborted
 	size := len(undoCmdLines)
@@ -137,17 +137,17 @@ func (db *DB) ExecMulti(conn redis.Connection, watching map[string]uint32, cmdLi
 			db.execWithLock(cmdLine)
 		}
 	}
-	return reply.MakeErrReply("EXECABORT Transaction discarded because of previous errors.")
+	return protocol.MakeErrReply("EXECABORT Transaction discarded because of previous errors.")
 }
 
 // DiscardMulti drops MULTI pending commands
 func DiscardMulti(conn redis.Connection) redis.Reply {
 	if !conn.InMultiState() {
-		return reply.MakeErrReply("ERR DISCARD without MULTI")
+		return protocol.MakeErrReply("ERR DISCARD without MULTI")
 	}
 	conn.ClearQueuedCmds()
 	conn.SetMultiState(false)
-	return reply.MakeOkReply()
+	return protocol.MakeOkReply()
 }
 
 // GetUndoLogs return rollback commands
@@ -169,10 +169,10 @@ func (db *DB) execWithLock(cmdLine [][]byte) redis.Reply {
 	cmdName := strings.ToLower(string(cmdLine[0]))
 	cmd, ok := cmdTable[cmdName]
 	if !ok {
-		return reply.MakeErrReply("ERR unknown command '" + cmdName + "'")
+		return protocol.MakeErrReply("ERR unknown command '" + cmdName + "'")
 	}
 	if !validateArity(cmd.arity, cmdLine) {
-		return reply.MakeArgNumErrReply(cmdName)
+		return protocol.MakeArgNumErrReply(cmdName)
 	}
 	fun := cmd.executor
 	return fun(db, cmdLine[1:])

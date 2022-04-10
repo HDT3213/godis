@@ -6,7 +6,7 @@ import (
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/client"
-	"github.com/hdt3213/godis/redis/reply"
+	"github.com/hdt3213/godis/redis/protocol"
 	"strconv"
 )
 
@@ -44,7 +44,7 @@ func (cluster *Cluster) relay(peer string, c redis.Connection, args [][]byte) re
 	}
 	peerClient, err := cluster.getPeerClient(peer)
 	if err != nil {
-		return reply.MakeErrReply(err.Error())
+		return protocol.MakeErrReply(err.Error())
 	}
 	defer func() {
 		_ = cluster.returnPeerClient(peer, peerClient)

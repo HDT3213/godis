@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/connection"
-	"github.com/hdt3213/godis/redis/reply"
-	"github.com/hdt3213/godis/redis/reply/asserts"
+	"github.com/hdt3213/godis/redis/protocol"
+	"github.com/hdt3213/godis/redis/protocol/asserts"
 	"testing"
 )
 
@@ -18,7 +18,7 @@ func TestRename(t *testing.T) {
 	newKey := key + utils.RandString(2)
 	testDB.Exec(conn, utils.ToCmdLine("SET", key, value, "ex", "1000"))
 	result := Rename(testCluster, conn, utils.ToCmdLine("RENAME", key, newKey))
-	if _, ok := result.(*reply.OkReply); !ok {
+	if _, ok := result.(*protocol.OkReply); !ok {
 		t.Error("expect ok")
 		return
 	}
@@ -28,9 +28,9 @@ func TestRename(t *testing.T) {
 	asserts.AssertIntReply(t, result, 1)
 	// check ttl
 	result = testDB.Exec(conn, utils.ToCmdLine("TTL", newKey))
-	intResult, ok := result.(*reply.IntReply)
+	intResult, ok := result.(*protocol.IntReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected int reply, actually %s", result.ToBytes()))
+		t.Error(fmt.Sprintf("expected int protocol, actually %s", result.ToBytes()))
 		return
 	}
 	if intResult.Code <= 0 {
@@ -55,9 +55,9 @@ func TestRenameNx(t *testing.T) {
 
 	asserts.AssertIntReply(t, result, 1)
 	result = testDB.Exec(conn, utils.ToCmdLine("TTL", newKey))
-	intResult, ok := result.(*reply.IntReply)
+	intResult, ok := result.(*protocol.IntReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected int reply, actually %s", result.ToBytes()))
+		t.Error(fmt.Sprintf("expected int protocol, actually %s", result.ToBytes()))
 		return
 	}
 	if intResult.Code <= 0 {

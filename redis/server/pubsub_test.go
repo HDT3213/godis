@@ -5,7 +5,7 @@ import (
 	"github.com/hdt3213/godis/pubsub"
 	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/parser"
-	"github.com/hdt3213/godis/redis/reply/asserts"
+	"github.com/hdt3213/godis/redis/protocol/asserts"
 	"testing"
 )
 

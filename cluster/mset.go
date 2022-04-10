@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/utils"
-	"github.com/hdt3213/godis/redis/reply"
+	"github.com/hdt3213/godis/redis/protocol"
 	"strconv"
 )
 
@@ -13,7 +13,7 @@ const keyExistsErr = "key exists"
 // MGet atomically get multi key-value from cluster, writeKeys can be distributed on any node
 func MGet(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 	if len(cmdLine) < 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'mget' command")
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'mget' command")
 	}
 	keys := make([]string, len(cmdLine)-1)
 	for i := 1; i < len(cmdLine); i++ {
@@ -24,11 +24,11 @@ func MGet(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 	groupMap := cluster.groupBy(keys)
 	for peer, group := range groupMap {
 		resp := cluster.relay(peer, c, makeArgs("MGET", group...))
-		if reply.IsErrorReply(resp) {
-			errReply := resp.(reply.ErrorReply)
-			return reply.MakeErrReply(fmt.Sprintf("ERR during get %s occurs: %v", group[0], errReply.Error()))
+		if protocol.IsErrorReply(resp) {
+			errReply := resp.(protocol.ErrorReply)
+			return protocol.MakeErrReply(fmt.Sprintf("ERR during get %s occurs: %v", group[0], errReply.Error()))
 		}
-		arrReply, _ := resp.(*reply.MultiBulkReply)
+		arrReply, _ := resp.(*protocol.MultiBulkReply)
 		for i, v := range arrReply.Args {
 			key := group[i]
 			resultMap[key] = v
@@ -38,14 +38,14 @@ func MGet(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 	for i, k := range keys {
 		result[i] = resultMap[k]
 	}
-	return reply.MakeMultiBulkReply(result)
+	return protocol.MakeMultiBulkReply(result)
 }
 
 // MSet atomically sets multi key-value in cluster, writeKeys can be distributed on any node
 func MSet(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 	argCount := len(cmdLine) - 1
 	if argCount%2 != 0 || argCount < 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'mset' command")
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'mset' command")
 	}
 
 	size := argCount / 2
@@ -79,7 +79,7 @@ func MSet(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 		} else {
 			resp = cluster.relay(peer, c, makeArgs("Prepare", peerArgs...))
 		}
-		if reply.IsErrorReply(resp) {
+		if protocol.IsErrorReply(resp) {
 			errReply = resp
 			rollback = true
 			break
@@ -93,7 +93,7 @@ func MSet(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 		rollback = errReply != nil
 	}
 	if !rollback {
-		return &reply.OkReply{}
+		return &protocol.OkReply{}
 	}
 	return errReply
 
@@ -103,7 +103,7 @@ func MSet(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 func MSetNX(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 	argCount := len(cmdLine) - 1
 	if argCount%2 != 0 || argCount < 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'msetnx' command")
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'msetnx' command")
 	}
 
 	size := argCount / 2
@@ -139,10 +139,10 @@ func MSetNX(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 		} else {
 			resp = cluster.relay(peer, c, makeArgs("Prepare", peerArgs...))
 		}
-		if reply.IsErrorReply(resp) {
-			re := resp.(reply.ErrorReply)
+		if protocol.IsErrorReply(resp) {
+			re := resp.(protocol.ErrorReply)
 			if re.Error() == keyExistsErr {
-				errReply = reply.MakeIntReply(0)
+				errReply = protocol.MakeIntReply(0)
 			} else {
 				errReply = resp
 			}
@@ -158,7 +158,7 @@ func MSetNX(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 	_, errReply = requestCommit(cluster, c, txID, groupMap)
 	rollback = errReply != nil
 	if !rollback {
-		return reply.MakeIntReply(1)
+		return protocol.MakeIntReply(1)
 	}
 	return errReply
 }
@@ -166,7 +166,7 @@ func MSetNX(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 func prepareMSetNx(cluster *Cluster, conn redis.Connection, cmdLine CmdLine) redis.Reply {
 	args := cmdLine[1:]
 	if len(args)%2 != 0 {
-		return reply.MakeSyntaxErrReply()
+		return protocol.MakeSyntaxErrReply()
 	}
 	size := len(args) / 2
 	values := make([][]byte, size)
@@ -176,14 +176,14 @@ func prepareMSetNx(cluster *Cluster, conn redis.Connection, cmdLine CmdLine) red
 		values[i] = args[2*i+1]
 	}
 	re := cluster.db.ExecWithLock(conn, utils.ToCmdLine2("ExistIn", keys...))
-	if reply.IsErrorReply(re) {
+	if protocol.IsErrorReply(re) {
 		return re
 	}
-	_, ok := re.(*reply.EmptyMultiBulkReply)
+	_, ok := re.(*protocol.EmptyMultiBulkReply)
 	if !ok {
-		return reply.MakeErrReply(keyExistsErr)
+		return protocol.MakeErrReply(keyExistsErr)
 	}
-	return reply.MakeOkReply()
+	return protocol.MakeOkReply()
 }
 
 func init() {

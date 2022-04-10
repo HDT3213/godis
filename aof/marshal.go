@@ -6,17 +6,17 @@ import (
 	"github.com/hdt3213/godis/datastruct/set"
 	SortedSet "github.com/hdt3213/godis/datastruct/sortedset"
 	"github.com/hdt3213/godis/interface/database"
-	"github.com/hdt3213/godis/redis/reply"
+	"github.com/hdt3213/godis/redis/protocol"
 	"strconv"
 	"time"
 )
 
 // EntityToCmd serialize data entity to redis command
-func EntityToCmd(key string, entity *database.DataEntity) *reply.MultiBulkReply {
+func EntityToCmd(key string, entity *database.DataEntity) *protocol.MultiBulkReply {
 	if entity == nil {
 		return nil
 	}
-	var cmd *reply.MultiBulkReply
+	var cmd *protocol.MultiBulkReply
 	switch val := entity.Data.(type) {
 	case []byte:
 		cmd = stringToCmd(key, val)
@@ -34,17 +34,17 @@ func EntityToCmd(key string, entity *database.DataEntity) *reply.MultiBulkReply 
 
 var setCmd = []byte("SET")
 
-func stringToCmd(key string, bytes []byte) *reply.MultiBulkReply {
+func stringToCmd(key string, bytes []byte) *protocol.MultiBulkReply {
 	args := make([][]byte, 3)
 	args[0] = setCmd
 	args[1] = []byte(key)
 	args[2] = bytes
-	return reply.MakeMultiBulkReply(args)
+	return protocol.MakeMultiBulkReply(args)
 }
 
 var rPushAllCmd = []byte("RPUSH")
 
-func listToCmd(key string, list *List.LinkedList) *reply.MultiBulkReply {
+func listToCmd(key string, list *List.LinkedList) *protocol.MultiBulkReply {
 	args := make([][]byte, 2+list.Len())
 	args[0] = rPushAllCmd
 	args[1] = []byte(key)
@@ -53,12 +53,12 @@ func listToCmd(key string, list *List.LinkedList) *reply.MultiBulkReply {
 		args[2+i] = bytes
 		return true
 	})
-	return reply.MakeMultiBulkReply(args)
+	return protocol.MakeMultiBulkReply(args)
 }
 
 var sAddCmd = []byte("SADD")
 
-func setToCmd(key string, set *set.Set) *reply.MultiBulkReply {
+func setToCmd(key string, set *set.Set) *protocol.MultiBulkReply {
 	args := make([][]byte, 2+set.Len())
 	args[0] = sAddCmd
 	args[1] = []byte(key)
@@ -68,12 +68,12 @@ func setToCmd(key string, set *set.Set) *reply.MultiBulkReply {
 		i++
 		return true
 	})
-	return reply.MakeMultiBulkReply(args)
+	return protocol.MakeMultiBulkReply(args)
 }
 
 var hMSetCmd = []byte("HMSET")
 
-func hashToCmd(key string, hash dict.Dict) *reply.MultiBulkReply {
+func hashToCmd(key string, hash dict.Dict) *protocol.MultiBulkReply {
 	args := make([][]byte, 2+hash.Len()*2)
 	args[0] = hMSetCmd
 	args[1] = []byte(key)
@@ -85,12 +85,12 @@ func hashToCmd(key string, hash dict.Dict) *reply.MultiBulkReply {
 		i++
 		return true
 	})
-	return reply.MakeMultiBulkReply(args)
+	return protocol.MakeMultiBulkReply(args)
 }
 
 var zAddCmd = []byte("ZADD")
 
-func zSetToCmd(key string, zset *SortedSet.SortedSet) *reply.MultiBulkReply {
+func zSetToCmd(key string, zset *SortedSet.SortedSet) *protocol.MultiBulkReply {
 	args := make([][]byte, 2+zset.Len()*2)
 	args[0] = zAddCmd
 	args[1] = []byte(key)
@@ -102,16 +102,16 @@ func zSetToCmd(key string, zset *SortedSet.SortedSet) *reply.MultiBulkReply {
 		i++
 		return true
 	})
-	return reply.MakeMultiBulkReply(args)
+	return protocol.MakeMultiBulkReply(args)
 }
 
 var pExpireAtBytes = []byte("PEXPIREAT")
 
 // MakeExpireCmd generates command line to set expiration for the given key
-func MakeExpireCmd(key string, expireAt time.Time) *reply.MultiBulkReply {
+func MakeExpireCmd(key string, expireAt time.Time) *protocol.MultiBulkReply {
 	args := make([][]byte, 3)
 	args[0] = pExpireAtBytes
 	args[1] = []byte(key)
 	args[2] = []byte(strconv.FormatInt(expireAt.UnixNano()/1e6, 10))
-	return reply.MakeMultiBulkReply(args)
+	return protocol.MakeMultiBulkReply(args)
 }

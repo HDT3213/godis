@@ -5,23 +5,23 @@ import (
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/utils"
-	"github.com/hdt3213/godis/redis/reply"
+	"github.com/hdt3213/godis/redis/protocol"
 	"strconv"
 )
 
-func (db *DB) getAsSet(key string) (*HashSet.Set, reply.ErrorReply) {
+func (db *DB) getAsSet(key string) (*HashSet.Set, protocol.ErrorReply) {
 	entity, exists := db.GetEntity(key)
 	if !exists {
 		return nil, nil
 	}
 	set, ok := entity.Data.(*HashSet.Set)
 	if !ok {
-		return nil, &reply.WrongTypeErrReply{}
+		return nil, &protocol.WrongTypeErrReply{}
 	}
 	return set, nil
 }
 
-func (db *DB) getOrInitSet(key string) (set *HashSet.Set, inited bool, errReply reply.ErrorReply) {
+func (db *DB) getOrInitSet(key string) (set *HashSet.Set, inited bool, errReply protocol.ErrorReply) {
 	set, errReply = db.getAsSet(key)
 	if errReply != nil {
 		return nil, false, errReply
@@ -52,7 +52,7 @@ func execSAdd(db *DB, args [][]byte) redis.Reply {
 		counter += set.Add(string(member))
 	}
 	db.addAof(utils.ToCmdLine3("sadd", args...))
-	return reply.MakeIntReply(int64(counter))
+	return protocol.MakeIntReply(int64(counter))
 }
 
 // execSIsMember checks if the given value is member of set
@@ -66,14 +66,14 @@ func execSIsMember(db *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if set == nil {
-		return reply.MakeIntReply(0)
+		return protocol.MakeIntReply(0)
 	}
 
 	has := set.Has(member)
 	if has {
-		return reply.MakeIntReply(1)
+		return protocol.MakeIntReply(1)
 	}
-	return reply.MakeIntReply(0)
+	return protocol.MakeIntReply(0)
 }
 
 // execSRem removes a member from set
@@ -86,7 +86,7 @@ func execSRem(db *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if set == nil {
-		return reply.MakeIntReply(0)
+		return protocol.MakeIntReply(0)
 	}
 	counter := 0
 	for _, member := range members {
@@ -98,7 +98,7 @@ func execSRem(db *DB, args [][]byte) redis.Reply {
 	if counter > 0 {
 		db.addAof(utils.ToCmdLine3("srem", args...))
 	}
-	return reply.MakeIntReply(int64(counter))
+	return protocol.MakeIntReply(int64(counter))
 }
 
 // execSCard gets the number of members in a set
@@ -111,9 +111,9 @@ func execSCard(db *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if set == nil {
-		return reply.MakeIntReply(0)
+		return protocol.MakeIntReply(0)
 	}
-	return reply.MakeIntReply(int64(set.Len()))
+	return protocol.MakeIntReply(int64(set.Len()))
 }
 
 // execSMembers gets all members in a set
@@ -126,7 +126,7 @@ func execSMembers(db *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if set == nil {
-		return &reply.EmptyMultiBulkReply{}
+		return &protocol.EmptyMultiBulkReply{}
 	}
 
 	arr := make([][]byte, set.Len())
@@ -136,7 +136,7 @@ func execSMembers(db *DB, args [][]byte) redis.Reply {
 		i++
 		return true
 	})
-	return reply.MakeMultiBulkReply(arr)
+	return protocol.MakeMultiBulkReply(arr)
 }
 
 // execSInter intersect multiple sets
@@ -153,7 +153,7 @@ func execSInter(db *DB, args [][]byte) redis.Reply {
 			return errReply
 		}
 		if set == nil {
-			return &reply.EmptyMultiBulkReply{}
+			return &protocol.EmptyMultiBulkReply{}
 		}
 
 		if result == nil {
@@ -163,7 +163,7 @@ func execSInter(db *DB, args [][]byte) redis.Reply {
 			result = result.Intersect(set)
 			if result.Len() == 0 {
 				// early termination
-				return &reply.EmptyMultiBulkReply{}
+				return &protocol.EmptyMultiBulkReply{}
 			}
 		}
 	}
@@ -175,7 +175,7 @@ func execSInter(db *DB, args [][]byte) redis.Reply {
 		i++
 		return true
 	})
-	return reply.MakeMultiBulkReply(arr)
+	return protocol.MakeMultiBulkReply(arr)
 }
 
 // execSInterStore intersects multiple sets and store the result in a key
@@ -195,7 +195,7 @@ func execSInterStore(db *DB, args [][]byte) redis.Reply {
 		}
 		if set == nil {
 			db.Remove(dest) // clean ttl and old value
-			return reply.MakeIntReply(0)
+			return protocol.MakeIntReply(0)
 		}
 
 		if result == nil {
@@ -206,7 +206,7 @@ func execSInterStore(db *DB, args [][]byte) redis.Reply {
 			if result.Len() == 0 {
 				// early termination
 				db.Remove(dest) // clean ttl and old value
-				return reply.MakeIntReply(0)
+				return protocol.MakeIntReply(0)
 			}
 		}
 	}
@@ -216,7 +216,7 @@ func execSInterStore(db *DB, args [][]byte) redis.Reply {
 		Data: set,
 	})
 	db.addAof(utils.ToCmdLine3("sinterstore", args...))
-	return reply.MakeIntReply(int64(set.Len()))
+	return protocol.MakeIntReply(int64(set.Len()))
 }
 
 // execSUnion adds multiple sets
@@ -246,7 +246,7 @@ func execSUnion(db *DB, args [][]byte) redis.Reply {
 
 	if result == nil {
 		// all keys are empty set
-		return &reply.EmptyMultiBulkReply{}
+		return &protocol.EmptyMultiBulkReply{}
 	}
 	arr := make([][]byte, result.Len())
 	i := 0
@@ -255,7 +255,7 @@ func execSUnion(db *DB, args [][]byte) redis.Reply {
 		i++
 		return true
 	})
-	return reply.MakeMultiBulkReply(arr)
+	return protocol.MakeMultiBulkReply(arr)
 }
 
 // execSUnionStore adds multiple sets and store the result in a key
@@ -287,7 +287,7 @@ func execSUnionStore(db *DB, args [][]byte) redis.Reply {
 	db.Remove(dest) // clean ttl
 	if result == nil {
 		// all keys are empty set
-		return &reply.EmptyMultiBulkReply{}
+		return &protocol.EmptyMultiBulkReply{}
 	}
 
 	set := HashSet.Make(result.ToSlice()...)
@@ -296,7 +296,7 @@ func execSUnionStore(db *DB, args [][]byte) redis.Reply {
 	})
 
 	db.addAof(utils.ToCmdLine3("sunionstore", args...))
-	return reply.MakeIntReply(int64(set.Len()))
+	return protocol.MakeIntReply(int64(set.Len()))
 }
 
 // execSDiff subtracts multiple sets
@@ -315,7 +315,7 @@ func execSDiff(db *DB, args [][]byte) redis.Reply {
 		if set == nil {
 			if i == 0 {
 				// early termination
-				return &reply.EmptyMultiBulkReply{}
+				return &protocol.EmptyMultiBulkReply{}
 			}
 			continue
 		}
@@ -326,14 +326,14 @@ func execSDiff(db *DB, args [][]byte) redis.Reply {
 			result = result.Diff(set)
 			if result.Len() == 0 {
 				// early termination
-				return &reply.EmptyMultiBulkReply{}
+				return &protocol.EmptyMultiBulkReply{}
 			}
 		}
 	}
 
 	if result == nil {
 		// all keys are nil
-		return &reply.EmptyMultiBulkReply{}
+		return &protocol.EmptyMultiBulkReply{}
 	}
 	arr := make([][]byte, result.Len())
 	i := 0
@@ -342,7 +342,7 @@ func execSDiff(db *DB, args [][]byte) redis.Reply {
 		i++
 		return true
 	})
-	return reply.MakeMultiBulkReply(arr)
+	return protocol.MakeMultiBulkReply(arr)
 }
 
 // execSDiffStore subtracts multiple sets and store the result in a key
@@ -364,7 +364,7 @@ func execSDiffStore(db *DB, args [][]byte) redis.Reply {
 			if i == 0 {
 				// early termination
 				db.Remove(dest)
-				return reply.MakeIntReply(0)
+				return protocol.MakeIntReply(0)
 			}
 			continue
 		}
@@ -376,7 +376,7 @@ func execSDiffStore(db *DB, args [][]byte) redis.Reply {
 			if result.Len() == 0 {
 				// early termination
 				db.Remove(dest)
-				return reply.MakeIntReply(0)
+				return protocol.MakeIntReply(0)
 			}
 		}
 	}
@@ -384,7 +384,7 @@ func execSDiffStore(db *DB, args [][]byte) redis.Reply {
 	if result == nil {
 		// all keys are nil
 		db.Remove(dest)
-		return &reply.EmptyMultiBulkReply{}
+		return &protocol.EmptyMultiBulkReply{}
 	}
 	set := HashSet.Make(result.ToSlice()...)
 	db.PutEntity(dest, &database.DataEntity{
@@ -392,13 +392,13 @@ func execSDiffStore(db *DB, args [][]byte) redis.Reply {
 	})
 
 	db.addAof(utils.ToCmdLine3("sdiffstore", args...))
-	return reply.MakeIntReply(int64(set.Len()))
+	return protocol.MakeIntReply(int64(set.Len()))
 }
 
 // execSRandMember gets random members from set
 func execSRandMember(db *DB, args [][]byte) redis.Reply {
 	if len(args) != 1 && len(args) != 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'srandmember' command")
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'srandmember' command")
 	}
 	key := string(args[0])
 
@@ -408,16 +408,16 @@ func execSRandMember(db *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if set == nil {
-		return &reply.NullBulkReply{}
+		return &protocol.NullBulkReply{}
 	}
 	if len(args) == 1 {
 		// get a random member
 		members := set.RandomMembers(1)
-		return reply.MakeBulkReply([]byte(members[0]))
+		return protocol.MakeBulkReply([]byte(members[0]))
 	}
 	count64, err := strconv.ParseInt(string(args[1]), 10, 64)
 	if err != nil {
-		return reply.MakeErrReply("ERR value is not an integer or out of range")
+		return protocol.MakeErrReply("ERR value is not an integer or out of range")
 	}
 	count := int(count64)
 	if count > 0 {
@@ -426,16 +426,16 @@ func execSRandMember(db *DB, args [][]byte) redis.Reply {
 		for i, v := range members {
 			result[i] = []byte(v)
 		}
-		return reply.MakeMultiBulkReply(result)
+		return protocol.MakeMultiBulkReply(result)
 	} else if count < 0 {
 		members := set.RandomMembers(-count)
 		result := make([][]byte, len(members))
 		for i, v := range members {
 			result[i] = []byte(v)
 		}
-		return reply.MakeMultiBulkReply(result)
+		return protocol.MakeMultiBulkReply(result)
 	}
-	return &reply.EmptyMultiBulkReply{}
+	return &protocol.EmptyMultiBulkReply{}
 }
 
 func init() {

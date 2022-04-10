@@ -2,7 +2,7 @@ package cluster
 
 import (
 	"github.com/hdt3213/godis/interface/redis"
-	"github.com/hdt3213/godis/redis/reply"
+	"github.com/hdt3213/godis/redis/protocol"
 	"strconv"
 )
 
@@ -10,7 +10,7 @@ import (
 // if the given writeKeys are distributed on different node, Del will use try-commit-catch to remove them
 func Del(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	if len(args) < 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'del' command")
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'del' command")
 	}
 	keys := make([]string, len(args)-1)
 	for i := 1; i < len(args); i++ {
@@ -36,7 +36,7 @@ func Del(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 		} else {
 			resp = cluster.relay(peer, c, makeArgs("Prepare", peerArgs...))
 		}
-		if reply.IsErrorReply(resp) {
+		if protocol.IsErrorReply(resp) {
 			errReply = resp
 			rollback = true
 			break
@@ -56,10 +56,10 @@ func Del(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	if !rollback {
 		var deleted int64 = 0
 		for _, resp := range respList {
-			intResp := resp.(*reply.IntReply)
+			intResp := resp.(*protocol.IntReply)
 			deleted += intResp.Code
 		}
-		return reply.MakeIntReply(int64(deleted))
+		return protocol.MakeIntReply(int64(deleted))
 	}
 	return errReply
 }

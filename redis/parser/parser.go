@@ -6,7 +6,7 @@ import (
 	"errors"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
-	"github.com/hdt3213/godis/redis/reply"
+	"github.com/hdt3213/godis/redis/protocol"
 	"io"
 	"runtime/debug"
 	"strconv"
@@ -34,7 +34,7 @@ func ParseBytes(data []byte) ([]redis.Reply, error) {
 	var results []redis.Reply
 	for payload := range ch {
 		if payload == nil {
-			return nil, errors.New("no reply")
+			return nil, errors.New("no protocol")
 		}
 		if payload.Err != nil {
 			if payload.Err == io.EOF {
@@ -54,7 +54,7 @@ func ParseOne(data []byte) (redis.Reply, error) {
 	go parse0(reader, ch)
 	payload := <-ch // parse0 will close the channel
 	if payload == nil {
-		return nil, errors.New("no reply")
+		return nil, errors.New("no protocol")
 	}
 	return payload.Data, payload.Err
 }
@@ -105,7 +105,7 @@ func parse0(reader io.Reader, ch chan<- *Payload) {
 		if !state.readingMultiLine {
 			// receive new response
 			if msg[0] == '*' {
-				// multi bulk reply
+				// multi bulk protocol
 				err = parseMultiBulkHeader(msg, &state)
 				if err != nil {
 					ch <- &Payload{
@@ -116,12 +116,12 @@ func parse0(reader io.Reader, ch chan<- *Payload) {
 				}
 				if state.expectedArgsCount == 0 {
 					ch <- &Payload{
-						Data: &reply.EmptyMultiBulkReply{},
+						Data: &protocol.EmptyMultiBulkReply{},
 					}
 					state = readState{} // reset state
 					continue
 				}
-			} else if msg[0] == '$' { // bulk reply
+			} else if msg[0] == '$' { // bulk protocol
 				err = parseBulkHeader(msg, &state)
 				if err != nil {
 					ch <- &Payload{
@@ -130,15 +130,15 @@ func parse0(reader io.Reader, ch chan<- *Payload) {
 					state = readState{} // reset state
 					continue
 				}
-				if state.bulkLen == -1 { // null bulk reply
+				if state.bulkLen == -1 { // null bulk protocol
 					ch <- &Payload{
-						Data: &reply.NullBulkReply{},
+						Data: &protocol.NullBulkReply{},
 					}
 					state = readState{} // reset state
 					continue
 				}
 			} else {
-				// single line reply
+				// single line protocol
 				result, err := parseSingleLineReply(msg)
 				ch <- &Payload{
 					Data: result,
@@ -148,7 +148,7 @@ func parse0(reader io.Reader, ch chan<- *Payload) {
 				continue
 			}
 		} else {
-			// receive following bulk reply
+			// receive following bulk protocol
 			err = readBody(msg, &state)
 			if err != nil {
 				ch <- &Payload{
@@ -161,9 +161,9 @@ func parse0(reader io.Reader, ch chan<- *Payload) {
 			if state.finished() {
 				var result redis.Reply
 				if state.msgType == '*' {
-					result = reply.MakeMultiBulkReply(state.args)
+					result = protocol.MakeMultiBulkReply(state.args)
 				} else if state.msgType == '$' {
-					result = reply.MakeBulkReply(state.args[0])
+					result = protocol.MakeBulkReply(state.args[0])
 				}
 				ch <- &Payload{
 					Data: result,
@@ -213,7 +213,7 @@ func parseMultiBulkHeader(msg []byte, state *readState) error {
 		state.expectedArgsCount = 0
 		return nil
 	} else if expectedLine > 0 {
-		// first line of multi bulk reply
+		// first line of multi bulk protocol
 		state.msgType = msg[0]
 		state.readingMultiLine = true
 		state.expectedArgsCount = int(expectedLine)
@@ -247,16 +247,16 @@ func parseSingleLineReply(msg []byte) (redis.Reply, error) {
 	str := strings.TrimSuffix(string(msg), "\r\n")
 	var result redis.Reply
 	switch msg[0] {
-	case '+': // status reply
-		result = reply.MakeStatusReply(str[1:])
-	case '-': // err reply
-		result = reply.MakeErrReply(str[1:])
-	case ':': // int reply
+	case '+': // status protocol
+		result = protocol.MakeStatusReply(str[1:])
+	case '-': // err protocol
+		result = protocol.MakeErrReply(str[1:])
+	case ':': // int protocol
 		val, err := strconv.ParseInt(str[1:], 10, 64)
 		if err != nil {
 			return nil, errors.New("protocol error: " + string(msg))
 		}
-		result = reply.MakeIntReply(val)
+		result = protocol.MakeIntReply(val)
 	default:
 		// parse as text protocol
 		strs := strings.Split(str, " ")
@@ -264,17 +264,17 @@ func parseSingleLineReply(msg []byte) (redis.Reply, error) {
 		for i, s := range strs {
 			args[i] = []byte(s)
 		}
-		result = reply.MakeMultiBulkReply(args)
+		result = protocol.MakeMultiBulkReply(args)
 	}
 	return result, nil
 }
 
-// read the non-first lines of multi bulk reply or bulk reply
+// read the non-first lines of multi bulk protocol or bulk protocol
 func readBody(msg []byte, state *readState) error {
 	line := msg[0 : len(msg)-2]
 	var err error
 	if line[0] == '$' {
-		// bulk reply
+		// bulk protocol
 		state.bulkLen, err = strconv.ParseInt(string(line[1:]), 10, 64)
 		if err != nil {
 			return errors.New("protocol error: " + string(msg))

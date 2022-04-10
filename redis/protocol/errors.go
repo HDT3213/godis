@@ -1,4 +1,4 @@
-package reply
+package protocol
 
 // UnknownErrReply represents UnknownErr
 type UnknownErrReply struct{}

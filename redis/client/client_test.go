@@ -2,7 +2,7 @@ package client
 
 import (
 	"github.com/hdt3213/godis/lib/logger"
-	"github.com/hdt3213/godis/redis/reply"
+	"github.com/hdt3213/godis/redis/protocol"
 	"strconv"
 	"testing"
 )
@@ -23,7 +23,7 @@ func TestClient(t *testing.T) {
 	result := client.Send([][]byte{
 		[]byte("PING"),
 	})
-	if statusRet, ok := result.(*reply.StatusReply); ok {
+	if statusRet, ok := result.(*protocol.StatusReply); ok {
 		if statusRet.Status != "PONG" {
 			t.Error("`ping` failed, result: " + statusRet.Status)
 		}
@@ -34,7 +34,7 @@ func TestClient(t *testing.T) {
 		[]byte("a"),
 		[]byte("a"),
 	})
-	if statusRet, ok := result.(*reply.StatusReply); ok {
+	if statusRet, ok := result.(*protocol.StatusReply); ok {
 		if statusRet.Status != "OK" {
 			t.Error("`set` failed, result: " + statusRet.Status)
 		}
@@ -44,7 +44,7 @@ func TestClient(t *testing.T) {
 		[]byte("GET"),
 		[]byte("a"),
 	})
-	if bulkRet, ok := result.(*reply.BulkReply); ok {
+	if bulkRet, ok := result.(*protocol.BulkReply); ok {
 		if string(bulkRet.Arg) != "a" {
 			t.Error("`get` failed, result: " + string(bulkRet.Arg))
 		}
@@ -54,7 +54,7 @@ func TestClient(t *testing.T) {
 		[]byte("DEL"),
 		[]byte("a"),
 	})
-	if intRet, ok := result.(*reply.IntReply); ok {
+	if intRet, ok := result.(*protocol.IntReply); ok {
 		if intRet.Code != 1 {
 			t.Error("`del` failed, result: " + strconv.FormatInt(intRet.Code, 10))
 		}
@@ -65,7 +65,7 @@ func TestClient(t *testing.T) {
 		[]byte("GET"),
 		[]byte("a"),
 	})
-	if _, ok := result.(*reply.NullBulkReply); !ok {
+	if _, ok := result.(*protocol.NullBulkReply); !ok {
 		t.Error("`get` failed, result: " + string(result.ToBytes()))
 	}
 
@@ -81,7 +81,7 @@ func TestClient(t *testing.T) {
 		[]byte("2"),
 		[]byte("c"),
 	})
-	if intRet, ok := result.(*reply.IntReply); ok {
+	if intRet, ok := result.(*protocol.IntReply); ok {
 		if intRet.Code != 3 {
 			t.Error("`rpush` failed, result: " + strconv.FormatInt(intRet.Code, 10))
 		}
@@ -93,7 +93,7 @@ func TestClient(t *testing.T) {
 		[]byte("0"),
 		[]byte("-1"),
 	})
-	if multiBulkRet, ok := result.(*reply.MultiBulkReply); ok {
+	if multiBulkRet, ok := result.(*protocol.MultiBulkReply); ok {
 		if len(multiBulkRet.Args) != 3 ||
 			string(multiBulkRet.Args[0]) != "1" ||
 			string(multiBulkRet.Args[1]) != "2" ||

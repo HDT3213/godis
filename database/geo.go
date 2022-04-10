@@ -6,7 +6,7 @@ import (
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/geohash"
 	"github.com/hdt3213/godis/lib/utils"
-	"github.com/hdt3213/godis/redis/reply"
+	"github.com/hdt3213/godis/redis/protocol"
 	"strconv"
 	"strings"
 )
@@ -14,7 +14,7 @@ import (
 // execGeoAdd add a location into SortedSet
 func execGeoAdd(db *DB, args [][]byte) redis.Reply {
 	if len(args) < 4 || len(args)%3 != 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'geoadd' command")
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'geoadd' command")
 	}
 	key := string(args[0])
 	size := (len(args) - 1) / 3
@@ -24,14 +24,14 @@ func execGeoAdd(db *DB, args [][]byte) redis.Reply {
 		latStr := string(args[3*i+2])
 		lng, err := strconv.ParseFloat(lngStr, 64)
 		if err != nil {
-			return reply.MakeErrReply("ERR value is not a valid float")
+			return protocol.MakeErrReply("ERR value is not a valid float")
 		}
 		lat, err := strconv.ParseFloat(latStr, 64)
 		if err != nil {
-			return reply.MakeErrReply("ERR value is not a valid float")
+			return protocol.MakeErrReply("ERR value is not a valid float")
 		}
 		if lat < -90 || lat > 90 || lng < -180 || lng > 180 {
-			return reply.MakeErrReply(fmt.Sprintf("ERR invalid longitude,latitude pair %s,%s", latStr, lngStr))
+			return protocol.MakeErrReply(fmt.Sprintf("ERR invalid longitude,latitude pair %s,%s", latStr, lngStr))
 		}
 		code := float64(geohash.Encode(lat, lng))
 		elements[i] = &sortedset.Element{
@@ -53,7 +53,7 @@ func execGeoAdd(db *DB, args [][]byte) redis.Reply {
 		}
 	}
 	db.addAof(utils.ToCmdLine3("geoadd", args...))
-	return reply.MakeIntReply(int64(i))
+	return protocol.MakeIntReply(int64(i))
 }
 
 func undoGeoAdd(db *DB, args [][]byte) []CmdLine {
@@ -70,7 +70,7 @@ func undoGeoAdd(db *DB, args [][]byte) []CmdLine {
 func execGeoPos(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) < 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'geopos' command")
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'geopos' command")
 	}
 	key := string(args[0])
 	sortedSet, errReply := db.getAsSortedSet(key)
@@ -78,7 +78,7 @@ func execGeoPos(db *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if sortedSet == nil {
-		return &reply.NullBulkReply{}
+		return &protocol.NullBulkReply{}
 	}
 
 	positions := make([]redis.Reply, len(args)-1)
@@ -86,24 +86,24 @@ func execGeoPos(db *DB, args [][]byte) redis.Reply {
 		member := string(args[i+1])
 		elem, exists := sortedSet.Get(member)
 		if !exists {
-			positions[i] = &reply.EmptyMultiBulkReply{}
+			positions[i] = &protocol.EmptyMultiBulkReply{}
 			continue
 		}
 		lat, lng := geohash.Decode(uint64(elem.Score))
 		lngStr := strconv.FormatFloat(lng, 'f', -1, 64)
 		latStr := strconv.FormatFloat(lat, 'f', -1, 64)
-		positions[i] = reply.MakeMultiBulkReply([][]byte{
+		positions[i] = protocol.MakeMultiBulkReply([][]byte{
 			[]byte(lngStr), []byte(latStr),
 		})
 	}
-	return reply.MakeMultiRawReply(positions)
+	return protocol.MakeMultiRawReply(positions)
 }
 
 // execGeoDist returns the distance between two locations
 func execGeoDist(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) != 3 && len(args) != 4 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'geodist' command")
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'geodist' command")
 	}
 	key := string(args[0])
 	sortedSet, errReply := db.getAsSortedSet(key)
@@ -111,7 +111,7 @@ func execGeoDist(db *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if sortedSet == nil {
-		return &reply.NullBulkReply{}
+		return &protocol.NullBulkReply{}
 	}
 
 	positions := make([][]float64, 2)
@@ -119,7 +119,7 @@ func execGeoDist(db *DB, args [][]byte) redis.Reply {
 		member := string(args[i])
 		elem, exists := sortedSet.Get(member)
 		if !exists {
-			return &reply.NullBulkReply{}
+			return &protocol.NullBulkReply{}
 		}
 		lat, lng := geohash.Decode(uint64(elem.Score))
 		positions[i-1] = []float64{lat, lng}
@@ -132,19 +132,19 @@ func execGeoDist(db *DB, args [][]byte) redis.Reply {
 	switch unit {
 	case "m":
 		disStr := strconv.FormatFloat(dis, 'f', -1, 64)
-		return reply.MakeBulkReply([]byte(disStr))
+		return protocol.MakeBulkReply([]byte(disStr))
 	case "km":
 		disStr := strconv.FormatFloat(dis/1000, 'f', -1, 64)
-		return reply.MakeBulkReply([]byte(disStr))
+		return protocol.MakeBulkReply([]byte(disStr))
 	}
-	return reply.MakeErrReply("ERR unsupported unit provided. please use m, km")
+	return protocol.MakeErrReply("ERR unsupported unit provided. please use m, km")
 }
 
 // execGeoHash return geo-hash-code of given position
 func execGeoHash(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) < 1 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'geohash' command")
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'geohash' command")
 	}
 
 	key := string(args[0])
@@ -153,7 +153,7 @@ func execGeoHash(db *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if sortedSet == nil {
-		return &reply.NullBulkReply{}
+		return &protocol.NullBulkReply{}
 	}
 
 	strs := make([][]byte, len(args)-1)
@@ -161,20 +161,20 @@ func execGeoHash(db *DB, args [][]byte) redis.Reply {
 		member := string(args[i+1])
 		elem, exists := sortedSet.Get(member)
 		if !exists {
-			strs[i] = (&reply.EmptyMultiBulkReply{}).ToBytes()
+			strs[i] = (&protocol.EmptyMultiBulkReply{}).ToBytes()
 			continue
 		}
 		str := geohash.ToString(geohash.FromInt(uint64(elem.Score)))
 		strs[i] = []byte(str)
 	}
-	return reply.MakeMultiBulkReply(strs)
+	return protocol.MakeMultiBulkReply(strs)
 }
 
 // execGeoRadius returns members within max distance of given point
 func execGeoRadius(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) < 5 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'georadius' command")
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'georadius' command")
 	}
 
 	key := string(args[0])
@@ -183,27 +183,27 @@ func execGeoRadius(db *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if sortedSet == nil {
-		return &reply.NullBulkReply{}
+		return &protocol.NullBulkReply{}
 	}
 
 	lng, err := strconv.ParseFloat(string(args[1]), 64)
 	if err != nil {
-		return reply.MakeErrReply("ERR value is not a valid float")
+		return protocol.MakeErrReply("ERR value is not a valid float")
 	}
 	lat, err := strconv.ParseFloat(string(args[2]), 64)
 	if err != nil {
-		return reply.MakeErrReply("ERR value is not a valid float")
+		return protocol.MakeErrReply("ERR value is not a valid float")
 	}
 	radius, err := strconv.ParseFloat(string(args[3]), 64)
 	if err != nil {
-		return reply.MakeErrReply("ERR value is not a valid float")
+		return protocol.MakeErrReply("ERR value is not a valid float")
 	}
 	unit := strings.ToLower(string(args[4]))
 	if unit == "m" {
 	} else if unit == "km" {
 		radius *= 1000
 	} else {
-		return reply.MakeErrReply("ERR unsupported unit provided. please use m, km")
+		return protocol.MakeErrReply("ERR unsupported unit provided. please use m, km")
 	}
 	return geoRadius0(sortedSet, lat, lng, radius)
 }
@@ -212,7 +212,7 @@ func execGeoRadius(db *DB, args [][]byte) redis.Reply {
 func execGeoRadiusByMember(db *DB, args [][]byte) redis.Reply {
 	// parse args
 	if len(args) < 3 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'georadiusbymember' command")
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'georadiusbymember' command")
 	}
 
 	key := string(args[0])
@@ -221,19 +221,19 @@ func execGeoRadiusByMember(db *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if sortedSet == nil {
-		return &reply.NullBulkReply{}
+		return &protocol.NullBulkReply{}
 	}
 
 	member := string(args[1])
 	elem, ok := sortedSet.Get(member)
 	if !ok {
-		return &reply.NullBulkReply{}
+		return &protocol.NullBulkReply{}
 	}
 	lat, lng := geohash.Decode(uint64(elem.Score))
 
 	radius, err := strconv.ParseFloat(string(args[2]), 64)
 	if err != nil {
-		return reply.MakeErrReply("ERR value is not a valid float")
+		return protocol.MakeErrReply("ERR value is not a valid float")
 	}
 	if len(args) > 3 {
 		unit := strings.ToLower(string(args[3]))
@@ -241,7 +241,7 @@ func execGeoRadiusByMember(db *DB, args [][]byte) redis.Reply {
 		} else if unit == "km" {
 			radius *= 1000
 		} else {
-			return reply.MakeErrReply("ERR unsupported unit provided. please use m, km")
+			return protocol.MakeErrReply("ERR unsupported unit provided. please use m, km")
 		}
 	}
 	return geoRadius0(sortedSet, lat, lng, radius)
@@ -258,7 +258,7 @@ func geoRadius0(sortedSet *sortedset.SortedSet, lat float64, lng float64, radius
 			members = append(members, []byte(elem.Member))
 		}
 	}
-	return reply.MakeMultiBulkReply(members)
+	return protocol.MakeMultiBulkReply(members)
 }
 
 func init() {

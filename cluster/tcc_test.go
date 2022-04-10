@@ -2,7 +2,7 @@ package cluster
 
 import (
 	"github.com/hdt3213/godis/redis/connection"
-	"github.com/hdt3213/godis/redis/reply/asserts"
+	"github.com/hdt3213/godis/redis/protocol/asserts"
 	"math/rand"
 	"strconv"
 	"testing"

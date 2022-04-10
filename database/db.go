@@ -8,7 +8,7 @@ import (
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/timewheel"
-	"github.com/hdt3213/godis/redis/reply"
+	"github.com/hdt3213/godis/redis/protocol"
 	"strings"
 	"sync"
 	"time"
@@ -83,28 +83,28 @@ func (db *DB) Exec(c redis.Connection, cmdLine [][]byte) redis.Reply {
 	cmdName := strings.ToLower(string(cmdLine[0]))
 	if cmdName == "multi" {
 		if len(cmdLine) != 1 {
-			return reply.MakeArgNumErrReply(cmdName)
+			return protocol.MakeArgNumErrReply(cmdName)
 		}
 		return StartMulti(c)
 	} else if cmdName == "discard" {
 		if len(cmdLine) != 1 {
-			return reply.MakeArgNumErrReply(cmdName)
+			return protocol.MakeArgNumErrReply(cmdName)
 		}
 		return DiscardMulti(c)
 	} else if cmdName == "exec" {
 		if len(cmdLine) != 1 {
-			return reply.MakeArgNumErrReply(cmdName)
+			return protocol.MakeArgNumErrReply(cmdName)
 		}
 		return execMulti(db, c)
 	} else if cmdName == "watch" {
 		if !validateArity(-2, cmdLine) {
-			return reply.MakeArgNumErrReply(cmdName)
+			return protocol.MakeArgNumErrReply(cmdName)
 		}
 		return Watch(db, c, cmdLine[1:])
 	}
 	if c != nil && c.InMultiState() {
 		EnqueueCmd(c, cmdLine)
-		return reply.MakeQueuedReply()
+		return protocol.MakeQueuedReply()
 	}
 
 	return db.execNormalCommand(cmdLine)
@@ -114,10 +114,10 @@ func (db *DB) execNormalCommand(cmdLine [][]byte) redis.Reply {
 	cmdName := strings.ToLower(string(cmdLine[0]))
 	cmd, ok := cmdTable[cmdName]
 	if !ok {
-		return reply.MakeErrReply("ERR unknown command '" + cmdName + "'")
+		return protocol.MakeErrReply("ERR unknown command '" + cmdName + "'")
 	}
 	if !validateArity(cmd.arity, cmdLine) {
-		return reply.MakeArgNumErrReply(cmdName)
+		return protocol.MakeArgNumErrReply(cmdName)
 	}
 
 	prepare := cmd.prepare

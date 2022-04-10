@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"encoding/base64"
 	"github.com/hdt3213/godis/redis/parser"
-	"github.com/hdt3213/godis/redis/reply"
+	"github.com/hdt3213/godis/redis/protocol"
 )
 
 func encodeCmdLine(cmdLines []CmdLine) [][]byte {
 	var result [][]byte
 	for _, line := range cmdLines {
-		raw := reply.MakeMultiBulkReply(line).ToBytes()
+		raw := protocol.MakeMultiBulkReply(line).ToBytes()
 		encoded := make([]byte, base64.StdEncoding.EncodedLen(len(raw)))
 		base64.StdEncoding.Encode(encoded, raw)
 		result = append(result, encoded)
@@ -18,7 +18,7 @@ func encodeCmdLine(cmdLines []CmdLine) [][]byte {
 	return result
 }
 
-func parseEncodedMultiRawReply(args [][]byte) (*reply.MultiRawReply, error) {
+func parseEncodedMultiRawReply(args [][]byte) (*protocol.MultiRawReply, error) {
 	cmdBuf := new(bytes.Buffer)
 	for _, arg := range args {
 		dbuf := make([]byte, base64.StdEncoding.DecodedLen(len(arg)))
@@ -30,12 +30,12 @@ func parseEncodedMultiRawReply(args [][]byte) (*reply.MultiRawReply, error) {
 	}
 	cmds, err := parser.ParseBytes(cmdBuf.Bytes())
 	if err != nil {
-		return nil, reply.MakeErrReply(err.Error())
+		return nil, protocol.MakeErrReply(err.Error())
 	}
-	return reply.MakeMultiRawReply(cmds), nil
+	return protocol.MakeMultiRawReply(cmds), nil
 }
 
-func encodeMultiRawReply(src *reply.MultiRawReply) *reply.MultiBulkReply {
+func encodeMultiRawReply(src *protocol.MultiRawReply) *protocol.MultiBulkReply {
 	args := make([][]byte, 0, len(src.Replies))
 	for _, rep := range src.Replies {
 		raw := rep.ToBytes()
@@ -43,5 +43,5 @@ func encodeMultiRawReply(src *reply.MultiRawReply) *reply.MultiBulkReply {
 		base64.StdEncoding.Encode(encoded, raw)
 		args = append(args, encoded)
 	}
-	return reply.MakeMultiBulkReply(args)
+	return protocol.MakeMultiBulkReply(args)
 }

@@ -117,7 +117,7 @@ func makeRouter() map[string]CmdFunc {
 	return routerMap
 }
 
-// relay command to responsible peer, and return its reply to client
+// relay command to responsible peer, and return its protocol to client
 func defaultFunc(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	key := string(args[1])
 	peer := cluster.peerPicker.PickNode(key)

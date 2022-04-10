@@ -3,7 +3,7 @@ package database
 import (
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/connection"
-	"github.com/hdt3213/godis/redis/reply/asserts"
+	"github.com/hdt3213/godis/redis/protocol/asserts"
 	"testing"
 )
 

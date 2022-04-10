@@ -1,4 +1,4 @@
-package reply
+package protocol
 
 // PongReply is +PONG
 type PongReply struct{}
@@ -22,7 +22,7 @@ func (r *OkReply) ToBytes() []byte {
 
 var theOkReply = new(OkReply)
 
-// MakeOkReply returns a ok reply
+// MakeOkReply returns a ok protocol
 func MakeOkReply() *OkReply {
 	return theOkReply
 }
@@ -79,7 +79,7 @@ func (r *QueuedReply) ToBytes() []byte {
 
 var theQueuedReply = new(QueuedReply)
 
-// MakeQueuedReply returns a QUEUED reply
+// MakeQueuedReply returns a QUEUED protocol
 func MakeQueuedReply() *QueuedReply {
 	return theQueuedReply
 }

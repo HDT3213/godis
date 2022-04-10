@@ -9,7 +9,7 @@ import (
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/pubsub"
-	"github.com/hdt3213/godis/redis/reply"
+	"github.com/hdt3213/godis/redis/protocol"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -74,7 +74,7 @@ func (mdb *MultiDB) Exec(c redis.Connection, cmdLine [][]byte) (result redis.Rep
 	defer func() {
 		if err := recover(); err != nil {
 			logger.Warn(fmt.Sprintf("error occurs: %v\n%s", err, string(debug.Stack())))
-			result = &reply.UnknownErrReply{}
+			result = &protocol.UnknownErrReply{}
 		}
 	}()
 
@@ -84,13 +84,13 @@ func (mdb *MultiDB) Exec(c redis.Connection, cmdLine [][]byte) (result redis.Rep
 		return Auth(c, cmdLine[1:])
 	}
 	if !isAuthenticated(c) {
-		return reply.MakeErrReply("NOAUTH Authentication required")
+		return protocol.MakeErrReply("NOAUTH Authentication required")
 	}
 
 	// special commands
 	if cmdName == "subscribe" {
 		if len(cmdLine) < 2 {
-			return reply.MakeArgNumErrReply("subscribe")
+			return protocol.MakeArgNumErrReply("subscribe")
 		}
 		return pubsub.Subscribe(mdb.hub, c, cmdLine[1:])
 	} else if cmdName == "publish" {
@@ -106,10 +106,10 @@ func (mdb *MultiDB) Exec(c redis.Connection, cmdLine [][]byte) (result redis.Rep
 		return mdb.flushAll()
 	} else if cmdName == "select" {
 		if c != nil && c.InMultiState() {
-			return reply.MakeErrReply("cannot select database within multi")
+			return protocol.MakeErrReply("cannot select database within multi")
 		}
 		if len(cmdLine) != 2 {
-			return reply.MakeArgNumErrReply("select")
+			return protocol.MakeArgNumErrReply("select")
 		}
 		return execSelect(c, mdb, cmdLine[1:])
 	}
@@ -118,7 +118,7 @@ func (mdb *MultiDB) Exec(c redis.Connection, cmdLine [][]byte) (result redis.Rep
 	// normal commands
 	dbIndex := c.GetDBIndex()
 	if dbIndex >= len(mdb.dbSet) {
-		return reply.MakeErrReply("ERR DB index is out of range")
+		return protocol.MakeErrReply("ERR DB index is out of range")
 	}
 	selectedDB := mdb.dbSet[dbIndex]
 	return selectedDB.Exec(c, cmdLine)
@@ -139,13 +139,13 @@ func (mdb *MultiDB) Close() {
 func execSelect(c redis.Connection, mdb *MultiDB, args [][]byte) redis.Reply {
 	dbIndex, err := strconv.Atoi(string(args[0]))
 	if err != nil {
-		return reply.MakeErrReply("ERR invalid DB index")
+		return protocol.MakeErrReply("ERR invalid DB index")
 	}
 	if dbIndex >= len(mdb.dbSet) {
-		return reply.MakeErrReply("ERR DB index is out of range")
+		return protocol.MakeErrReply("ERR DB index is out of range")
 	}
 	c.SelectDB(dbIndex)
-	return reply.MakeOkReply()
+	return protocol.MakeOkReply()
 }
 
 func (mdb *MultiDB) flushAll() redis.Reply {
@@ -155,7 +155,7 @@ func (mdb *MultiDB) flushAll() redis.Reply {
 	if mdb.aofHandler != nil {
 		mdb.aofHandler.AddAof(0, utils.ToCmdLine("FlushAll"))
 	}
-	return &reply.OkReply{}
+	return &protocol.OkReply{}
 }
 
 // ForEach traverses all the keys in the given database
@@ -170,7 +170,7 @@ func (mdb *MultiDB) ForEach(dbIndex int, cb func(key string, data *database.Data
 // ExecMulti executes multi commands transaction Atomically and Isolated
 func (mdb *MultiDB) ExecMulti(conn redis.Connection, watching map[string]uint32, cmdLines []CmdLine) redis.Reply {
 	if conn.GetDBIndex() >= len(mdb.dbSet) {
-		return reply.MakeErrReply("ERR DB index is out of range")
+		return protocol.MakeErrReply("ERR DB index is out of range")
 	}
 	db := mdb.dbSet[conn.GetDBIndex()]
 	return db.ExecMulti(conn, watching, cmdLines)
@@ -215,11 +215,11 @@ func (mdb *MultiDB) ExecWithLock(conn redis.Connection, cmdLine [][]byte) redis.
 // BGRewriteAOF asynchronously rewrites Append-Only-File
 func BGRewriteAOF(db *MultiDB, args [][]byte) redis.Reply {
 	go db.aofHandler.Rewrite()
-	return reply.MakeStatusReply("Background append only file rewriting started")
+	return protocol.MakeStatusReply("Background append only file rewriting started")
 }
 
 // RewriteAOF start Append-Only-File rewriting and blocked until it finished
 func RewriteAOF(db *MultiDB, args [][]byte) redis.Reply {
 	db.aofHandler.Rewrite()
-	return reply.MakeStatusReply("Background append only file rewriting started")
+	return protocol.MakeStatusReply("Background append only file rewriting started")
 }

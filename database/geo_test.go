@@ -3,8 +3,8 @@ package database
 import (
 	"fmt"
 	"github.com/hdt3213/godis/lib/utils"
-	"github.com/hdt3213/godis/redis/reply"
-	"github.com/hdt3213/godis/redis/reply/asserts"
+	"github.com/hdt3213/godis/redis/protocol"
+	"github.com/hdt3213/godis/redis/protocol/asserts"
 	"strconv"
 	"testing"
 )
@@ -72,9 +72,9 @@ func TestGeoDist(t *testing.T) {
 		"15.087269", "37.502669", pos2,
 	))
 	result := execGeoDist(testDB, utils.ToCmdLine(key, pos1, pos2, "km"))
-	bulkReply, ok := result.(*reply.BulkReply)
+	bulkReply, ok := result.(*protocol.BulkReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected bulk reply, actually %s", result.ToBytes()))
+		t.Error(fmt.Sprintf("expected bulk protocol, actually %s", result.ToBytes()))
 		return
 	}
 	dist, err := strconv.ParseFloat(string(bulkReply.Arg), 10)
@@ -87,9 +87,9 @@ func TestGeoDist(t *testing.T) {
 	}
 
 	result = execGeoDist(testDB, utils.ToCmdLine(key, pos1, pos2, "m"))
-	bulkReply, ok = result.(*reply.BulkReply)
+	bulkReply, ok = result.(*protocol.BulkReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected bulk reply, actually %s", result.ToBytes()))
+		t.Error(fmt.Sprintf("expected bulk protocol, actually %s", result.ToBytes()))
 		return
 	}
 	dist, err = strconv.ParseFloat(string(bulkReply.Arg), 10)

@@ -3,8 +3,8 @@ package database
 import (
 	"fmt"
 	"github.com/hdt3213/godis/lib/utils"
-	"github.com/hdt3213/godis/redis/reply"
-	"github.com/hdt3213/godis/redis/reply/asserts"
+	"github.com/hdt3213/godis/redis/protocol"
+	"github.com/hdt3213/godis/redis/protocol/asserts"
 	"strconv"
 	"testing"
 )
@@ -34,9 +34,9 @@ func TestSAdd(t *testing.T) {
 
 	// test members
 	result = testDB.Exec(nil, utils.ToCmdLine("SMembers", key))
-	multiBulk, ok := result.(*reply.MultiBulkReply)
+	multiBulk, ok := result.(*protocol.MultiBulkReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected bulk reply, actually %s", result.ToBytes()))
+		t.Error(fmt.Sprintf("expected bulk protocol, actually %s", result.ToBytes()))
 		return
 	}
 	if len(multiBulk.Args) != size {
@@ -183,17 +183,17 @@ func TestSRandMember(t *testing.T) {
 		testDB.Exec(nil, utils.ToCmdLine("sadd", key, member))
 	}
 	result := testDB.Exec(nil, utils.ToCmdLine("SRandMember", key))
-	br, ok := result.(*reply.BulkReply)
+	br, ok := result.(*protocol.BulkReply)
 	if !ok && len(br.Arg) > 0 {
-		t.Error(fmt.Sprintf("expected bulk reply, actually %s", result.ToBytes()))
+		t.Error(fmt.Sprintf("expected bulk protocol, actually %s", result.ToBytes()))
 		return
 	}
 
 	result = testDB.Exec(nil, utils.ToCmdLine("SRandMember", key, "10"))
 	asserts.AssertMultiBulkReplySize(t, result, 10)
-	multiBulk, ok := result.(*reply.MultiBulkReply)
+	multiBulk, ok := result.(*protocol.MultiBulkReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected bulk reply, actually %s", result.ToBytes()))
+		t.Error(fmt.Sprintf("expected bulk protocol, actually %s", result.ToBytes()))
 		return
 	}
 	m := make(map[string]struct{})

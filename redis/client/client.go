@@ -5,7 +5,7 @@ import (
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/sync/wait"
 	"github.com/hdt3213/godis/redis/parser"
-	"github.com/hdt3213/godis/redis/reply"
+	"github.com/hdt3213/godis/redis/protocol"
 	"net"
 	"runtime/debug"
 	"sync"
@@ -128,10 +128,10 @@ func (client *Client) Send(args [][]byte) redis.Reply {
 	client.pendingReqs <- request
 	timeout := request.waiting.WaitWithTimeout(maxWait)
 	if timeout {
-		return reply.MakeErrReply("server time out")
+		return protocol.MakeErrReply("server time out")
 	}
 	if request.err != nil {
-		return reply.MakeErrReply("request failed")
+		return protocol.MakeErrReply("request failed")
 	}
 	return request.reply
 }
@@ -153,7 +153,7 @@ func (client *Client) doRequest(req *request) {
 	if req == nil || len(req.args) == 0 {
 		return
 	}
-	re := reply.MakeMultiBulkReply(req.args)
+	re := protocol.MakeMultiBulkReply(req.args)
 	bytes := re.ToBytes()
 	_, err := client.conn.Write(bytes)
 	i := 0
@@ -193,7 +193,7 @@ func (client *Client) handleRead() error {
 	ch := parser.ParseStream(client.conn)
 	for payload := range ch {
 		if payload.Err != nil {
-			client.finishRequest(reply.MakeErrReply(payload.Err.Error()))
+			client.finishRequest(protocol.MakeErrReply(payload.Err.Error()))
 			continue
 		}
 		client.finishRequest(payload.Data)

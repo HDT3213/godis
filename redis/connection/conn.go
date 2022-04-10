@@ -12,7 +12,7 @@ import (
 type Connection struct {
 	conn net.Conn
 
-	// waiting until reply finished
+	// waiting until protocol finished
 	waitingReply wait.Wait
 
 	// lock while server sending response

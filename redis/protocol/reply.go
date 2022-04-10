@@ -1,4 +1,4 @@
-package reply
+package protocol
 
 import (
 	"bytes"
@@ -115,7 +115,7 @@ type IntReply struct {
 	Code int64
 }
 
-// MakeIntReply creates int reply
+// MakeIntReply creates int protocol
 func MakeIntReply(code int64) *IntReply {
 	return &IntReply{
 		Code: code,
@@ -147,7 +147,7 @@ func MakeErrReply(status string) *StandardErrReply {
 	}
 }
 
-// IsErrorReply returns true if the given reply is error
+// IsErrorReply returns true if the given protocol is error
 func IsErrorReply(reply redis.Reply) bool {
 	return reply.ToBytes()[0] == '-'
 }

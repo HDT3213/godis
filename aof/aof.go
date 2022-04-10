@@ -7,7 +7,7 @@ import (
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/parser"
-	"github.com/hdt3213/godis/redis/reply"
+	"github.com/hdt3213/godis/redis/protocol"
 	"io"
 	"os"
 	"strconv"
@@ -78,7 +78,7 @@ func (handler *Handler) handleAof() {
 		handler.pausingAof.RLock() // prevent other goroutines from pausing aof
 		if p.dbIndex != handler.currentDB {
 			// select db
-			data := reply.MakeMultiBulkReply(utils.ToCmdLine("SELECT", strconv.Itoa(p.dbIndex))).ToBytes()
+			data := protocol.MakeMultiBulkReply(utils.ToCmdLine("SELECT", strconv.Itoa(p.dbIndex))).ToBytes()
 			_, err := handler.aofFile.Write(data)
 			if err != nil {
 				logger.Warn(err)
@@ -86,7 +86,7 @@ func (handler *Handler) handleAof() {
 			}
 			handler.currentDB = p.dbIndex
 		}
-		data := reply.MakeMultiBulkReply(p.cmdLine).ToBytes()
+		data := protocol.MakeMultiBulkReply(p.cmdLine).ToBytes()
 		_, err := handler.aofFile.Write(data)
 		if err != nil {
 			logger.Warn(err)
@@ -135,13 +135,13 @@ func (handler *Handler) LoadAof(maxBytes int) {
 			logger.Error("empty payload")
 			continue
 		}
-		r, ok := p.Data.(*reply.MultiBulkReply)
+		r, ok := p.Data.(*protocol.MultiBulkReply)
 		if !ok {
-			logger.Error("require multi bulk reply")
+			logger.Error("require multi bulk protocol")
 			continue
 		}
 		ret := handler.db.Exec(fakeConn, r.Args)
-		if reply.IsErrorReply(ret) {
+		if protocol.IsErrorReply(ret) {
 			logger.Error("exec err", err)
 		}
 	}

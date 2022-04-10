@@ -6,7 +6,7 @@ import (
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/timewheel"
-	"github.com/hdt3213/godis/redis/reply"
+	"github.com/hdt3213/godis/redis/protocol"
 	"strconv"
 	"strings"
 	"sync"
@@ -122,7 +122,7 @@ func (tx *Transaction) rollback() error {
 // cmdLine: Prepare id cmdName args...
 func execPrepare(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 	if len(cmdLine) < 3 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'prepare' command")
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'prepare' command")
 	}
 	txID := string(cmdLine[1])
 	cmdName := strings.ToLower(string(cmdLine[2]))
@@ -130,46 +130,46 @@ func execPrepare(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Re
 	cluster.transactions.Put(txID, tx)
 	err := tx.prepare()
 	if err != nil {
-		return reply.MakeErrReply(err.Error())
+		return protocol.MakeErrReply(err.Error())
 	}
 	prepareFunc, ok := prepareFuncMap[cmdName]
 	if ok {
 		return prepareFunc(cluster, c, cmdLine[2:])
 	}
-	return &reply.OkReply{}
+	return &protocol.OkReply{}
 }
 
 // execRollback rollbacks local transaction
 func execRollback(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 	if len(cmdLine) != 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'rollback' command")
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'rollback' command")
 	}
 	txID := string(cmdLine[1])
 	raw, ok := cluster.transactions.Get(txID)
 	if !ok {
-		return reply.MakeIntReply(0)
+		return protocol.MakeIntReply(0)
 	}
 	tx, _ := raw.(*Transaction)
 	err := tx.rollback()
 	if err != nil {
-		return reply.MakeErrReply(err.Error())
+		return protocol.MakeErrReply(err.Error())
 	}
 	// clean transaction
 	timewheel.Delay(waitBeforeCleanTx, "", func() {
 		cluster.transactions.Remove(tx.id)
 	})
-	return reply.MakeIntReply(1)
+	return protocol.MakeIntReply(1)
 }
 
 // execCommit commits local transaction as a worker when receive execCommit command from coordinator
 func execCommit(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 	if len(cmdLine) != 2 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'commit' command")
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'commit' command")
 	}
 	txID := string(cmdLine[1])
 	raw, ok := cluster.transactions.Get(txID)
 	if !ok {
-		return reply.MakeIntReply(0)
+		return protocol.MakeIntReply(0)
 	}
 	tx, _ := raw.(*Transaction)
 
@@ -178,10 +178,10 @@ func execCommit(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Rep
 
 	result := cluster.db.ExecWithLock(c, tx.cmdLine)
 
-	if reply.IsErrorReply(result) {
+	if protocol.IsErrorReply(result) {
 		// failed
 		err2 := tx.rollback()
-		return reply.MakeErrReply(fmt.Sprintf("err occurs when rollback: %v, origin err: %s", err2, result))
+		return protocol.MakeErrReply(fmt.Sprintf("err occurs when rollback: %v, origin err: %s", err2, result))
 	}
 	// after committed
 	tx.unLockKeys()
@@ -195,8 +195,8 @@ func execCommit(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Rep
 }
 
 // requestCommit commands all node to commit transaction as coordinator
-func requestCommit(cluster *Cluster, c redis.Connection, txID int64, peers map[string][]string) ([]redis.Reply, reply.ErrorReply) {
-	var errReply reply.ErrorReply
+func requestCommit(cluster *Cluster, c redis.Connection, txID int64, peers map[string][]string) ([]redis.Reply, protocol.ErrorReply) {
+	var errReply protocol.ErrorReply
 	txIDStr := strconv.FormatInt(txID, 10)
 	respList := make([]redis.Reply, 0, len(peers))
 	for peer := range peers {
@@ -206,8 +206,8 @@ func requestCommit(cluster *Cluster, c redis.Connection, txID int64, peers map[s
 		} else {
 			resp = cluster.relay(peer, c, makeArgs("commit", txIDStr))
 		}
-		if reply.IsErrorReply(resp) {
-			errReply = resp.(reply.ErrorReply)
+		if protocol.IsErrorReply(resp) {
+			errReply = resp.(protocol.ErrorReply)
 			break
 		}
 		respList = append(respList, resp)

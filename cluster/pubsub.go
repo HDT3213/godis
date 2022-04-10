@@ -3,7 +3,7 @@ package cluster
 import (
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
-	"github.com/hdt3213/godis/redis/reply"
+	"github.com/hdt3213/godis/redis/protocol"
 )
 
 const (
@@ -21,13 +21,13 @@ func Publish(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	var count int64 = 0
 	results := cluster.broadcast(c, args)
 	for _, val := range results {
-		if errReply, ok := val.(reply.ErrorReply); ok {
+		if errReply, ok := val.(protocol.ErrorReply); ok {
 			logger.Error("publish occurs error: " + errReply.Error())
-		} else if intReply, ok := val.(*reply.IntReply); ok {
+		} else if intReply, ok := val.(*protocol.IntReply); ok {
 			count += intReply.Code
 		}
 	}
-	return reply.MakeIntReply(count)
+	return protocol.MakeIntReply(count)
 }
 
 // onRelayedPublish receives publish command from peer, just publish to local subscribing clients, do not relay to peers

@@ -6,8 +6,8 @@ import (
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/connection"
-	"github.com/hdt3213/godis/redis/reply"
-	"github.com/hdt3213/godis/redis/reply/asserts"
+	"github.com/hdt3213/godis/redis/protocol"
+	"github.com/hdt3213/godis/redis/protocol/asserts"
 	"io/ioutil"
 	"os"
 	"path"
@@ -59,9 +59,9 @@ func validateTestData(t *testing.T, db database.DB, dbIndex int, prefix string, 
 		ret = db.Exec(conn, utils.ToCmdLine("GET", key))
 		asserts.AssertBulkReply(t, ret, key)
 		ret = db.Exec(conn, utils.ToCmdLine("TTL", key))
-		intResult, ok := ret.(*reply.IntReply)
+		intResult, ok := ret.(*protocol.IntReply)
 		if !ok {
-			t.Errorf("expected int reply, actually %s", ret.ToBytes())
+			t.Errorf("expected int protocol, actually %s", ret.ToBytes())
 			return
 		}
 		if intResult.Code <= 0 || intResult.Code > 10000 {

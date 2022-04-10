@@ -2,13 +2,13 @@ package cluster
 
 import (
 	"github.com/hdt3213/godis/interface/redis"
-	"github.com/hdt3213/godis/redis/reply"
+	"github.com/hdt3213/godis/redis/protocol"
 )
 
 // Rename renames a key, the origin and the destination must within the same node
 func Rename(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	if len(args) != 3 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'rename' command")
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'rename' command")
 	}
 	src := string(args[1])
 	dest := string(args[2])
@@ -17,7 +17,7 @@ func Rename(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	destPeer := cluster.peerPicker.PickNode(dest)
 
 	if srcPeer != destPeer {
-		return reply.MakeErrReply("ERR rename must within one slot in cluster mode")
+		return protocol.MakeErrReply("ERR rename must within one slot in cluster mode")
 	}
 	return cluster.relay(srcPeer, c, args)
 }
@@ -26,7 +26,7 @@ func Rename(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 // The origin and the destination must within the same node
 func RenameNx(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	if len(args) != 3 {
-		return reply.MakeErrReply("ERR wrong number of arguments for 'renamenx' command")
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'renamenx' command")
 	}
 	src := string(args[1])
 	dest := string(args[2])
@@ -35,7 +35,7 @@ func RenameNx(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	destPeer := cluster.peerPicker.PickNode(dest)
 
 	if srcPeer != destPeer {
-		return reply.MakeErrReply("ERR rename must within one slot in cluster mode")
+		return protocol.MakeErrReply("ERR rename must within one slot in cluster mode")
 	}
 	return cluster.relay(srcPeer, c, args)
 }
