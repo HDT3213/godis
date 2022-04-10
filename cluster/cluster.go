@@ -160,7 +160,7 @@ func makeArgs(cmd string, args ...string) [][]byte {
 	return result
 }
 
-// return peer -> writeKeys
+// return node -> writeKeys
 func (cluster *Cluster) groupBy(keys []string) map[string][]string {
 	result := make(map[string][]string)
 	for _, key := range keys {

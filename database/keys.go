@@ -49,24 +49,6 @@ func execExists(db *DB, args [][]byte) redis.Reply {
 	return protocol.MakeIntReply(result)
 }
 
-// execExistIn returns existing key in given keys
-// example: ExistIn key1 key2 key3..., returns [key1, key2]
-// custom command for MSetNX tcc transaction
-func execExistIn(db *DB, args [][]byte) redis.Reply {
-	var result [][]byte
-	for _, arg := range args {
-		key := string(arg)
-		_, exists := db.GetEntity(key)
-		if exists {
-			result = append(result, []byte(key))
-		}
-	}
-	if len(result) == 0 {
-		return protocol.MakeEmptyMultiBulkReply()
-	}
-	return protocol.MakeMultiBulkReply(result)
-}
-
 // execFlushDB removes all data in current db
 func execFlushDB(db *DB, args [][]byte) redis.Reply {
 	db.Flush()
@@ -336,7 +318,6 @@ func init() {
 	RegisterCommand("PTTL", execPTTL, readFirstKey, nil, 2)
 	RegisterCommand("Persist", execPersist, writeFirstKey, undoExpire, 2)
 	RegisterCommand("Exists", execExists, readAllKeys, nil, -2)
-	RegisterCommand("ExistIn", execExistIn, readAllKeys, nil, -1)
 	RegisterCommand("Type", execType, readFirstKey, nil, 2)
 	RegisterCommand("Rename", execRename, prepareRename, undoRename, 3)
 	RegisterCommand("RenameNx", execRenameNx, prepareRename, undoRename, 3)

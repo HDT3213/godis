@@ -17,6 +17,10 @@ import (
 // For example, prepareMSetNX  will return error to prevent MSetNx transaction from committing if any related key already exists
 var prepareFuncMap = make(map[string]CmdFunc)
 
+func registerPrepareFunc(cmdName string, fn CmdFunc) {
+	prepareFuncMap[strings.ToLower(cmdName)] = fn
+}
+
 // Transaction stores state and data for a try-commit-catch distributed transaction
 type Transaction struct {
 	id      string   // transaction id
@@ -195,16 +199,16 @@ func execCommit(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Rep
 }
 
 // requestCommit commands all node to commit transaction as coordinator
-func requestCommit(cluster *Cluster, c redis.Connection, txID int64, peers map[string][]string) ([]redis.Reply, protocol.ErrorReply) {
+func requestCommit(cluster *Cluster, c redis.Connection, txID int64, groupMap map[string][]string) ([]redis.Reply, protocol.ErrorReply) {
 	var errReply protocol.ErrorReply
 	txIDStr := strconv.FormatInt(txID, 10)
-	respList := make([]redis.Reply, 0, len(peers))
-	for peer := range peers {
+	respList := make([]redis.Reply, 0, len(groupMap))
+	for node := range groupMap {
 		var resp redis.Reply
-		if peer == cluster.self {
+		if node == cluster.self {
 			resp = execCommit(cluster, c, makeArgs("commit", txIDStr))
 		} else {
-			resp = cluster.relay(peer, c, makeArgs("commit", txIDStr))
+			resp = cluster.relay(node, c, makeArgs("commit", txIDStr))
 		}
 		if protocol.IsErrorReply(resp) {
 			errReply = resp.(protocol.ErrorReply)
@@ -213,20 +217,21 @@ func requestCommit(cluster *Cluster, c redis.Connection, txID int64, peers map[s
 		respList = append(respList, resp)
 	}
 	if errReply != nil {
-		requestRollback(cluster, c, txID, peers)
+		requestRollback(cluster, c, txID, groupMap)
 		return nil, errReply
 	}
 	return respList, nil
 }
 
 // requestRollback requests all node rollback transaction as coordinator
-func requestRollback(cluster *Cluster, c redis.Connection, txID int64, peers map[string][]string) {
+// groupMap: node -> keys
+func requestRollback(cluster *Cluster, c redis.Connection, txID int64, groupMap map[string][]string) {
 	txIDStr := strconv.FormatInt(txID, 10)
-	for peer := range peers {
-		if peer == cluster.self {
+	for node := range groupMap {
+		if node == cluster.self {
 			execRollback(cluster, c, makeArgs("rollback", txIDStr))
 		} else {
-			cluster.relay(peer, c, makeArgs("rollback", txIDStr))
+			cluster.relay(node, c, makeArgs("rollback", txIDStr))
 		}
 	}
 }

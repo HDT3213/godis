@@ -37,6 +37,7 @@ func TestRename(t *testing.T) {
 		t.Errorf("expected ttl more than 0, actual: %d", intResult.Code)
 		return
 	}
+	// test no src key
 }
 
 func TestRenameNx(t *testing.T) {

@@ -22,19 +22,6 @@ func TestExists(t *testing.T) {
 	asserts.AssertIntReply(t, result, 0)
 }
 
-func TestExistIn(t *testing.T) {
-	testDB.Flush()
-	key := utils.RandString(10)
-	value := utils.RandString(10)
-	key2 := utils.RandString(10)
-	testDB.Exec(nil, utils.ToCmdLine("set", key, value))
-	result := testDB.Exec(nil, utils.ToCmdLine("ExistIn", key, key2))
-	asserts.AssertMultiBulkReply(t, result, []string{key})
-	key3 := utils.RandString(10)
-	result = testDB.Exec(nil, utils.ToCmdLine("ExistIn", key2, key3))
-	asserts.AssertMultiBulkReplySize(t, result, 0)
-}
-
 func TestType(t *testing.T) {
 	testDB.Flush()
 	key := utils.RandString(10)

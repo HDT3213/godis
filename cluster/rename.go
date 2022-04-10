@@ -2,7 +2,9 @@ package cluster
 
 import (
 	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
+	"strconv"
 )
 
 // Rename renames a key, the origin and the destination must within the same node
@@ -10,16 +12,79 @@ func Rename(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	if len(args) != 3 {
 		return protocol.MakeErrReply("ERR wrong number of arguments for 'rename' command")
 	}
-	src := string(args[1])
-	dest := string(args[2])
+	srcKey := string(args[1])
+	destKey := string(args[2])
 
-	srcPeer := cluster.peerPicker.PickNode(src)
-	destPeer := cluster.peerPicker.PickNode(dest)
-
-	if srcPeer != destPeer {
-		return protocol.MakeErrReply("ERR rename must within one slot in cluster mode")
+	srcNode := cluster.peerPicker.PickNode(srcKey)
+	destNode := cluster.peerPicker.PickNode(destKey)
+	if srcNode == destNode { // do fast
+		return cluster.relay(srcNode, c, args)
 	}
-	return cluster.relay(srcPeer, c, args)
+
+	groupMap := map[string][]string{
+		srcNode:  {srcKey},
+		destNode: {destKey},
+	}
+	txID := cluster.idGenerator.NextID()
+	txIDStr := strconv.FormatInt(txID, 10)
+	// prepare rename from
+	srcArgs := makeArgs("Prepare", txIDStr, "RenameFrom", srcKey)
+	var srcPrepareResp redis.Reply
+	if srcNode == cluster.self {
+		srcPrepareResp = execPrepare(cluster, c, srcArgs)
+	} else {
+		srcPrepareResp = cluster.relay(srcNode, c, srcArgs)
+	}
+	if protocol.IsErrorReply(srcPrepareResp) {
+		// rollback src node
+		requestRollback(cluster, c, txID, map[string][]string{srcNode: {srcKey}})
+		return srcPrepareResp
+	}
+	srcPrepareMBR, ok := srcPrepareResp.(*protocol.MultiBulkReply)
+	if !ok || len(srcPrepareMBR.Args) < 2 {
+		requestRollback(cluster, c, txID, map[string][]string{srcNode: {srcKey}})
+		return protocol.MakeErrReply("ERR invalid prepare response")
+	}
+	// prepare rename to
+	destArgs := utils.ToCmdLine3("Prepare", []byte(txIDStr),
+		[]byte("RenameTo"), []byte(destKey), srcPrepareMBR.Args[0], srcPrepareMBR.Args[1])
+	var destPrepareResp redis.Reply
+	if destNode == cluster.self {
+		destPrepareResp = execPrepare(cluster, c, destArgs)
+	} else {
+		destPrepareResp = cluster.relay(destNode, c, destArgs)
+	}
+	if protocol.IsErrorReply(destPrepareResp) {
+		// rollback src node
+		requestRollback(cluster, c, txID, groupMap)
+		return destPrepareResp
+	}
+	_, errReply := requestCommit(cluster, c, txID, groupMap)
+	if errReply != nil {
+		requestRollback(cluster, c, txID, groupMap)
+		return errReply
+	}
+	return protocol.MakeOkReply()
+}
+
+func prepareRenameFrom(cluster *Cluster, conn redis.Connection, cmdLine CmdLine) redis.Reply {
+	if len(cmdLine) != 2 {
+		return protocol.MakeArgNumErrReply("RenameFrom")
+	}
+	key := string(cmdLine[1])
+	existResp := cluster.db.ExecWithLock(conn, utils.ToCmdLine("Exists", key))
+	if protocol.IsErrorReply(existResp) {
+		return existResp
+	}
+	existIntResp := existResp.(*protocol.IntReply)
+	if existIntResp.Code == 0 {
+		return protocol.MakeErrReply("ERR no such key")
+	}
+	return cluster.db.ExecWithLock(conn, utils.ToCmdLine2("DumpKey", key))
+}
+
+func init() {
+	registerPrepareFunc("RenameFrom", prepareRenameFrom)
 }
 
 // RenameNx renames a key, only if the new key does not exist.

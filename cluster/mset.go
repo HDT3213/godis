@@ -128,16 +128,16 @@ func MSetNX(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 	txID := cluster.idGenerator.NextID()
 	txIDStr := strconv.FormatInt(txID, 10)
 	rollback := false
-	for peer, group := range groupMap {
-		peerArgs := []string{txIDStr, "MSETNX"}
+	for node, group := range groupMap {
+		nodeArgs := []string{txIDStr, "MSETNX"}
 		for _, k := range group {
-			peerArgs = append(peerArgs, k, valueMap[k])
+			nodeArgs = append(nodeArgs, k, valueMap[k])
 		}
 		var resp redis.Reply
-		if peer == cluster.self {
-			resp = execPrepare(cluster, c, makeArgs("Prepare", peerArgs...))
+		if node == cluster.self {
+			resp = execPrepare(cluster, c, makeArgs("Prepare", nodeArgs...))
 		} else {
-			resp = cluster.relay(peer, c, makeArgs("Prepare", peerArgs...))
+			resp = cluster.relay(node, c, makeArgs("Prepare", nodeArgs...))
 		}
 		if protocol.IsErrorReply(resp) {
 			re := resp.(protocol.ErrorReply)
@@ -187,5 +187,5 @@ func prepareMSetNx(cluster *Cluster, conn redis.Connection, cmdLine CmdLine) red
 }
 
 func init() {
-	prepareFuncMap["msetnx"] = prepareMSetNx
+	registerPrepareFunc("MSetNx", prepareMSetNx)
 }
