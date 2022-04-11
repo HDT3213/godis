@@ -164,20 +164,6 @@ func (db *DB) GetUndoLogs(cmdLine [][]byte) []CmdLine {
 	return undo(db, cmdLine[1:])
 }
 
-// execWithLock executes normal commands, invoker should provide locks
-func (db *DB) execWithLock(cmdLine [][]byte) redis.Reply {
-	cmdName := strings.ToLower(string(cmdLine[0]))
-	cmd, ok := cmdTable[cmdName]
-	if !ok {
-		return protocol.MakeErrReply("ERR unknown command '" + cmdName + "'")
-	}
-	if !validateArity(cmd.arity, cmdLine) {
-		return protocol.MakeArgNumErrReply(cmdName)
-	}
-	fun := cmd.executor
-	return fun(db, cmdLine[1:])
-}
-
 // GetRelatedKeys analysis related keys
 func GetRelatedKeys(cmdLine [][]byte) ([]string, []string) {
 	cmdName := strings.ToLower(string(cmdLine[0]))

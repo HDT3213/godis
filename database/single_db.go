@@ -80,6 +80,7 @@ func makeBasicDB() *DB {
 
 // Exec executes command within one database
 func (db *DB) Exec(c redis.Connection, cmdLine [][]byte) redis.Reply {
+	// transaction control commands and other commands which cannot execute within transaction
 	cmdName := strings.ToLower(string(cmdLine[0]))
 	if cmdName == "multi" {
 		if len(cmdLine) != 1 {
@@ -101,6 +102,14 @@ func (db *DB) Exec(c redis.Connection, cmdLine [][]byte) redis.Reply {
 			return protocol.MakeArgNumErrReply(cmdName)
 		}
 		return Watch(db, c, cmdLine[1:])
+	} else if cmdName == "flushdb" {
+		if !validateArity(1, cmdLine) {
+			return protocol.MakeArgNumErrReply(cmdName)
+		}
+		if c.InMultiState() {
+			return protocol.MakeErrReply("ERR command 'FlushDB' cannot be used in MULTI")
+		}
+		return execFlushDB(db, cmdLine[1:])
 	}
 	if c != nil && c.InMultiState() {
 		EnqueueCmd(c, cmdLine)
@@ -125,6 +134,20 @@ func (db *DB) execNormalCommand(cmdLine [][]byte) redis.Reply {
 	db.addVersion(write...)
 	db.RWLocks(write, read)
 	defer db.RWUnLocks(write, read)
+	fun := cmd.executor
+	return fun(db, cmdLine[1:])
+}
+
+// execWithLock executes normal commands, invoker should provide locks
+func (db *DB) execWithLock(cmdLine [][]byte) redis.Reply {
+	cmdName := strings.ToLower(string(cmdLine[0]))
+	cmd, ok := cmdTable[cmdName]
+	if !ok {
+		return protocol.MakeErrReply("ERR unknown command '" + cmdName + "'")
+	}
+	if !validateArity(cmd.arity, cmdLine) {
+		return protocol.MakeArgNumErrReply(cmdName)
+	}
 	fun := cmd.executor
 	return fun(db, cmdLine[1:])
 }

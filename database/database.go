@@ -87,8 +87,7 @@ func (mdb *MultiDB) Exec(c redis.Connection, cmdLine [][]byte) (result redis.Rep
 		return protocol.MakeErrReply("NOAUTH Authentication required")
 	}
 
-	// todo: merge special commands into router
-	// special commands
+	// special commands which cannot execute within transaction
 	if cmdName == "subscribe" {
 		if len(cmdLine) < 2 {
 			return protocol.MakeArgNumErrReply("subscribe")

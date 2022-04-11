@@ -321,6 +321,5 @@ func init() {
 	RegisterCommand("Type", execType, readFirstKey, nil, 2)
 	RegisterCommand("Rename", execRename, prepareRename, undoRename, 3)
 	RegisterCommand("RenameNx", execRenameNx, prepareRename, undoRename, 3)
-	RegisterCommand("FlushDB", execFlushDB, noPrepare, nil, -1)
 	RegisterCommand("Keys", execKeys, noPrepare, nil, 2)
 }
