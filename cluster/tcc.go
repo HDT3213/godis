@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-// prepareFuncMap executed after related key locked, and use additional logic to determine whether the transaction can be committed
+// prepareFunc executed after related key locked, and use additional logic to determine whether the transaction can be committed
 // For example, prepareMSetNX  will return error to prevent MSetNx transaction from committing if any related key already exists
 var prepareFuncMap = make(map[string]CmdFunc)
 
@@ -233,5 +233,13 @@ func requestRollback(cluster *Cluster, c redis.Connection, txID int64, groupMap 
 		} else {
 			cluster.relay(node, c, makeArgs("rollback", txIDStr))
 		}
+	}
+}
+
+func (cluster *Cluster) relayPrepare(node string, c redis.Connection, cmdLine CmdLine) redis.Reply {
+	if node == cluster.self {
+		return execPrepare(cluster, c, cmdLine)
+	} else {
+		return cluster.relay(node, c, cmdLine)
 	}
 }

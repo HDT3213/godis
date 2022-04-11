@@ -41,7 +41,7 @@ func execDumpKey(db *DB, args [][]byte) redis.Reply {
 	return resp
 }
 
-// execRenameFrom exactly the same as execDel, used for cluster.Rename
+// execRenameFrom is exactly same as execDel, used for cluster.Rename
 func execRenameFrom(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	db.Remove(key)
@@ -83,9 +83,16 @@ func execRenameTo(db *DB, args [][]byte) redis.Reply {
 	return protocol.MakeOkReply()
 }
 
+// execRenameNxTo is exactly same as execRenameTo, used for cluster.RenameNx, not exists check in cluster.prepareRenameNxTo
+func execRenameNxTo(db *DB, args [][]byte) redis.Reply {
+	return execRenameTo(db, args)
+}
+
 func init() {
 	RegisterCommand("DumpKey", execDumpKey, writeAllKeys, undoDel, 2)
 	RegisterCommand("ExistIn", execExistIn, readAllKeys, nil, -1)
 	RegisterCommand("RenameFrom", execRenameFrom, readFirstKey, nil, 2)
 	RegisterCommand("RenameTo", execRenameTo, writeFirstKey, rollbackFirstKey, 4)
+	RegisterCommand("RenameNxTo", execRenameTo, writeFirstKey, rollbackFirstKey, 4)
+
 }

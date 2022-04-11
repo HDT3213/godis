@@ -22,8 +22,8 @@ func TestRename(t *testing.T) {
 		t.Error("expect ok")
 		return
 	}
-	result = testDB.Exec(conn, utils.ToCmdLine("EXISTS", key))
-	asserts.AssertIntReply(t, result, 0)
+	//result = testDB.Exec(conn, utils.ToCmdLine("EXISTS", key))
+	//asserts.AssertIntReply(t, result, 0)
 	result = testDB.Exec(conn, utils.ToCmdLine("EXISTS", newKey))
 	asserts.AssertIntReply(t, result, 1)
 	// check ttl

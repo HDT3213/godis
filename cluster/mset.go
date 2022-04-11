@@ -133,12 +133,7 @@ func MSetNX(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 		for _, k := range group {
 			nodeArgs = append(nodeArgs, k, valueMap[k])
 		}
-		var resp redis.Reply
-		if node == cluster.self {
-			resp = execPrepare(cluster, c, makeArgs("Prepare", nodeArgs...))
-		} else {
-			resp = cluster.relay(node, c, makeArgs("Prepare", nodeArgs...))
-		}
+		resp := cluster.relayPrepare(node, c, makeArgs("Prepare", nodeArgs...))
 		if protocol.IsErrorReply(resp) {
 			re := resp.(protocol.ErrorReply)
 			if re.Error() == keyExistsErr {
