@@ -9,9 +9,9 @@ import (
 func TestDel(t *testing.T) {
 	conn := &connection.FakeConn{}
 	allowFastTransaction = false
-	testCluster.Exec(conn, toArgs("SET", "a", "a"))
-	ret := Del(testCluster, conn, toArgs("DEL", "a", "b", "c"))
+	testNodeA.Exec(conn, toArgs("SET", "a", "a"))
+	ret := Del(testNodeA, conn, toArgs("DEL", "a", "b", "c"))
 	asserts.AssertNotError(t, ret)
-	ret = testCluster.Exec(conn, toArgs("GET", "a"))
+	ret = testNodeA.Exec(conn, toArgs("GET", "a"))
 	asserts.AssertNullBulk(t, ret)
 }

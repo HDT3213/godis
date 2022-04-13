@@ -19,7 +19,6 @@ func Rename(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	if srcNode == destNode { // do fast
 		return cluster.relay(srcNode, c, args)
 	}
-
 	groupMap := map[string][]string{
 		srcNode:  {srcKey},
 		destNode: {destKey},

@@ -27,11 +27,11 @@ func TestAuth(t *testing.T) {
 		config.Properties.RequirePass = ""
 	}()
 	conn := &connection.FakeConn{}
-	ret := testCluster.Exec(conn, toArgs("GET", "a"))
+	ret := testNodeA.Exec(conn, toArgs("GET", "a"))
 	asserts.AssertErrReply(t, ret, "NOAUTH Authentication required")
-	ret = testCluster.Exec(conn, toArgs("AUTH", passwd))
+	ret = testNodeA.Exec(conn, toArgs("AUTH", passwd))
 	asserts.AssertStatusReply(t, ret, "OK")
-	ret = testCluster.Exec(conn, toArgs("GET", "a"))
+	ret = testNodeA.Exec(conn, toArgs("GET", "a"))
 	asserts.AssertNotError(t, ret)
 }
 
