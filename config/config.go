@@ -19,6 +19,7 @@ type ServerProperties struct {
 	MaxClients     int    `cfg:"maxclients"`
 	RequirePass    string `cfg:"requirepass"`
 	Databases      int    `cfg:"databases"`
+	RDBFilename    string `cfg:"dbfilename"`
 
 	Peers []string `cfg:"peers"`
 	Self  string   `cfg:"self"`

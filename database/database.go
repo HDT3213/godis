@@ -39,6 +39,7 @@ func NewStandaloneServer() *MultiDB {
 		mdb.dbSet[i] = singleDB
 	}
 	mdb.hub = pubsub.MakeHub()
+	validAof := false
 	if config.Properties.AppendOnly {
 		aofHandler, err := aof.NewAOFHandler(mdb, func() database.EmbedDB {
 			return MakeBasicMultiDB()
@@ -54,6 +55,11 @@ func NewStandaloneServer() *MultiDB {
 				mdb.aofHandler.AddAof(singleDB.index, line)
 			}
 		}
+		validAof = true
+	}
+	if config.Properties.RDBFilename != "" && !validAof {
+		// load rdb
+		loadRdb(mdb)
 	}
 	return mdb
 }
@@ -158,13 +164,16 @@ func (mdb *MultiDB) flushAll() redis.Reply {
 	return &protocol.OkReply{}
 }
 
+func (mdb *MultiDB) selectDB(dbIndex int) *DB {
+	if dbIndex >= len(mdb.dbSet) {
+		panic("ERR DB index is out of range")
+	}
+	return mdb.dbSet[dbIndex]
+}
+
 // ForEach traverses all the keys in the given database
 func (mdb *MultiDB) ForEach(dbIndex int, cb func(key string, data *database.DataEntity, expiration *time.Time) bool) {
-	if dbIndex >= len(mdb.dbSet) {
-		return
-	}
-	db := mdb.dbSet[dbIndex]
-	db.ForEach(cb)
+	mdb.selectDB(dbIndex).ForEach(cb)
 }
 
 // ExecMulti executes multi commands transaction Atomically and Isolated
@@ -178,29 +187,17 @@ func (mdb *MultiDB) ExecMulti(conn redis.Connection, watching map[string]uint32,
 
 // RWLocks lock keys for writing and reading
 func (mdb *MultiDB) RWLocks(dbIndex int, writeKeys []string, readKeys []string) {
-	if dbIndex >= len(mdb.dbSet) {
-		panic("ERR DB index is out of range")
-	}
-	db := mdb.dbSet[dbIndex]
-	db.RWLocks(writeKeys, readKeys)
+	mdb.selectDB(dbIndex).RWLocks(writeKeys, readKeys)
 }
 
 // RWUnLocks unlock keys for writing and reading
 func (mdb *MultiDB) RWUnLocks(dbIndex int, writeKeys []string, readKeys []string) {
-	if dbIndex >= len(mdb.dbSet) {
-		panic("ERR DB index is out of range")
-	}
-	db := mdb.dbSet[dbIndex]
-	db.RWUnLocks(writeKeys, readKeys)
+	mdb.selectDB(dbIndex).RWUnLocks(writeKeys, readKeys)
 }
 
 // GetUndoLogs return rollback commands
 func (mdb *MultiDB) GetUndoLogs(dbIndex int, cmdLine [][]byte) []CmdLine {
-	if dbIndex >= len(mdb.dbSet) {
-		panic("ERR DB index is out of range")
-	}
-	db := mdb.dbSet[dbIndex]
-	return db.GetUndoLogs(cmdLine)
+	return mdb.selectDB(dbIndex).GetUndoLogs(cmdLine)
 }
 
 // ExecWithLock executes normal commands, invoker should provide locks
