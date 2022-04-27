@@ -323,12 +323,12 @@ func TestStrLen(t *testing.T) {
 	testDB.Exec(nil, utils.ToCmdLine2("SET", key, key))
 
 	actual := testDB.Exec(nil, utils.ToCmdLine("StrLen", key))
-	len, ok := actual.(*protocol.IntReply)
+	size, ok := actual.(*protocol.IntReply)
 	if !ok {
 		t.Errorf("expect int bulk protocol, get: %s", string(actual.ToBytes()))
 		return
 	}
-	asserts.AssertIntReply(t, len, 10)
+	asserts.AssertIntReply(t, size, 10)
 }
 
 func TestStrLen_KeyNotExist(t *testing.T) {
@@ -647,4 +647,91 @@ func TestGetRange_StringExist_EndIdxIncorrectFormat(t *testing.T) {
 
 	errorMsg := fmt.Sprintf("strconv.ParseInt: parsing \"%s\": invalid syntax", incorrectValue)
 	asserts.AssertErrReply(t, val, errorMsg)
+}
+
+func TestSetBit(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	actual := testDB.Exec(nil, utils.ToCmdLine("SetBit", key, "15", "1"))
+	asserts.AssertIntReply(t, actual, 0)
+	actual = testDB.Exec(nil, utils.ToCmdLine("SetBit", key, "15", "0"))
+	asserts.AssertIntReply(t, actual, 1)
+	testDB.Exec(nil, utils.ToCmdLine("SetBit", key, "13", "1"))
+	actual = testDB.Exec(nil, utils.ToCmdLine("GetBit", key, "13"))
+	asserts.AssertIntReply(t, actual, 1)
+	actual = testDB.Exec(nil, utils.ToCmdLine("GetBit", key+"1", "13")) // test not exist key
+	asserts.AssertIntReply(t, actual, 0)
+
+	actual = testDB.Exec(nil, utils.ToCmdLine("SetBit", key, "13", "a"))
+	asserts.AssertErrReply(t, actual, "ERR bit is not an integer or out of range")
+	actual = testDB.Exec(nil, utils.ToCmdLine("SetBit", key, "a", "1"))
+	asserts.AssertErrReply(t, actual, "ERR bit offset is not an integer or out of range")
+	actual = testDB.Exec(nil, utils.ToCmdLine("GetBit", key, "a"))
+	asserts.AssertErrReply(t, actual, "ERR bit offset is not an integer or out of range")
+
+	key2 := utils.RandString(11)
+	testDB.Exec(nil, utils.ToCmdLine("rpush", key2, "1"))
+	actual = testDB.Exec(nil, utils.ToCmdLine("SetBit", key2, "15", "0"))
+	asserts.AssertErrReply(t, actual, "WRONGTYPE Operation against a key holding the wrong kind of value")
+	actual = testDB.Exec(nil, utils.ToCmdLine("GetBit", key2, "15"))
+	asserts.AssertErrReply(t, actual, "WRONGTYPE Operation against a key holding the wrong kind of value")
+}
+
+func TestBitCount(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	testDB.Exec(nil, utils.ToCmdLine("SetBit", key, "15", "1"))
+	testDB.Exec(nil, utils.ToCmdLine("SetBit", key, "13", "1"))
+	actual := testDB.Exec(nil, utils.ToCmdLine("BitCount", key))
+	asserts.AssertIntReply(t, actual, 2)
+	actual = testDB.Exec(nil, utils.ToCmdLine("BitCount", key, "14", "15", "BIT"))
+	asserts.AssertIntReply(t, actual, 1)
+	actual = testDB.Exec(nil, utils.ToCmdLine("BitCount", key, "16", "20", "BIT"))
+	asserts.AssertIntReply(t, actual, 0)
+	actual = testDB.Exec(nil, utils.ToCmdLine("BitCount", key, "1", "1", "BYTE"))
+	asserts.AssertIntReply(t, actual, 2)
+
+	key2 := utils.RandString(11)
+	testDB.Exec(nil, utils.ToCmdLine("rpush", key2, "1"))
+	actual = testDB.Exec(nil, utils.ToCmdLine("BitCount", key2))
+	asserts.AssertErrReply(t, actual, "WRONGTYPE Operation against a key holding the wrong kind of value")
+	actual = testDB.Exec(nil, utils.ToCmdLine("BitCount", key+"a"))
+	asserts.AssertIntReply(t, actual, 0)
+	actual = testDB.Exec(nil, utils.ToCmdLine("BitCount", key, "14", "15", "B"))
+	asserts.AssertErrReply(t, actual, "ERR syntax error")
+	actual = testDB.Exec(nil, utils.ToCmdLine("BitCount", key, "14", "A"))
+	asserts.AssertErrReply(t, actual, "ERR value is not an integer or out of range")
+	actual = testDB.Exec(nil, utils.ToCmdLine("BitCount", key, "A", "-1"))
+	asserts.AssertErrReply(t, actual, "ERR value is not an integer or out of range")
+}
+
+func TestBitPos(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	testDB.Exec(nil, utils.ToCmdLine("SetBit", key, "15", "1"))
+	actual := testDB.Exec(nil, utils.ToCmdLine("BitPos", key, "0"))
+	asserts.AssertIntReply(t, actual, 0)
+	actual = testDB.Exec(nil, utils.ToCmdLine("BitPos", key, "1"))
+	asserts.AssertIntReply(t, actual, 15)
+	actual = testDB.Exec(nil, utils.ToCmdLine("BitPos", key, "1", "0", "-1", "BIT"))
+	asserts.AssertIntReply(t, actual, 15)
+	actual = testDB.Exec(nil, utils.ToCmdLine("BitPos", key, "1", "1", "1", "BYTE"))
+	asserts.AssertIntReply(t, actual, 15)
+	actual = testDB.Exec(nil, utils.ToCmdLine("BitPos", key, "0", "1", "1", "BYTE"))
+	asserts.AssertIntReply(t, actual, 8)
+
+	key2 := utils.RandString(12)
+	testDB.Exec(nil, utils.ToCmdLine("rpush", key2, "1"))
+	actual = testDB.Exec(nil, utils.ToCmdLine("BitPos", key2, "1"))
+	asserts.AssertErrReply(t, actual, "WRONGTYPE Operation against a key holding the wrong kind of value")
+	actual = testDB.Exec(nil, utils.ToCmdLine("BitPos", key+"a", "1"))
+	asserts.AssertIntReply(t, actual, -1)
+	actual = testDB.Exec(nil, utils.ToCmdLine("BitPos", key, "1", "1", "15", "B"))
+	asserts.AssertErrReply(t, actual, "ERR syntax error")
+	actual = testDB.Exec(nil, utils.ToCmdLine("BitPos", key, "1", "14", "A"))
+	asserts.AssertErrReply(t, actual, "ERR value is not an integer or out of range")
+	actual = testDB.Exec(nil, utils.ToCmdLine("BitPos", key, "1", "a", "14"))
+	asserts.AssertErrReply(t, actual, "ERR value is not an integer or out of range")
+	actual = testDB.Exec(nil, utils.ToCmdLine("BitPos", key, "-1"))
+	asserts.AssertErrReply(t, actual, "ERR bit is not an integer or out of range")
 }

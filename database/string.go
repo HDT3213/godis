@@ -2,11 +2,13 @@ package database
 
 import (
 	"github.com/hdt3213/godis/aof"
+	"github.com/hdt3213/godis/datastruct/bitmap"
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
 	"github.com/shopspring/decimal"
+	"math/bits"
 	"strconv"
 	"strings"
 	"time"
@@ -536,46 +538,200 @@ func execSetRange(db *DB, args [][]byte) redis.Reply {
 
 func execGetRange(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
-	startIdx, errNative := strconv.ParseInt(string(args[1]), 10, 64)
-	if errNative != nil {
-		return protocol.MakeErrReply(errNative.Error())
+	startIdx, err2 := strconv.ParseInt(string(args[1]), 10, 64)
+	if err2 != nil {
+		return protocol.MakeErrReply("ERR value is not an integer or out of range")
 	}
-	endIdx, errNative := strconv.ParseInt(string(args[2]), 10, 64)
-	if errNative != nil {
-		return protocol.MakeErrReply(errNative.Error())
+	endIdx, err2 := strconv.ParseInt(string(args[2]), 10, 64)
+	if err2 != nil {
+		return protocol.MakeErrReply("ERR value is not an integer or out of range")
 	}
 
-	bytes, err := db.getAsString(key)
+	bs, err := db.getAsString(key)
 	if err != nil {
 		return err
 	}
-
-	if bytes == nil {
+	if bs == nil {
 		return protocol.MakeNullBulkReply()
 	}
-
-	bytesLen := int64(len(bytes))
-	if startIdx < -1*bytesLen {
-		return &protocol.NullBulkReply{}
-	} else if startIdx < 0 {
-		startIdx = bytesLen + startIdx
-	} else if startIdx >= bytesLen {
-		return &protocol.NullBulkReply{}
+	bytesLen := int64(len(bs))
+	beg, end := utils.ConvertRange(startIdx, endIdx, bytesLen)
+	if beg < 0 {
+		return protocol.MakeNullBulkReply()
 	}
-	if endIdx < -1*bytesLen {
-		return &protocol.NullBulkReply{}
-	} else if endIdx < 0 {
-		endIdx = bytesLen + endIdx + 1
-	} else if endIdx < bytesLen {
-		endIdx = endIdx + 1
+	return protocol.MakeBulkReply(bs[beg:end])
+}
+
+func execSetBit(db *DB, args [][]byte) redis.Reply {
+	key := string(args[0])
+	offset, err := strconv.ParseInt(string(args[1]), 10, 64)
+	if err != nil {
+		return protocol.MakeErrReply("ERR bit offset is not an integer or out of range")
+	}
+	valStr := string(args[2])
+	var v byte
+	if valStr == "1" {
+		v = 1
+	} else if valStr == "0" {
+		v = 0
 	} else {
-		endIdx = bytesLen
+		return protocol.MakeErrReply("ERR bit is not an integer or out of range\n")
 	}
-	if startIdx > endIdx {
-		return protocol.MakeNullBulkReply()
+	bs, errReply := db.getAsString(key)
+	if errReply != nil {
+		return errReply
 	}
+	bm := bitmap.FromBytes(bs)
+	former := bm.GetBit(offset)
+	bm.SetBit(offset, v)
+	db.PutEntity(key, &database.DataEntity{Data: bm.ToBytes()})
+	return protocol.MakeIntReply(int64(former))
+}
 
-	return protocol.MakeBulkReply(bytes[startIdx:endIdx])
+func execGetBit(db *DB, args [][]byte) redis.Reply {
+	key := string(args[0])
+	offset, err := strconv.ParseInt(string(args[1]), 10, 64)
+	if err != nil {
+		return protocol.MakeErrReply("ERR bit offset is not an integer or out of range")
+	}
+	bs, errReply := db.getAsString(key)
+	if errReply != nil {
+		return errReply
+	}
+	if bs == nil {
+		return protocol.MakeIntReply(0)
+	}
+	bm := bitmap.FromBytes(bs)
+	return protocol.MakeIntReply(int64(bm.GetBit(offset)))
+}
+
+func execBitCount(db *DB, args [][]byte) redis.Reply {
+	key := string(args[0])
+	bs, err := db.getAsString(key)
+	if err != nil {
+		return err
+	}
+	if bs == nil {
+		return protocol.MakeIntReply(0)
+	}
+	byteMode := true
+	if len(args) > 3 {
+		mode := strings.ToLower(string(args[3]))
+		if mode == "bit" {
+			byteMode = false
+		} else if mode == "byte" {
+			byteMode = true
+		} else {
+			return protocol.MakeErrReply("ERR syntax error")
+		}
+	}
+	var size int64
+	bm := bitmap.FromBytes(bs)
+	if byteMode {
+		size = int64(len(*bm))
+	} else {
+		size = int64(bm.BitSize())
+	}
+	var beg, end int
+	if len(args) > 1 {
+		var err2 error
+		var startIdx, endIdx int64
+		startIdx, err2 = strconv.ParseInt(string(args[1]), 10, 64)
+		if err2 != nil {
+			return protocol.MakeErrReply("ERR value is not an integer or out of range")
+		}
+		endIdx, err2 = strconv.ParseInt(string(args[2]), 10, 64)
+		if err2 != nil {
+			return protocol.MakeErrReply("ERR value is not an integer or out of range")
+		}
+		beg, end = utils.ConvertRange(startIdx, endIdx, size)
+		if beg < 0 {
+			return protocol.MakeIntReply(0)
+		}
+	}
+	var count int64
+	if byteMode {
+		bm.ForEachByte(beg, end, func(offset int64, val byte) bool {
+			count += int64(bits.OnesCount8(val))
+			return true
+		})
+	} else {
+		bm.ForEachBit(int64(beg), int64(end), func(offset int64, val byte) bool {
+			if val > 0 {
+				count++
+			}
+			return true
+		})
+	}
+	return protocol.MakeIntReply(count)
+}
+
+func execBitPos(db *DB, args [][]byte) redis.Reply {
+	key := string(args[0])
+	bs, err := db.getAsString(key)
+	if err != nil {
+		return err
+	}
+	if bs == nil {
+		return protocol.MakeIntReply(-1)
+	}
+	valStr := string(args[1])
+	var v byte
+	if valStr == "1" {
+		v = 1
+	} else if valStr == "0" {
+		v = 0
+	} else {
+		return protocol.MakeErrReply("ERR bit is not an integer or out of range")
+	}
+	byteMode := true
+	if len(args) > 4 {
+		mode := strings.ToLower(string(args[4]))
+		if mode == "bit" {
+			byteMode = false
+		} else if mode == "byte" {
+			byteMode = true
+		} else {
+			return protocol.MakeErrReply("ERR syntax error")
+		}
+	}
+	var size int64
+	bm := bitmap.FromBytes(bs)
+	if byteMode {
+		size = int64(len(*bm))
+	} else {
+		size = int64(bm.BitSize())
+	}
+	var beg, end int
+	if len(args) > 2 {
+		var err2 error
+		var startIdx, endIdx int64
+		startIdx, err2 = strconv.ParseInt(string(args[2]), 10, 64)
+		if err2 != nil {
+			return protocol.MakeErrReply("ERR value is not an integer or out of range")
+		}
+		endIdx, err2 = strconv.ParseInt(string(args[3]), 10, 64)
+		if err2 != nil {
+			return protocol.MakeErrReply("ERR value is not an integer or out of range")
+		}
+		beg, end = utils.ConvertRange(startIdx, endIdx, size)
+		if beg < 0 {
+			return protocol.MakeIntReply(0)
+		}
+	}
+	if byteMode {
+		beg *= 8
+		end *= 8
+	}
+	var offset = int64(-1)
+	bm.ForEachBit(int64(beg), int64(end), func(o int64, val byte) bool {
+		if val == v {
+			offset = o
+			return false
+		}
+		return true
+	})
+	return protocol.MakeIntReply(offset)
 }
 
 func init() {
@@ -597,4 +753,9 @@ func init() {
 	RegisterCommand("Append", execAppend, writeFirstKey, rollbackFirstKey, 3)
 	RegisterCommand("SetRange", execSetRange, writeFirstKey, rollbackFirstKey, 4)
 	RegisterCommand("GetRange", execGetRange, readFirstKey, nil, 4)
+	RegisterCommand("SetBit", execSetBit, writeFirstKey, rollbackFirstKey, 4)
+	RegisterCommand("GetBit", execGetBit, readFirstKey, nil, 3)
+	RegisterCommand("BitCount", execBitCount, readFirstKey, nil, -2)
+	RegisterCommand("BitPos", execBitPos, readFirstKey, nil, -3)
+
 }
