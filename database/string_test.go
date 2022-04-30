@@ -622,14 +622,7 @@ func TestGetRange_StringExist_StartIdxIncorrectFormat(t *testing.T) {
 	incorrectValue := "incorrect"
 
 	actual := testDB.Exec(nil, utils.ToCmdLine("GetRange", key, incorrectValue, fmt.Sprint(0)))
-	val, ok := actual.(*protocol.StandardErrReply)
-	if !ok {
-		t.Errorf("expect standart bulk protocol, get: %s", string(actual.ToBytes()))
-		return
-	}
-
-	errorMsg := fmt.Sprintf("strconv.ParseInt: parsing \"%s\": invalid syntax", incorrectValue)
-	asserts.AssertErrReply(t, val, errorMsg)
+	asserts.AssertErrReply(t, actual, "-ERR value is not an integer or out of range")
 }
 
 func TestGetRange_StringExist_EndIdxIncorrectFormat(t *testing.T) {
@@ -639,14 +632,7 @@ func TestGetRange_StringExist_EndIdxIncorrectFormat(t *testing.T) {
 	incorrectValue := "incorrect"
 
 	actual := testDB.Exec(nil, utils.ToCmdLine("GetRange", key, fmt.Sprint(0), incorrectValue))
-	val, ok := actual.(*protocol.StandardErrReply)
-	if !ok {
-		t.Errorf("expect standart bulk protocol, get: %s", string(actual.ToBytes()))
-		return
-	}
-
-	errorMsg := fmt.Sprintf("strconv.ParseInt: parsing \"%s\": invalid syntax", incorrectValue)
-	asserts.AssertErrReply(t, val, errorMsg)
+	asserts.AssertErrReply(t, actual, "ERR value is not an integer or out of range")
 }
 
 func TestSetBit(t *testing.T) {
