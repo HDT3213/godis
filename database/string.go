@@ -575,7 +575,7 @@ func execSetBit(db *DB, args [][]byte) redis.Reply {
 	} else if valStr == "0" {
 		v = 0
 	} else {
-		return protocol.MakeErrReply("ERR bit is not an integer or out of range\n")
+		return protocol.MakeErrReply("ERR bit is not an integer or out of range")
 	}
 	bs, errReply := db.getAsString(key)
 	if errReply != nil {

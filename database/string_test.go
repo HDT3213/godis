@@ -622,7 +622,7 @@ func TestGetRange_StringExist_StartIdxIncorrectFormat(t *testing.T) {
 	incorrectValue := "incorrect"
 
 	actual := testDB.Exec(nil, utils.ToCmdLine("GetRange", key, incorrectValue, fmt.Sprint(0)))
-	asserts.AssertErrReply(t, actual, "-ERR value is not an integer or out of range")
+	asserts.AssertErrReply(t, actual, "ERR value is not an integer or out of range")
 }
 
 func TestGetRange_StringExist_EndIdxIncorrectFormat(t *testing.T) {
