@@ -64,6 +64,7 @@
     - sadd
     - sismember
     - srem
+    - spop
     - scard
     - smembers
     - sinter

@@ -71,6 +71,7 @@ func makeRouter() map[string]CmdFunc {
 	routerMap["sadd"] = defaultFunc
 	routerMap["sismember"] = defaultFunc
 	routerMap["srem"] = defaultFunc
+	routerMap["spop"] = defaultFunc
 	routerMap["scard"] = defaultFunc
 	routerMap["smembers"] = defaultFunc
 	routerMap["sinter"] = defaultFunc

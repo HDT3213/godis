@@ -101,6 +101,46 @@ func execSRem(db *DB, args [][]byte) redis.Reply {
 	return protocol.MakeIntReply(int64(counter))
 }
 
+// execSPop removes one or more random members from set
+func execSPop(db *DB, args [][]byte) redis.Reply {
+	if len(args) != 1 && len(args) != 2 {
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'spop' command")
+	}
+	key := string(args[0])
+
+	set, errReply := db.getAsSet(key)
+	if errReply != nil {
+		return errReply
+	}
+	if set == nil {
+		return &protocol.NullBulkReply{}
+	}
+
+	count := 1
+	if len(args) == 2 {
+		count64, err := strconv.ParseInt(string(args[1]), 10, 64)
+		if err != nil || count64 <= 0 {
+			return protocol.MakeErrReply("ERR value is out of range, must be positive")
+		}
+		count = int(count64)
+	}
+	if count > set.Len() {
+		count = set.Len()
+	}
+
+	members := set.RandomDistinctMembers(count)
+	result := make([][]byte, len(members))
+	for i, v := range members {
+		set.Remove(v)
+		result[i] = []byte(v)
+	}
+
+	if count > 0 {
+		db.addAof(utils.ToCmdLine3("spop", args...))
+	}
+	return protocol.MakeMultiBulkReply(result)
+}
+
 // execSCard gets the number of members in a set
 func execSCard(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
@@ -442,6 +482,7 @@ func init() {
 	RegisterCommand("SAdd", execSAdd, writeFirstKey, undoSetChange, -3)
 	RegisterCommand("SIsMember", execSIsMember, readFirstKey, nil, 3)
 	RegisterCommand("SRem", execSRem, writeFirstKey, undoSetChange, -3)
+	RegisterCommand("SPop", execSPop, writeFirstKey, undoSetChange, -2)
 	RegisterCommand("SCard", execSCard, readFirstKey, nil, 2)
 	RegisterCommand("SMembers", execSMembers, readFirstKey, nil, 2)
 	RegisterCommand("SInter", execSInter, prepareSetCalculate, nil, -2)
