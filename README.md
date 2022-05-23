@@ -15,13 +15,15 @@ middleware using golang.
 
 Key Features:
 
-- Support string, list, hash, set, sorted set
-- Multi Database and `SELECT` command  
+- Support string, list, hash, set, sorted set, bitmap
+- Multi Database and `SELECT` command
 - TTL
 - Publish/Subscribe
 - GEO
 - AOF and AOF Rewrite
-- MULTI Commands Transaction is Atomic and Isolated. If any errors are encountered during execution, godis will rollback the executed commands
+- RDB read and write
+- MULTI Commands Transaction is Atomic and Isolated. If any errors are encountered during execution, godis will rollback
+  the executed commands
 - Server-side Cluster which is transparent to client. You can connect to any node in the cluster to
   access all data in the cluster.
   - `MSET`, `MSETNX`, `DEL`, `Rename`, `RenameNX` command is supported and atomically executed in cluster mode, allow over multi node
@@ -117,7 +119,7 @@ MSET (10 keys): 65487.89 requests per second
 + [x] `Multi` Command
 + [x] `Watch` Command and CAS support
 + [ ] Stream support
-+ [ ] RDB file loader
++ [x] RDB file loader
 + [ ] Master-Slave mode
 + [ ] Sentinel
 
