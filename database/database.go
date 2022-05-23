@@ -110,6 +110,10 @@ func (mdb *MultiDB) Exec(c redis.Connection, cmdLine [][]byte) (result redis.Rep
 		return RewriteAOF(mdb, cmdLine[1:])
 	} else if cmdName == "flushall" {
 		return mdb.flushAll()
+	} else if cmdName == "save" {
+		return SaveRDB(mdb, cmdLine[1:])
+	} else if cmdName == "bgsave" {
+		return BGSaveRDB(mdb, cmdLine[1:])
 	} else if cmdName == "select" {
 		if c != nil && c.InMultiState() {
 			return protocol.MakeErrReply("cannot select database within multi")
@@ -217,6 +221,46 @@ func BGRewriteAOF(db *MultiDB, args [][]byte) redis.Reply {
 
 // RewriteAOF start Append-Only-File rewriting and blocked until it finished
 func RewriteAOF(db *MultiDB, args [][]byte) redis.Reply {
-	db.aofHandler.Rewrite()
-	return protocol.MakeStatusReply("Background append only file rewriting started")
+	err := db.aofHandler.Rewrite()
+	if err != nil {
+		return protocol.MakeErrReply(err.Error())
+	}
+	return protocol.MakeOkReply()
+}
+
+// SaveRDB start RDB writing and blocked until it finished
+func SaveRDB(db *MultiDB, args [][]byte) redis.Reply {
+	if db.aofHandler == nil {
+		return protocol.MakeErrReply("please enable aof before using save")
+	}
+	err := db.aofHandler.Rewrite2RDB()
+	if err != nil {
+		return protocol.MakeErrReply(err.Error())
+	}
+	return protocol.MakeOkReply()
+}
+
+// BGSaveRDB asynchronously save RDB
+func BGSaveRDB(db *MultiDB, args [][]byte) redis.Reply {
+	if db.aofHandler == nil {
+		return protocol.MakeErrReply("please enable aof before using save")
+	}
+	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				logger.Error(err)
+			}
+		}()
+		err := db.aofHandler.Rewrite2RDB()
+		if err != nil {
+			logger.Error(err)
+		}
+	}()
+	return protocol.MakeStatusReply("Background saving started")
+}
+
+// GetDBSize returns keys count and ttl key count
+func (mdb *MultiDB) GetDBSize(dbIndex int) (int, int) {
+	db := mdb.selectDB(dbIndex)
+	return db.data.Len(), db.ttlMap.Len()
 }

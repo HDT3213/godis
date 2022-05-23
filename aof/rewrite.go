@@ -28,19 +28,18 @@ type RewriteCtx struct {
 }
 
 // Rewrite carries out AOF rewrite
-func (handler *Handler) Rewrite() {
+func (handler *Handler) Rewrite() error {
 	ctx, err := handler.StartRewrite()
 	if err != nil {
-		logger.Warn(err)
-		return
+		return err
 	}
 	err = handler.DoRewrite(ctx)
 	if err != nil {
-		logger.Error(err)
-		return
+		return err
 	}
 
 	handler.FinishRewrite(ctx)
+	return nil
 }
 
 // DoRewrite actually rewrite aof file

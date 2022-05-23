@@ -126,6 +126,44 @@ func TestAof(t *testing.T) {
 	aofReadDB.Close()
 }
 
+func TestRDB(t *testing.T) {
+	tmpDir, err := ioutil.TempDir("", "godis")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	aofFilename := path.Join(tmpDir, "a.aof")
+	rdbFilename := path.Join(tmpDir, "dump.rdb")
+	defer func() {
+		_ = os.Remove(aofFilename)
+		_ = os.Remove(rdbFilename)
+	}()
+	config.Properties = &config.ServerProperties{
+		AppendOnly:     true,
+		AppendFilename: aofFilename,
+		RDBFilename:    rdbFilename,
+	}
+	dbNum := 4
+	size := 10
+	var prefixes []string
+	conn := &connection.FakeConn{}
+	writeDB := NewStandaloneServer()
+	for i := 0; i < dbNum; i++ {
+		prefix := utils.RandString(8)
+		prefixes = append(prefixes, prefix)
+		makeTestData(writeDB, i, prefix, size)
+	}
+	time.Sleep(time.Second) // wait for aof finished
+	writeDB.Exec(conn, utils.ToCmdLine("save"))
+	writeDB.Close()
+	readDB := NewStandaloneServer() // start new db and read aof file
+	for i := 0; i < dbNum; i++ {
+		prefix := prefixes[i]
+		validateTestData(t, readDB, i, prefix, size)
+	}
+	readDB.Close()
+}
+
 func TestRewriteAOF(t *testing.T) {
 	tmpFile, err := ioutil.TempFile("", "*.aof")
 	if err != nil {

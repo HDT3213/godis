@@ -24,6 +24,7 @@ type EmbedDB interface {
 	ForEach(dbIndex int, cb func(key string, data *DataEntity, expiration *time.Time) bool)
 	RWLocks(dbIndex int, writeKeys []string, readKeys []string)
 	RWUnLocks(dbIndex int, writeKeys []string, readKeys []string)
+	GetDBSize(dbIndex int) (int, int)
 }
 
 // DataEntity stores data bound to a key, including a string, list, hash, set and so on
