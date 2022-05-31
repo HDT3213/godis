@@ -26,7 +26,7 @@ func TestHSet(t *testing.T) {
 		}
 	}
 
-	// test hget and hexists
+	// test hget, hexists and hstrlen
 	for field, v := range values {
 		actual := testDB.Exec(nil, utils.ToCmdLine("hget", key, field))
 		expected := protocol.MakeBulkReply(v)
@@ -36,6 +36,11 @@ func TestHSet(t *testing.T) {
 		actual = testDB.Exec(nil, utils.ToCmdLine("hexists", key, field))
 		if intResult, _ := actual.(*protocol.IntReply); intResult.Code != int64(1) {
 			t.Error(fmt.Sprintf("expected %d, actually %d", 1, intResult.Code))
+		}
+
+		actual = testDB.Exec(nil, utils.ToCmdLine("hstrlen", key, field))
+		if intResult, _ := actual.(*protocol.IntReply); intResult.Code != int64(len(v)) {
+			t.Error(fmt.Sprintf("expected %d, actually %d", int64(len(v)), intResult.Code))
 		}
 	}
 

@@ -60,6 +60,7 @@ func makeRouter() map[string]CmdFunc {
 	routerMap["hexists"] = defaultFunc
 	routerMap["hdel"] = defaultFunc
 	routerMap["hlen"] = defaultFunc
+	routerMap["hstrlen"] = defaultFunc
 	routerMap["hmget"] = defaultFunc
 	routerMap["hmset"] = defaultFunc
 	routerMap["hkeys"] = defaultFunc
