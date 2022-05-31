@@ -108,6 +108,11 @@ func (r *StatusReply) ToBytes() []byte {
 	return []byte("+" + r.Status + CRLF)
 }
 
+// IsOKReply returns true if the given protocol is +OK
+func IsOKReply(reply redis.Reply) bool {
+	return string(reply.ToBytes()) == "+OK\r\n"
+}
+
 /* ---- Int Reply ---- */
 
 // IntReply stores an int64 number

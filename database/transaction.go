@@ -1,15 +1,9 @@
 package database
 
 import (
-	"github.com/hdt3213/godis/datastruct/set"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/redis/protocol"
 	"strings"
-)
-
-var forbiddenInMulti = set.Make(
-	"flushdb",
-	"flushall",
 )
 
 // Watch set watching keys
@@ -29,7 +23,7 @@ func execGetVersion(db *DB, args [][]byte) redis.Reply {
 }
 
 func init() {
-	RegisterCommand("GetVer", execGetVersion, readAllKeys, nil, 2)
+	RegisterCommand("GetVer", execGetVersion, readAllKeys, nil, 2, flagReadOnly)
 }
 
 // invoker should lock watching keys
@@ -58,9 +52,6 @@ func EnqueueCmd(conn redis.Connection, cmdLine [][]byte) redis.Reply {
 	cmd, ok := cmdTable[cmdName]
 	if !ok {
 		return protocol.MakeErrReply("ERR unknown command '" + cmdName + "'")
-	}
-	if forbiddenInMulti.Has(cmdName) {
-		return protocol.MakeErrReply("ERR command '" + cmdName + "' cannot be used in MULTI")
 	}
 	if cmd.prepare == nil {
 		return protocol.MakeErrReply("ERR command '" + cmdName + "' cannot be used in MULTI")

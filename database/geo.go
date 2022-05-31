@@ -262,10 +262,10 @@ func geoRadius0(sortedSet *sortedset.SortedSet, lat float64, lng float64, radius
 }
 
 func init() {
-	RegisterCommand("GeoAdd", execGeoAdd, writeFirstKey, undoGeoAdd, -5)
-	RegisterCommand("GeoPos", execGeoPos, readFirstKey, nil, -2)
-	RegisterCommand("GeoDist", execGeoDist, readFirstKey, nil, -4)
-	RegisterCommand("GeoHash", execGeoHash, readFirstKey, nil, -2)
-	RegisterCommand("GeoRadius", execGeoRadius, readFirstKey, nil, -6)
-	RegisterCommand("GeoRadiusByMember", execGeoRadiusByMember, readFirstKey, nil, -5)
+	RegisterCommand("GeoAdd", execGeoAdd, writeFirstKey, undoGeoAdd, -5, flagWrite)
+	RegisterCommand("GeoPos", execGeoPos, readFirstKey, nil, -2, flagReadOnly)
+	RegisterCommand("GeoDist", execGeoDist, readFirstKey, nil, -4, flagReadOnly)
+	RegisterCommand("GeoHash", execGeoHash, readFirstKey, nil, -2, flagReadOnly)
+	RegisterCommand("GeoRadius", execGeoRadius, readFirstKey, nil, -6, flagReadOnly)
+	RegisterCommand("GeoRadiusByMember", execGeoRadiusByMember, readFirstKey, nil, -5, flagReadOnly)
 }

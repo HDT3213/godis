@@ -11,8 +11,6 @@ func makeTestDB() *DB {
 		versionMap: dict.MakeConcurrent(dataDictSize),
 		ttlMap:     dict.MakeConcurrent(ttlDictSize),
 		locker:     lock.Make(lockerSize),
-		addAof: func(line CmdLine) {
-
-		},
+		addAof:     func(line CmdLine) {},
 	}
 }

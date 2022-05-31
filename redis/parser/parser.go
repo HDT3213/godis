@@ -65,6 +65,7 @@ type readState struct {
 	msgType           byte
 	args              [][]byte
 	bulkLen           int64
+	readingRepl       bool
 }
 
 func (s *readState) finished() bool {
@@ -74,9 +75,10 @@ func (s *readState) finished() bool {
 func parse0(reader io.Reader, ch chan<- *Payload) {
 	defer func() {
 		if err := recover(); err != nil {
-			logger.Error(string(debug.Stack()))
+			logger.Error(err, string(debug.Stack()))
 		}
 	}()
+
 	bufReader := bufio.NewReader(reader)
 	var state readState
 	var err error
@@ -187,16 +189,22 @@ func readLine(bufReader *bufio.Reader, state *readState) ([]byte, bool, error) {
 			return nil, false, errors.New("protocol error: " + string(msg))
 		}
 	} else { // read bulk line (binary safe)
-		msg = make([]byte, state.bulkLen+2)
+		// there is CRLF between BulkReply in normal stream
+		// but there is no CRLF between RDB and following AOF
+		bulkLen := state.bulkLen + 2
+		if state.readingRepl {
+			bulkLen -= 2
+		}
+		msg = make([]byte, bulkLen)
 		_, err = io.ReadFull(bufReader, msg)
 		if err != nil {
 			return nil, true, err
 		}
-		if len(msg) == 0 ||
-			msg[len(msg)-2] != '\r' ||
-			msg[len(msg)-1] != '\n' {
-			return nil, false, errors.New("protocol error: " + string(msg))
-		}
+		//if len(msg) == 0 ||
+		//	msg[len(msg)-2] != '\r' ||
+		//	msg[len(msg)-1] != '\n' {
+		//	return nil, false, errors.New("protocol error: " + string(msg))
+		//}
 		state.bulkLen = 0
 	}
 	return msg, false, nil

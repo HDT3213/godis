@@ -41,5 +41,5 @@ func isAuthenticated(c redis.Connection) bool {
 }
 
 func init() {
-	RegisterCommand("ping", Ping, noPrepare, nil, -1)
+	RegisterCommand("ping", Ping, noPrepare, nil, -1, flagReadOnly)
 }

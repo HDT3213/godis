@@ -7,21 +7,30 @@ import (
 	SortedSet "github.com/hdt3213/godis/datastruct/sortedset"
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/lib/logger"
+	"github.com/hdt3213/rdb/core"
 	rdb "github.com/hdt3213/rdb/parser"
 	"os"
 )
 
-func loadRdb(mdb *MultiDB) {
+func loadRdbFile(mdb *MultiDB) {
 	rdbFile, err := os.Open(config.Properties.RDBFilename)
 	if err != nil {
-		logger.Error("open rdb file failed")
+		logger.Error("open rdb file failed " + err.Error())
 		return
 	}
 	defer func() {
 		_ = rdbFile.Close()
 	}()
 	decoder := rdb.NewDecoder(rdbFile)
-	err = decoder.Parse(func(o rdb.RedisObject) bool {
+	err = dumpRDB(decoder, mdb)
+	if err != nil {
+		logger.Error("dump rdb file failed " + err.Error())
+		return
+	}
+}
+
+func dumpRDB(dec *core.Decoder, mdb *MultiDB) error {
+	return dec.Parse(func(o rdb.RedisObject) bool {
 		db := mdb.selectDB(o.GetDBIndex())
 		switch o.GetType() {
 		case rdb.StringType:

@@ -505,16 +505,16 @@ func execRPushX(db *DB, args [][]byte) redis.Reply {
 }
 
 func init() {
-	RegisterCommand("LPush", execLPush, writeFirstKey, undoLPush, -3)
-	RegisterCommand("LPushX", execLPushX, writeFirstKey, undoLPush, -3)
-	RegisterCommand("RPush", execRPush, writeFirstKey, undoRPush, -3)
-	RegisterCommand("RPushX", execRPushX, writeFirstKey, undoRPush, -3)
-	RegisterCommand("LPop", execLPop, writeFirstKey, undoLPop, 2)
-	RegisterCommand("RPop", execRPop, writeFirstKey, undoRPop, 2)
-	RegisterCommand("RPopLPush", execRPopLPush, prepareRPopLPush, undoRPopLPush, 3)
-	RegisterCommand("LRem", execLRem, writeFirstKey, rollbackFirstKey, 4)
-	RegisterCommand("LLen", execLLen, readFirstKey, nil, 2)
-	RegisterCommand("LIndex", execLIndex, readFirstKey, nil, 3)
-	RegisterCommand("LSet", execLSet, writeFirstKey, undoLSet, 4)
-	RegisterCommand("LRange", execLRange, readFirstKey, nil, 4)
+	RegisterCommand("LPush", execLPush, writeFirstKey, undoLPush, -3, flagWrite)
+	RegisterCommand("LPushX", execLPushX, writeFirstKey, undoLPush, -3, flagWrite)
+	RegisterCommand("RPush", execRPush, writeFirstKey, undoRPush, -3, flagWrite)
+	RegisterCommand("RPushX", execRPushX, writeFirstKey, undoRPush, -3, flagWrite)
+	RegisterCommand("LPop", execLPop, writeFirstKey, undoLPop, 2, flagWrite)
+	RegisterCommand("RPop", execRPop, writeFirstKey, undoRPop, 2, flagWrite)
+	RegisterCommand("RPopLPush", execRPopLPush, prepareRPopLPush, undoRPopLPush, 3, flagWrite)
+	RegisterCommand("LRem", execLRem, writeFirstKey, rollbackFirstKey, 4, flagWrite)
+	RegisterCommand("LLen", execLLen, readFirstKey, nil, 2, flagReadOnly)
+	RegisterCommand("LIndex", execLIndex, readFirstKey, nil, 3, flagReadOnly)
+	RegisterCommand("LSet", execLSet, writeFirstKey, undoLSet, 4, flagWrite)
+	RegisterCommand("LRange", execLRange, readFirstKey, nil, 4, flagReadOnly)
 }

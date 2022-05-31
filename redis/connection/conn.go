@@ -8,6 +8,13 @@ import (
 	"time"
 )
 
+const (
+	// NormalCli is client with user
+	NormalCli = iota
+	// ReplicationRecvCli is fake client with replication master
+	ReplicationRecvCli
+)
+
 // Connection represents a connection with a redis-cli
 type Connection struct {
 	conn net.Conn
@@ -31,6 +38,7 @@ type Connection struct {
 
 	// selected db
 	selectedDB int
+	role       int32
 }
 
 // RemoteAddr returns the remote network address
@@ -146,6 +154,18 @@ func (c *Connection) EnqueueCmd(cmdLine [][]byte) {
 // ClearQueuedCmds clears queued commands of current transaction
 func (c *Connection) ClearQueuedCmds() {
 	c.queue = nil
+}
+
+// GetRole returns role of connection, such as connection with master
+func (c *Connection) GetRole() int32 {
+	if c == nil {
+		return NormalCli
+	}
+	return c.role
+}
+
+func (c *Connection) SetRole(r int32) {
+	c.role = r
 }
 
 // GetWatching returns watching keys and their version code when started watching

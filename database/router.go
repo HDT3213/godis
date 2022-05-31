@@ -14,15 +14,30 @@ type command struct {
 	flags    int
 }
 
+const (
+	flagWrite    = 0
+	flagReadOnly = 1
+)
+
 // RegisterCommand registers a new command
 // arity means allowed number of cmdArgs, arity < 0 means len(args) >= -arity.
 // for example: the arity of `get` is 2, `mget` is -2
-func RegisterCommand(name string, executor ExecFunc, prepare PreFunc, rollback UndoFunc, arity int) {
+func RegisterCommand(name string, executor ExecFunc, prepare PreFunc, rollback UndoFunc, arity int, flags int) {
 	name = strings.ToLower(name)
 	cmdTable[name] = &command{
 		executor: executor,
 		prepare:  prepare,
 		undo:     rollback,
 		arity:    arity,
+		flags:    flags,
 	}
+}
+
+func isReadOnlyCommand(name string) bool {
+	name = strings.ToLower(name)
+	cmd := cmdTable[name]
+	if cmd == nil {
+		return false
+	}
+	return cmd.flags&flagReadOnly > 0
 }

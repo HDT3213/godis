@@ -226,7 +226,15 @@ func (db *DB) Flush() {
 	db.data.Clear()
 	db.ttlMap.Clear()
 	db.locker = lock.Make(lockerSize)
+}
 
+func (db *DB) Load(db2 *DB) {
+	db.stopWorld.Add(1)
+	defer db.stopWorld.Done()
+
+	db.data = db2.data
+	db.ttlMap = db2.ttlMap
+	db.locker = lock.Make(lockerSize)
 }
 
 /* ---- Lock Function ----- */
@@ -280,6 +288,7 @@ func (db *DB) Persist(key string) {
 
 // IsExpired check whether a key is expired
 func (db *DB) IsExpired(key string) bool {
+	db.stopWorld.Wait()
 	rawExpireTime, ok := db.ttlMap.Get(key)
 	if !ok {
 		return false
@@ -295,6 +304,7 @@ func (db *DB) IsExpired(key string) bool {
 /* --- add version --- */
 
 func (db *DB) addVersion(keys ...string) {
+	db.stopWorld.Wait()
 	for _, key := range keys {
 		versionCode := db.GetVersion(key)
 		db.versionMap.Put(key, versionCode+1)
@@ -303,6 +313,7 @@ func (db *DB) addVersion(keys ...string) {
 
 // GetVersion returns version code for given key
 func (db *DB) GetVersion(key string) uint32 {
+	db.stopWorld.Wait()
 	entity, ok := db.versionMap.Get(key)
 	if !ok {
 		return 0
@@ -312,6 +323,7 @@ func (db *DB) GetVersion(key string) uint32 {
 
 // ForEach traverses all the keys in the database
 func (db *DB) ForEach(cb func(key string, data *database.DataEntity, expiration *time.Time) bool) {
+	db.stopWorld.Wait()
 	db.data.ForEach(func(key string, raw interface{}) bool {
 		entity, _ := raw.(*database.DataEntity)
 		var expiration *time.Time

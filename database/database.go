@@ -9,10 +9,12 @@ import (
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/pubsub"
+	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/protocol"
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -24,6 +26,11 @@ type MultiDB struct {
 	hub *pubsub.Hub
 	// handle aof persistence
 	aofHandler *aof.Handler
+
+	// store master node address
+	slaveOf     string
+	role        int32
+	replication *replicationStatus
 }
 
 // NewStandaloneServer creates a standalone redis server, with multi database and all other funtions
@@ -59,8 +66,11 @@ func NewStandaloneServer() *MultiDB {
 	}
 	if config.Properties.RDBFilename != "" && !validAof {
 		// load rdb
-		loadRdb(mdb)
+		loadRdbFile(mdb)
 	}
+	mdb.replication = initReplStatus()
+	mdb.startReplCron()
+	mdb.role = masterRole // The initialization process does not require atomicity
 	return mdb
 }
 
@@ -91,6 +101,25 @@ func (mdb *MultiDB) Exec(c redis.Connection, cmdLine [][]byte) (result redis.Rep
 	}
 	if !isAuthenticated(c) {
 		return protocol.MakeErrReply("NOAUTH Authentication required")
+	}
+	if cmdName == "slaveof" {
+		if c != nil && c.InMultiState() {
+			return protocol.MakeErrReply("cannot use slave of database within multi")
+		}
+		if len(cmdLine) != 3 {
+			return protocol.MakeArgNumErrReply("SLAVEOF")
+		}
+		return mdb.execSlaveOf(c, cmdLine[1:])
+	}
+
+	// read only slave
+	role := atomic.LoadInt32(&mdb.role)
+	if role == slaveRole &&
+		c.GetRole() != connection.ReplicationRecvCli {
+		// only allow read only command, forbid all special commands except `auth` and `slaveof`
+		if !isReadOnlyCommand(cmdName) {
+			return protocol.MakeErrReply("READONLY You can't write against a read only slave.")
+		}
 	}
 
 	// special commands which cannot execute within transaction
@@ -146,6 +175,8 @@ func (mdb *MultiDB) AfterClientClose(c redis.Connection) {
 
 // Close graceful shutdown database
 func (mdb *MultiDB) Close() {
+	// stop replication first
+	mdb.replication.close()
 	if mdb.aofHandler != nil {
 		mdb.aofHandler.Close()
 	}
