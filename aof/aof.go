@@ -142,7 +142,7 @@ func (handler *Handler) LoadAof(maxBytes int) {
 		}
 		ret := handler.db.Exec(fakeConn, r.Args)
 		if protocol.IsErrorReply(ret) {
-			logger.Error("exec err", err)
+			logger.Error("exec err", ret.ToBytes())
 		}
 	}
 }
