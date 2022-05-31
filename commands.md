@@ -53,6 +53,7 @@
     - hexists
     - hdel
     - hlen
+    - hstrlen
     - hmget
     - hmset
     - hkeys

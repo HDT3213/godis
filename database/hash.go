@@ -186,6 +186,28 @@ func execHLen(db *DB, args [][]byte) redis.Reply {
 	return protocol.MakeIntReply(int64(dict.Len()))
 }
 
+// execHStrlen Returns the string length of the value associated with field in the hash stored at key.
+// If the key or the field do not exist, 0 is returned.
+func execHStrlen(db *DB, args [][]byte) redis.Reply {
+	key := string(args[0])
+	field := string(args[1])
+
+	dict, errReply := db.getAsDict(key)
+	if errReply != nil {
+		return errReply
+	}
+	if dict == nil {
+		return protocol.MakeIntReply(0)
+	}
+
+	raw, exists := dict.Get(field)
+	if exists {
+		value, _ := raw.([]byte)
+		return protocol.MakeIntReply(int64(len(value)))
+	}
+	return protocol.MakeIntReply(0)
+}
+
 // execHMSet sets multi fields in hash table
 func execHMSet(db *DB, args [][]byte) redis.Reply {
 	// parse args
@@ -405,6 +427,7 @@ func init() {
 	RegisterCommand("HExists", execHExists, readFirstKey, nil, 3)
 	RegisterCommand("HDel", execHDel, writeFirstKey, undoHDel, -3)
 	RegisterCommand("HLen", execHLen, readFirstKey, nil, 2)
+	RegisterCommand("HStrlen", execHStrlen, readFirstKey, nil, 3)
 	RegisterCommand("HMSet", execHMSet, writeFirstKey, undoHMSet, -4)
 	RegisterCommand("HMGet", execHMGet, readFirstKey, nil, -3)
 	RegisterCommand("HGet", execHGet, readFirstKey, nil, -3)
