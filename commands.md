@@ -60,6 +60,7 @@
     - hgetall
     - hincrby
     - hincrbyfloat
+    - hrandfield
 - Set
     - sadd
     - sismember
