@@ -67,6 +67,7 @@ func makeRouter() map[string]CmdFunc {
 	routerMap["hgetall"] = defaultFunc
 	routerMap["hincrby"] = defaultFunc
 	routerMap["hincrbyfloat"] = defaultFunc
+	routerMap["hrandfield"] = defaultFunc
 
 	routerMap["sadd"] = defaultFunc
 	routerMap["sismember"] = defaultFunc

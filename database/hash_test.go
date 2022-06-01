@@ -174,6 +174,57 @@ func TestHGetAll(t *testing.T) {
 			t.Error(fmt.Sprintf("unexpected value %s", value))
 		}
 	}
+
+	// test HRandField
+	// test HRandField count of 0 is handled correctly -- "emptyarray"
+	result = testDB.Exec(nil, utils.ToCmdLine("hrandfield", key, "0"))
+	multiBulk, ok = result.(*protocol.MultiBulkReply)
+	if !ok {
+		resultBytes := string(result.ToBytes())
+		if resultBytes != "*0\r\n" {
+			t.Error(fmt.Sprintf("expected MultiBulkReply, actually %s", resultBytes))
+		}
+	}
+
+	// test HRandField count > size
+	result = testDB.Exec(nil, utils.ToCmdLine("hrandfield", key, strconv.Itoa(size+100)))
+	multiBulk, ok = result.(*protocol.MultiBulkReply)
+	if !ok {
+		t.Error(fmt.Sprintf("expected MultiBulkReply, actually %s", string(result.ToBytes())))
+	}
+	if len(fields) != len(multiBulk.Args) {
+		t.Error(fmt.Sprintf("expected %d items , actually %d ", len(fields), len(multiBulk.Args)))
+	}
+
+	// test HRandField count > size withvalues
+	result = testDB.Exec(nil, utils.ToCmdLine("hrandfield", key, strconv.Itoa(size+100), "withvalues"))
+	multiBulk, ok = result.(*protocol.MultiBulkReply)
+	if !ok {
+		t.Error(fmt.Sprintf("expected MultiBulkReply, actually %s", string(result.ToBytes())))
+	}
+	if 2*len(fields) != len(multiBulk.Args) {
+		t.Error(fmt.Sprintf("expected %d items , actually %d ", 2*len(fields), len(multiBulk.Args)))
+	}
+
+	// test HRandField count < size
+	result = testDB.Exec(nil, utils.ToCmdLine("hrandfield", key, strconv.Itoa(-size-10)))
+	multiBulk, ok = result.(*protocol.MultiBulkReply)
+	if !ok {
+		t.Error(fmt.Sprintf("expected MultiBulkReply, actually %s", string(result.ToBytes())))
+	}
+	if len(fields)+10 != len(multiBulk.Args) {
+		t.Error(fmt.Sprintf("expected %d items , actually %d ", len(fields)+10, len(multiBulk.Args)))
+	}
+
+	// test HRandField count < size withvalues
+	result = testDB.Exec(nil, utils.ToCmdLine("hrandfield", key, strconv.Itoa(-size-10), "withvalues"))
+	multiBulk, ok = result.(*protocol.MultiBulkReply)
+	if !ok {
+		t.Error(fmt.Sprintf("expected MultiBulkReply, actually %s", string(result.ToBytes())))
+	}
+	if 2*(len(fields)+10) != len(multiBulk.Args) {
+		t.Error(fmt.Sprintf("expected %d items , actually %d ", 2*(len(fields)+10), len(multiBulk.Args)))
+	}
 }
 
 func TestHIncrBy(t *testing.T) {

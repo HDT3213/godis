@@ -8,6 +8,7 @@ import (
 	"github.com/hdt3213/godis/redis/protocol"
 	"github.com/shopspring/decimal"
 	"strconv"
+	"strings"
 )
 
 func (db *DB) getAsDict(key string) (Dict.Dict, protocol.ErrorReply) {
@@ -398,6 +399,82 @@ func execHIncrByFloat(db *DB, args [][]byte) redis.Reply {
 	return protocol.MakeBulkReply(resultBytes)
 }
 
+// execHRandField return a random field(or field-value) from the hash value stored at key.
+func execHRandField(db *DB, args [][]byte) redis.Reply {
+	key := string(args[0])
+	count := 1
+	withvalues := 0
+
+	if len(args) > 3 {
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'hrandfield' command")
+	}
+
+	if len(args) == 3 {
+		if strings.ToLower(string(args[2])) == "withvalues" {
+			withvalues = 1
+		} else {
+			return protocol.MakeSyntaxErrReply()
+		}
+	}
+
+	if len(args) >= 2 {
+		count64, err := strconv.ParseInt(string(args[1]), 10, 64)
+		if err != nil {
+			return protocol.MakeErrReply("ERR value is not an integer or out of range")
+		}
+		count = int(count64)
+	}
+
+	dict, errReply := db.getAsDict(key)
+	if errReply != nil {
+		return errReply
+	}
+	if dict == nil {
+		return &protocol.EmptyMultiBulkReply{}
+	}
+
+	if count > 0 {
+		fields := dict.RandomDistinctKeys(count)
+		Numfield := len(fields)
+		if withvalues == 0 {
+			result := make([][]byte, Numfield)
+			for i, v := range fields {
+				result[i] = []byte(v)
+			}
+			return protocol.MakeMultiBulkReply(result)
+		} else {
+			result := make([][]byte, 2*Numfield)
+			for i, v := range fields {
+				result[2*i] = []byte(v)
+				raw, _ := dict.Get(v)
+				result[2*i+1] = raw.([]byte)
+			}
+			return protocol.MakeMultiBulkReply(result)
+		}
+	} else if count < 0 {
+		fields := dict.RandomKeys(-count)
+		Numfield := len(fields)
+		if withvalues == 0 {
+			result := make([][]byte, Numfield)
+			for i, v := range fields {
+				result[i] = []byte(v)
+			}
+			return protocol.MakeMultiBulkReply(result)
+		} else {
+			result := make([][]byte, 2*Numfield)
+			for i, v := range fields {
+				result[2*i] = []byte(v)
+				raw, _ := dict.Get(v)
+				result[2*i+1] = raw.([]byte)
+			}
+			return protocol.MakeMultiBulkReply(result)
+		}
+	}
+
+	// 'count' is 0 will reach.
+	return &protocol.EmptyMultiBulkReply{}
+}
+
 func init() {
 	RegisterCommand("HSet", execHSet, writeFirstKey, undoHSet, 4)
 	RegisterCommand("HSetNX", execHSetNX, writeFirstKey, undoHSet, 4)
@@ -413,4 +490,5 @@ func init() {
 	RegisterCommand("HGetAll", execHGetAll, readFirstKey, nil, 2)
 	RegisterCommand("HIncrBy", execHIncrBy, writeFirstKey, undoHIncr, 4)
 	RegisterCommand("HIncrByFloat", execHIncrByFloat, writeFirstKey, undoHIncr, 4)
+	RegisterCommand("HRandField", execHRandField, readFirstKey, nil, -2)
 }
