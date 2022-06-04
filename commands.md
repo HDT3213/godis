@@ -27,7 +27,9 @@
     - mget
     - msetnx
     - get
+    - getex
     - getset
+    - getdel
     - incr
     - incrby
     - incrbyfloat

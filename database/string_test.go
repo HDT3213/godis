@@ -283,6 +283,62 @@ func TestDecr(t *testing.T) {
 	}
 }
 
+func TestGetEX(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	value := utils.RandString(10)
+	ttl := "1000"
+
+	testDB.Exec(nil, utils.ToCmdLine("SET", key, value))
+
+	// Normal Get
+	actual := testDB.Exec(nil, utils.ToCmdLine("GETEX", key))
+	asserts.AssertBulkReply(t, actual, value)
+
+	// Test GetEX Key EX Seconds
+	actual = testDB.Exec(nil, utils.ToCmdLine("GETEX", key, "EX", ttl))
+	asserts.AssertBulkReply(t, actual, value)
+	actual = testDB.Exec(nil, utils.ToCmdLine("TTL", key))
+	intResult, ok := actual.(*protocol.IntReply)
+	if !ok {
+		t.Error(fmt.Sprintf("expected int protocol, actually %s", actual.ToBytes()))
+		return
+	}
+	if intResult.Code <= 0 || intResult.Code > 1000 {
+		t.Error(fmt.Sprintf("expected int between [0, 1000], actually %d", intResult.Code))
+		return
+	}
+
+	// Test GetEX Key Persist
+	actual = testDB.Exec(nil, utils.ToCmdLine("GETEX", key, "PERSIST"))
+	asserts.AssertBulkReply(t, actual, value)
+	actual = testDB.Exec(nil, utils.ToCmdLine("TTL", key))
+	intResult, ok = actual.(*protocol.IntReply)
+	if !ok {
+		t.Error(fmt.Sprintf("expected int protocol, actually %s", actual.ToBytes()))
+		return
+	}
+	if intResult.Code != -1 {
+		t.Error(fmt.Sprintf("expected int equals -1, actually %d", intResult.Code))
+		return
+	}
+
+	// Test GetEX Key NX Milliseconds
+	ttl = "1000000"
+	actual = testDB.Exec(nil, utils.ToCmdLine("GETEX", key, "PX", ttl))
+	asserts.AssertBulkReply(t, actual, value)
+	actual = testDB.Exec(nil, utils.ToCmdLine("TTL", key))
+	intResult, ok = actual.(*protocol.IntReply)
+	if !ok {
+		t.Error(fmt.Sprintf("expected int protocol, actually %s", actual.ToBytes()))
+		return
+	}
+	if intResult.Code <= 0 || intResult.Code > 1000000 {
+		t.Error(fmt.Sprintf("expected int between [0, 1000000], actually %d", intResult.Code))
+		return
+	}
+}
+
 func TestGetSet(t *testing.T) {
 	testDB.Flush()
 	key := utils.RandString(10)
@@ -300,6 +356,17 @@ func TestGetSet(t *testing.T) {
 	asserts.AssertBulkReply(t, actual, value)
 	actual = testDB.Exec(nil, utils.ToCmdLine("GET", key))
 	asserts.AssertBulkReply(t, actual, value2)
+
+	// Test GetDel
+	actual = testDB.Exec(nil, utils.ToCmdLine("GETDEL", key))
+	asserts.AssertBulkReply(t, actual, value2)
+
+	actual = testDB.Exec(nil, utils.ToCmdLine("GETDEL", key))
+	_, ok = actual.(*protocol.NullBulkReply)
+	if !ok {
+		t.Errorf("expect null bulk protocol, get: %s", string(actual.ToBytes()))
+		return
+	}
 }
 
 func TestMSetNX(t *testing.T) {
