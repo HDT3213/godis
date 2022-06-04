@@ -34,7 +34,9 @@ func makeRouter() map[string]CmdFunc {
 	routerMap["mget"] = MGet
 	routerMap["msetnx"] = MSetNX
 	routerMap["get"] = defaultFunc
+	routerMap["getex"] = defaultFunc
 	routerMap["getset"] = defaultFunc
+	routerMap["getdel"] = defaultFunc
 	routerMap["incr"] = defaultFunc
 	routerMap["incrby"] = defaultFunc
 	routerMap["incrbyfloat"] = defaultFunc

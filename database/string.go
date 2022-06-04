@@ -47,6 +47,79 @@ const (
 
 const unlimitedTTL int64 = 0
 
+// execGetEX Get the value of key and optionally set its expiration
+func execGetEX(db *DB, args [][]byte) redis.Reply {
+	key := string(args[0])
+	bytes, err := db.getAsString(key)
+	ttl := unlimitedTTL
+
+	if err != nil {
+		return err
+	}
+	if bytes == nil {
+		return &protocol.NullBulkReply{}
+	}
+
+	for i := 1; i < len(args); i++ {
+		arg := strings.ToUpper(string(args[i]))
+		if arg == "EX" { // ttl in seconds
+			if ttl != unlimitedTTL {
+				// ttl has been set
+				return &protocol.SyntaxErrReply{}
+			}
+			if i+1 >= len(args) {
+				return &protocol.SyntaxErrReply{}
+			}
+			ttlArg, err := strconv.ParseInt(string(args[i+1]), 10, 64)
+			if err != nil {
+				return &protocol.SyntaxErrReply{}
+			}
+			if ttlArg <= 0 {
+				return protocol.MakeErrReply("ERR invalid expire time in getex")
+			}
+			ttl = ttlArg * 1000
+			i++ // skip next arg
+		} else if arg == "PX" { // ttl in milliseconds
+			if ttl != unlimitedTTL {
+				return &protocol.SyntaxErrReply{}
+			}
+			if i+1 >= len(args) {
+				return &protocol.SyntaxErrReply{}
+			}
+			ttlArg, err := strconv.ParseInt(string(args[i+1]), 10, 64)
+			if err != nil {
+				return &protocol.SyntaxErrReply{}
+			}
+			if ttlArg <= 0 {
+				return protocol.MakeErrReply("ERR invalid expire time in getex")
+			}
+			ttl = ttlArg
+			i++ // skip next arg
+		} else if arg == "PERSIST" {
+			if ttl != unlimitedTTL { // PERSIST Cannot be used with EX | PX
+				return &protocol.SyntaxErrReply{}
+			}
+			if i+1 > len(args) {
+				return &protocol.SyntaxErrReply{}
+			}
+			db.Persist(key)
+		}
+	}
+
+	if len(args) > 1 {
+		if ttl != unlimitedTTL { // EX | PX
+			expireTime := time.Now().Add(time.Duration(ttl) * time.Millisecond)
+			db.Expire(key, expireTime)
+			db.addAof(aof.MakeExpireCmd(key, expireTime).Args)
+		} else { // PERSIST
+			db.Persist(key) // override ttl
+			// we convert to persist command to write aof
+			db.addAof(utils.ToCmdLine3("persist", args[0]))
+		}
+	}
+	return protocol.MakeBulkReply(bytes)
+}
+
 // execSet sets string value and time to live to the given key
 func execSet(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
@@ -321,6 +394,22 @@ func execGetSet(db *DB, args [][]byte) redis.Reply {
 	if old == nil {
 		return new(protocol.NullBulkReply)
 	}
+	return protocol.MakeBulkReply(old)
+}
+
+// execGetDel Get the value of key and delete the key.
+func execGetDel(db *DB, args [][]byte) redis.Reply {
+	key := string(args[0])
+
+	old, err := db.getAsString(key)
+	if err != nil {
+		return err
+	}
+	if old == nil {
+		return new(protocol.NullBulkReply)
+	}
+	db.Remove(key)
+	db.addAof(utils.ToCmdLine3("getdel", args...))
 	return protocol.MakeBulkReply(old)
 }
 
@@ -743,7 +832,9 @@ func init() {
 	RegisterCommand("MGet", execMGet, prepareMGet, nil, -2)
 	RegisterCommand("MSetNX", execMSetNX, prepareMSet, undoMSet, -3)
 	RegisterCommand("Get", execGet, readFirstKey, nil, 2)
+	RegisterCommand("GetEX", execGetEX, writeFirstKey, rollbackFirstKey, -2)
 	RegisterCommand("GetSet", execGetSet, writeFirstKey, rollbackFirstKey, 3)
+	RegisterCommand("GetDel", execGetDel, writeFirstKey, rollbackFirstKey, 2)
 	RegisterCommand("Incr", execIncr, writeFirstKey, rollbackFirstKey, 2)
 	RegisterCommand("IncrBy", execIncrBy, writeFirstKey, rollbackFirstKey, 3)
 	RegisterCommand("IncrByFloat", execIncrByFloat, writeFirstKey, rollbackFirstKey, 3)
