@@ -409,7 +409,9 @@ func execGetDel(db *DB, args [][]byte) redis.Reply {
 		return new(protocol.NullBulkReply)
 	}
 	db.Remove(key)
-	db.addAof(utils.ToCmdLine3("getdel", args...))
+
+	// We convert to del command to write aof
+	db.addAof(utils.ToCmdLine3("del", args...))
 	return protocol.MakeBulkReply(old)
 }
 
