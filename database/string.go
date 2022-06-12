@@ -390,7 +390,7 @@ func execGetSet(db *DB, args [][]byte) redis.Reply {
 
 	db.PutEntity(key, &database.DataEntity{Data: value})
 	db.Persist(key) // override ttl
-	db.addAof(utils.ToCmdLine3("getset", args...))
+	db.addAof(utils.ToCmdLine3("set", args...))
 	if old == nil {
 		return new(protocol.NullBulkReply)
 	}
