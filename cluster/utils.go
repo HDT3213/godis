@@ -42,7 +42,7 @@ func execSelect(c redis.Connection, args [][]byte) redis.Reply {
 	if err != nil {
 		return protocol.MakeErrReply("ERR invalid DB index")
 	}
-	if dbIndex >= config.Properties.Databases {
+	if dbIndex >= config.Properties.Databases || dbIndex < 0 {
 		return protocol.MakeErrReply("ERR DB index is out of range")
 	}
 	c.SelectDB(dbIndex)

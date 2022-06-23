@@ -88,11 +88,52 @@ func execRenameNxTo(db *DB, args [][]byte) redis.Reply {
 	return execRenameTo(db, args)
 }
 
+// execCopyFrom just reply "OK" message, used for cluster.Copy
+func execCopyFrom(db *DB, args [][]byte) redis.Reply {
+	return protocol.MakeOkReply()
+}
+
+// execCopyTo accepts result of execDumpKey and load the dumped key
+// args format: key dumpCmd ttlCmd
+// execCopyTo may be partially successful, do not use it without transaction
+func execCopyTo(db *DB, args [][]byte) redis.Reply {
+	key := args[0]
+	dumpRawCmd, err := parser.ParseOne(args[1])
+	if err != nil {
+		return protocol.MakeErrReply("illegal dump cmd: " + err.Error())
+	}
+	dumpCmd, ok := dumpRawCmd.(*protocol.MultiBulkReply)
+	if !ok {
+		return protocol.MakeErrReply("dump cmd is not multi bulk reply")
+	}
+	dumpCmd.Args[1] = key // change key
+	ttlRawCmd, err := parser.ParseOne(args[2])
+	if err != nil {
+		return protocol.MakeErrReply("illegal ttl cmd: " + err.Error())
+	}
+	ttlCmd, ok := ttlRawCmd.(*protocol.MultiBulkReply)
+	if !ok {
+		return protocol.MakeErrReply("ttl cmd is not multi bulk reply")
+	}
+	ttlCmd.Args[1] = key
+	db.Remove(string(key))
+	dumpResult := db.execWithLock(dumpCmd.Args)
+	if protocol.IsErrorReply(dumpResult) {
+		return dumpResult
+	}
+	ttlResult := db.execWithLock(ttlCmd.Args)
+	if protocol.IsErrorReply(ttlResult) {
+		return ttlResult
+	}
+	return protocol.MakeOkReply()
+}
+
 func init() {
 	RegisterCommand("DumpKey", execDumpKey, writeAllKeys, undoDel, 2)
 	RegisterCommand("ExistIn", execExistIn, readAllKeys, nil, -1)
 	RegisterCommand("RenameFrom", execRenameFrom, readFirstKey, nil, 2)
 	RegisterCommand("RenameTo", execRenameTo, writeFirstKey, rollbackFirstKey, 4)
 	RegisterCommand("RenameNxTo", execRenameTo, writeFirstKey, rollbackFirstKey, 4)
-
+	RegisterCommand("CopyFrom", execCopyFrom, readFirstKey, nil, 2)
+	RegisterCommand("CopyTo", execCopyTo, writeFirstKey, rollbackFirstKey, 5)
 }

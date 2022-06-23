@@ -25,6 +25,7 @@ func makeRouter() map[string]CmdFunc {
 	routerMap["type"] = defaultFunc
 	routerMap["rename"] = Rename
 	routerMap["renamenx"] = RenameNx
+	routerMap["copy"] = Copy
 
 	routerMap["set"] = defaultFunc
 	routerMap["setnx"] = defaultFunc
