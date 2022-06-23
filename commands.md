@@ -18,6 +18,7 @@
     - flushall
     - keys
     - bgrewriteaof
+    - copy
 - String
     - set
     - setnx

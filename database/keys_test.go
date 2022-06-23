@@ -3,6 +3,7 @@ package database
 import (
 	"fmt"
 	"github.com/hdt3213/godis/lib/utils"
+	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/protocol"
 	"github.com/hdt3213/godis/redis/protocol/asserts"
 	"strconv"
@@ -204,4 +205,49 @@ func TestKeys(t *testing.T) {
 	asserts.AssertMultiBulkReplySize(t, result, 1)
 	result = testDB.Exec(nil, utils.ToCmdLine("keys", "?:*"))
 	asserts.AssertMultiBulkReplySize(t, result, 2)
+}
+
+func TestCopy(t *testing.T) {
+	testDB.Flush()
+	testMDB := NewStandaloneServer()
+	srcKey := utils.RandString(10)
+	destKey := "from:" + srcKey
+	value := utils.RandString(10)
+	conn := new(connection.FakeConn)
+
+	testMDB.Exec(conn, utils.ToCmdLine("set", srcKey, value))
+
+	// normal copy
+	result := testMDB.Exec(conn, utils.ToCmdLine("copy", srcKey, destKey))
+	asserts.AssertIntReply(t, result, 1)
+	result = testMDB.Exec(conn, utils.ToCmdLine("get", destKey))
+	asserts.AssertBulkReply(t, result, value)
+
+	// copy srcKey(DB 0) to destKey(DB 1)
+	testMDB.Exec(conn, utils.ToCmdLine("copy", srcKey, destKey, "db", "1"))
+	testMDB.Exec(conn, utils.ToCmdLine("select", "1"))
+	result = testMDB.Exec(conn, utils.ToCmdLine("get", destKey))
+	asserts.AssertBulkReply(t, result, value)
+
+	// test destKey already exists
+	testMDB.Exec(conn, utils.ToCmdLine("select", "0"))
+	result = testMDB.Exec(conn, utils.ToCmdLine("copy", srcKey, destKey))
+	asserts.AssertIntReply(t, result, 0)
+
+	// copy srcKey(DB 0) to destKey(DB 0) with "Replace"
+	value = "new:" + value
+	testMDB.Exec(conn, utils.ToCmdLine("set", srcKey, value)) // reset srcKey
+	result = testMDB.Exec(conn, utils.ToCmdLine("copy", srcKey, destKey, "replace"))
+	asserts.AssertIntReply(t, result, 1)
+	result = testMDB.Exec(conn, utils.ToCmdLine("get", destKey))
+	asserts.AssertBulkReply(t, result, value)
+
+	// test copy expire time
+	testMDB.Exec(conn, utils.ToCmdLine("set", srcKey, value, "ex", "1000"))
+	result = testMDB.Exec(conn, utils.ToCmdLine("copy", srcKey, destKey, "replace"))
+	asserts.AssertIntReply(t, result, 1)
+	result = testMDB.Exec(conn, utils.ToCmdLine("ttl", srcKey))
+	asserts.AssertIntReplyGreaterThan(t, result, 0)
+	result = testMDB.Exec(conn, utils.ToCmdLine("ttl", destKey))
+	asserts.AssertIntReplyGreaterThan(t, result, 0)
 }

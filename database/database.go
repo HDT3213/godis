@@ -122,6 +122,11 @@ func (mdb *MultiDB) Exec(c redis.Connection, cmdLine [][]byte) (result redis.Rep
 			return protocol.MakeArgNumErrReply("select")
 		}
 		return execSelect(c, mdb, cmdLine[1:])
+	} else if cmdName == "copy" {
+		if len(cmdLine) < 3 {
+			return protocol.MakeArgNumErrReply("copy")
+		}
+		return execCopy(mdb, c, cmdLine[1:])
 	}
 	// todo: support multi database transaction
 
@@ -151,7 +156,7 @@ func execSelect(c redis.Connection, mdb *MultiDB, args [][]byte) redis.Reply {
 	if err != nil {
 		return protocol.MakeErrReply("ERR invalid DB index")
 	}
-	if dbIndex >= len(mdb.dbSet) {
+	if dbIndex >= len(mdb.dbSet) || dbIndex < 0 {
 		return protocol.MakeErrReply("ERR DB index is out of range")
 	}
 	c.SelectDB(dbIndex)
