@@ -151,7 +151,7 @@ func (handler *Handler) FinishRewrite(ctx *RewriteCtx) {
 	}
 	handler.aofFile = aofFile
 
-	// reset selected db 重新写入一次 select 指令保证 aof 中的数据库与 handler.currentDB 一致
+	// write select command again to ensure aof file has the same db index with  handler.currentDB
 	data = protocol.MakeMultiBulkReply(utils.ToCmdLine("SELECT", strconv.Itoa(handler.currentDB))).ToBytes()
 	_, err = handler.aofFile.Write(data)
 	if err != nil {

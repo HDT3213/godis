@@ -309,6 +309,7 @@ func (mdb *MultiDB) doPsync() error {
 	}
 	// there is no CRLF between RDB and following AOF, reset stream to avoid parser error
 	mdb.replication.masterChan = parser.ParseStream(mdb.replication.masterConn)
+	// fixme: update aof file
 	return nil
 }
 

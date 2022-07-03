@@ -294,7 +294,7 @@ func execKeys(db *DB, args [][]byte) redis.Reply {
 func toTTLCmd(db *DB, key string) *protocol.MultiBulkReply {
 	raw, exists := db.ttlMap.Get(key)
 	if !exists {
-		// 无 TTL
+		// has no TTL
 		return protocol.MakeMultiBulkReply(utils.ToCmdLine("PERSIST", key))
 	}
 	expireTime, _ := raw.(time.Time)
