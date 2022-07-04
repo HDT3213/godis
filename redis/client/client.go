@@ -11,7 +11,14 @@ import (
 	"runtime/debug"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
+)
+
+const (
+	created = iota
+	running
+	closed
 )
 
 // Client is a pipeline mode redis client
@@ -22,6 +29,7 @@ type Client struct {
 	ticker      *time.Ticker
 	addr        string
 
+	status  int32
 	working *sync.WaitGroup // its counter presents unfinished requests(pending and waiting)
 }
 
@@ -61,10 +69,12 @@ func (client *Client) Start() {
 	go client.handleWrite()
 	go client.handleRead()
 	go client.heartbeat()
+	atomic.StoreInt32(&client.status, running)
 }
 
 // Close stops asynchronous goroutines and close connection
 func (client *Client) Close() {
+	atomic.StoreInt32(&client.status, closed)
 	client.ticker.Stop()
 	// stop new request
 	close(client.pendingReqs)
@@ -78,6 +88,7 @@ func (client *Client) Close() {
 }
 
 func (client *Client) reconnect() {
+	logger.Info("reconnect with: " + client.addr)
 	_ = client.conn.Close() // ignore possible errors from repeated closes
 
 	var conn net.Conn
@@ -97,7 +108,7 @@ func (client *Client) reconnect() {
 		return
 	}
 	client.conn = conn
-	//
+
 	close(client.waitingReqs)
 	for req := range client.waitingReqs {
 		req.err = errors.New("connection closed")
@@ -122,6 +133,9 @@ func (client *Client) handleWrite() {
 
 // Send sends a request to redis server
 func (client *Client) Send(args [][]byte) redis.Reply {
+	if atomic.LoadInt32(&client.status) != running {
+		return protocol.MakeErrReply("client closed")
+	}
 	request := &request{
 		args:      args,
 		heartbeat: false,
@@ -198,6 +212,10 @@ func (client *Client) handleRead() {
 	ch := parser.ParseStream(client.conn)
 	for payload := range ch {
 		if payload.Err != nil {
+			status := atomic.LoadInt32(&client.status)
+			if status == closed {
+				return
+			}
 			client.reconnect()
 			return
 		}

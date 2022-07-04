@@ -3,7 +3,9 @@ package client
 import (
 	"bytes"
 	"github.com/hdt3213/godis/lib/logger"
+	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
+	"github.com/hdt3213/godis/redis/protocol/asserts"
 	"strconv"
 	"testing"
 	"time"
@@ -105,6 +107,8 @@ func TestClient(t *testing.T) {
 	}
 
 	client.Close()
+	ret := client.Send(utils.ToCmdLine("ping"))
+	asserts.AssertErrReply(t, ret, "client closed")
 }
 
 func TestReconnect(t *testing.T) {
@@ -135,7 +139,4 @@ func TestReconnect(t *testing.T) {
 	if !success {
 		t.Error("reconnect error")
 	}
-	//var wg sync.WaitGroup
-	//wg.Add(1)
-	//wg.Wait()
 }
