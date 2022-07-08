@@ -280,7 +280,10 @@ func execPersist(db *DB, args [][]byte) redis.Reply {
 
 // execKeys returns all keys matching the given pattern
 func execKeys(db *DB, args [][]byte) redis.Reply {
-	pattern := wildcard.CompilePattern(string(args[0]))
+	pattern, err := wildcard.CompilePattern(string(args[0]))
+	if err != nil {
+		return protocol.MakeErrReply("ERR illegal wildcard")
+	}
 	result := make([][]byte, 0)
 	db.data.ForEach(func(key string, val interface{}) bool {
 		if pattern.IsMatch(key) {
