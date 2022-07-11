@@ -303,9 +303,9 @@ func (mdb *MultiDB) doPsync() error {
 	}
 	logger.Info("full resync from master: " + mdb.replication.replId)
 	logger.Info("current offset:", mdb.replication.replOffset)
-	for i, newDB := range rdbHolder.dbSet {
-		oldDB := mdb.selectDB(i)
-		oldDB.Load(newDB)
+	for i, h := range rdbHolder.dbSet {
+		newDB := h.Load().(*DB)
+		mdb.loadDB(i, newDB)
 	}
 	// there is no CRLF between RDB and following AOF, reset stream to avoid parser error
 	mdb.replication.masterChan = parser.ParseStream(mdb.replication.masterConn)

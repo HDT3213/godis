@@ -51,6 +51,7 @@ func execExists(db *DB, args [][]byte) redis.Reply {
 }
 
 // execFlushDB removes all data in current db
+// deprecated, use MultiDB.flushDB
 func execFlushDB(db *DB, args [][]byte) redis.Reply {
 	db.Flush()
 	db.addAof(utils.ToCmdLine3("flushdb", args...))
@@ -316,7 +317,7 @@ func undoExpire(db *DB, args [][]byte) []CmdLine {
 // This command copies the value stored at the source key to the destination key.
 func execCopy(mdb *MultiDB, conn redis.Connection, args [][]byte) redis.Reply {
 	dbIndex := conn.GetDBIndex()
-	db := mdb.dbSet[dbIndex] // Current DB
+	db := mdb.mustSelectDB(dbIndex) // Current DB
 	replaceFlag := false
 	srcKey := string(args[0])
 	destKey := string(args[1])
@@ -356,7 +357,7 @@ func execCopy(mdb *MultiDB, conn redis.Connection, args [][]byte) redis.Reply {
 		return protocol.MakeIntReply(0)
 	}
 
-	destDB := mdb.dbSet[dbIndex]
+	destDB := mdb.mustSelectDB(dbIndex)
 	if _, exists = destDB.GetEntity(destKey); exists != false {
 		// If destKey exists and there is no "replace" option
 		if replaceFlag == false {

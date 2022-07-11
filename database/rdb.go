@@ -31,7 +31,7 @@ func loadRdbFile(mdb *MultiDB) {
 
 func dumpRDB(dec *core.Decoder, mdb *MultiDB) error {
 	return dec.Parse(func(o rdb.RedisObject) bool {
-		db := mdb.selectDB(o.GetDBIndex())
+		db := mdb.mustSelectDB(o.GetDBIndex())
 		switch o.GetType() {
 		case rdb.StringType:
 			str := o.(*rdb.StringObject)

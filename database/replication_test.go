@@ -8,17 +8,20 @@ import (
 	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/protocol"
 	"github.com/hdt3213/godis/redis/protocol/asserts"
+	"sync/atomic"
 	"testing"
 	"time"
 )
 
 func TestReplication(t *testing.T) {
 	mdb := &MultiDB{}
-	mdb.dbSet = make([]*DB, 16)
+	mdb.dbSet = make([]*atomic.Value, 16)
 	for i := range mdb.dbSet {
 		singleDB := makeDB()
 		singleDB.index = i
-		mdb.dbSet[i] = singleDB
+		holder := &atomic.Value{}
+		holder.Store(singleDB)
+		mdb.dbSet[i] = holder
 	}
 	mdb.replication = initReplStatus()
 	masterCli, err := client.MakeClient("127.0.0.1:6379")
