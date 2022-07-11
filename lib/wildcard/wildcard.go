@@ -24,6 +24,8 @@ var replaceMap = map[byte]string{
 	'?': ".",
 }
 
+var errEndWithEscape = "end with escape \\"
+
 // CompilePattern convert wildcard string to Pattern
 func CompilePattern(src string) (*Pattern, error) {
 	regexSrc := strings.Builder{}
@@ -32,7 +34,7 @@ func CompilePattern(src string) (*Pattern, error) {
 		ch := src[i]
 		if ch == '\\' {
 			if i == len(src)-1 {
-				return nil, errors.New("end with escape \\")
+				return nil, errors.New(errEndWithEscape)
 			}
 			regexSrc.WriteByte(ch)
 			regexSrc.WriteByte(src[i+1])
