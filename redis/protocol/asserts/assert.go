@@ -150,7 +150,7 @@ func AssertMultiBulkReplySize(t *testing.T, actual redis.Reply, expected int) {
 func printStack() string {
 	_, file, no, ok := runtime.Caller(2)
 	if ok {
-		return fmt.Sprintf("at %s#%d", file, no)
+		return fmt.Sprintf("at %s:%d", file, no)
 	}
 	return ""
 }

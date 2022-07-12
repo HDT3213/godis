@@ -68,7 +68,7 @@ func execType(db *DB, args [][]byte) redis.Reply {
 	switch entity.Data.(type) {
 	case []byte:
 		return protocol.MakeStatusReply("string")
-	case *list.LinkedList:
+	case list.List:
 		return protocol.MakeStatusReply("list")
 	case dict.Dict:
 		return protocol.MakeStatusReply("hash")

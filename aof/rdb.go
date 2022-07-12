@@ -106,7 +106,7 @@ func (handler *Handler) rewrite2RDB(ctx *RewriteCtx) error {
 			switch obj := entity.Data.(type) {
 			case []byte:
 				err = encoder.WriteStringObject(key, obj, opts...)
-			case *List.LinkedList:
+			case List.List:
 				vals := make([][]byte, 0, obj.Len())
 				obj.ForEach(func(i int, v interface{}) bool {
 					bytes, _ := v.([]byte)

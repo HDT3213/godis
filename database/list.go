@@ -9,26 +9,26 @@ import (
 	"strconv"
 )
 
-func (db *DB) getAsList(key string) (*List.LinkedList, protocol.ErrorReply) {
+func (db *DB) getAsList(key string) (List.List, protocol.ErrorReply) {
 	entity, ok := db.GetEntity(key)
 	if !ok {
 		return nil, nil
 	}
-	bytes, ok := entity.Data.(*List.LinkedList)
+	list, ok := entity.Data.(List.List)
 	if !ok {
 		return nil, &protocol.WrongTypeErrReply{}
 	}
-	return bytes, nil
+	return list, nil
 }
 
-func (db *DB) getOrInitList(key string) (list *List.LinkedList, isNew bool, errReply protocol.ErrorReply) {
+func (db *DB) getOrInitList(key string) (list List.List, isNew bool, errReply protocol.ErrorReply) {
 	list, errReply = db.getAsList(key)
 	if errReply != nil {
 		return nil, false, errReply
 	}
 	isNew = false
 	if list == nil {
-		list = &List.LinkedList{}
+		list = List.NewQuickList()
 		db.PutEntity(key, &database.DataEntity{
 			Data: list,
 		})
@@ -259,11 +259,17 @@ func execLRem(db *DB, args [][]byte) redis.Reply {
 
 	var removed int
 	if count == 0 {
-		removed = list.RemoveAllByVal(value)
+		removed = list.RemoveAllByVal(func(a interface{}) bool {
+			return utils.Equals(a, value)
+		})
 	} else if count > 0 {
-		removed = list.RemoveByVal(value, count)
+		removed = list.RemoveByVal(func(a interface{}) bool {
+			return utils.Equals(a, value)
+		}, count)
 	} else {
-		removed = list.ReverseRemoveByVal(value, -count)
+		removed = list.ReverseRemoveByVal(func(a interface{}) bool {
+			return utils.Equals(a, value)
+		}, -count)
 	}
 
 	if list.Len() == 0 {
