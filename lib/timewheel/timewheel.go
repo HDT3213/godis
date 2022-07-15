@@ -109,7 +109,7 @@ func (tw *TimeWheel) tickHandler() {
 	} else {
 		tw.currentPos++
 	}
-	tw.scanAndRunTask(l)
+	go tw.scanAndRunTask(l)
 }
 
 func (tw *TimeWheel) scanAndRunTask(l *list.List) {
