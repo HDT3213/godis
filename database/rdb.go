@@ -40,7 +40,7 @@ func dumpRDB(dec *core.Decoder, mdb *MultiDB) error {
 			})
 		case rdb.ListType:
 			listObj := o.(*rdb.ListObject)
-			list := &List.LinkedList{}
+			list := List.NewQuickList()
 			for _, v := range listObj.Values {
 				list.Add(v)
 			}

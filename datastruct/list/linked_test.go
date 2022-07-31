@@ -1,6 +1,7 @@
 package list
 
 import (
+	"github.com/hdt3213/godis/lib/utils"
 	"strconv"
 	"strings"
 	"testing"
@@ -30,12 +31,33 @@ func TestAdd(t *testing.T) {
 	})
 }
 
+func BenchmarkLinkedList_Add(b *testing.B) {
+	list := Make()
+	for i := 0; i < pageSize*10; i++ {
+		list.Add(i)
+	}
+}
+
+func BenchmarkLinkedList_Range(b *testing.B) {
+	list := Make()
+	for i := 0; i < pageSize*10; i++ {
+		list.Add(i)
+	}
+	list.ForEach(func(i int, v interface{}) bool {
+		return true
+	})
+}
+
 func TestLinkedList_Contains(t *testing.T) {
 	list := Make(1, 2, 3, 4)
-	if !list.Contains(1) {
+	if !list.Contains(func(a interface{}) bool {
+		return a == 1
+	}) {
 		t.Error("expect true actual false")
 	}
-	if list.Contains(-1) {
+	if list.Contains(func(a interface{}) bool {
+		return a == -1
+	}) {
 		t.Error("expect false actual true")
 	}
 }
@@ -81,7 +103,9 @@ func TestRemoveVal(t *testing.T) {
 		list.Add(i)
 	}
 	for index := 0; index < list.Len(); index++ {
-		list.RemoveAllByVal(index)
+		list.RemoveAllByVal(func(a interface{}) bool {
+			return utils.Equals(a, index)
+		})
 		list.ForEach(func(i int, v interface{}) bool {
 			intVal, _ := v.(int)
 			if intVal == index {
@@ -97,7 +121,9 @@ func TestRemoveVal(t *testing.T) {
 		list.Add(i)
 	}
 	for i := 0; i < 10; i++ {
-		list.RemoveByVal(i, 1)
+		list.RemoveByVal(func(a interface{}) bool {
+			return utils.Equals(a, i)
+		}, 1)
 	}
 	list.ForEach(func(i int, v interface{}) bool {
 		intVal, _ := v.(int)
@@ -107,7 +133,9 @@ func TestRemoveVal(t *testing.T) {
 		return true
 	})
 	for i := 0; i < 10; i++ {
-		list.RemoveByVal(i, 1)
+		list.RemoveByVal(func(a interface{}) bool {
+			return utils.Equals(a, i)
+		}, 1)
 	}
 	if list.Len() != 0 {
 		t.Error("test fail: expected 0, actual: " + strconv.Itoa(list.Len()))
@@ -119,7 +147,9 @@ func TestRemoveVal(t *testing.T) {
 		list.Add(i)
 	}
 	for i := 0; i < 10; i++ {
-		list.ReverseRemoveByVal(i, 1)
+		list.ReverseRemoveByVal(func(a interface{}) bool {
+			return a == i
+		}, 1)
 	}
 	list.ForEach(func(i int, v interface{}) bool {
 		intVal, _ := v.(int)
@@ -129,7 +159,9 @@ func TestRemoveVal(t *testing.T) {
 		return true
 	})
 	for i := 0; i < 10; i++ {
-		list.ReverseRemoveByVal(i, 1)
+		list.ReverseRemoveByVal(func(a interface{}) bool {
+			return a == i
+		}, 1)
 	}
 	if list.Len() != 0 {
 		t.Error("test fail: expected 0, actual: " + strconv.Itoa(list.Len()))

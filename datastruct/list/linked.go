@@ -1,7 +1,5 @@
 package list
 
-import "github.com/hdt3213/godis/lib/utils"
-
 // LinkedList is doubly linked list
 type LinkedList struct {
 	first *node
@@ -150,7 +148,7 @@ func (list *LinkedList) RemoveLast() (val interface{}) {
 }
 
 // RemoveAllByVal removes all elements with the given val
-func (list *LinkedList) RemoveAllByVal(val interface{}) int {
+func (list *LinkedList) RemoveAllByVal(expected Expected) int {
 	if list == nil {
 		panic("list is nil")
 	}
@@ -159,7 +157,7 @@ func (list *LinkedList) RemoveAllByVal(val interface{}) int {
 	var nextNode *node
 	for n != nil {
 		nextNode = n.next
-		if utils.Equals(n.val, val) {
+		if expected(n.val) {
 			list.removeNode(n)
 			removed++
 		}
@@ -170,7 +168,7 @@ func (list *LinkedList) RemoveAllByVal(val interface{}) int {
 
 // RemoveByVal removes at most `count` values of the specified value in this list
 // scan from left to right
-func (list *LinkedList) RemoveByVal(val interface{}, count int) int {
+func (list *LinkedList) RemoveByVal(expected Expected, count int) int {
 	if list == nil {
 		panic("list is nil")
 	}
@@ -179,7 +177,7 @@ func (list *LinkedList) RemoveByVal(val interface{}, count int) int {
 	var nextNode *node
 	for n != nil {
 		nextNode = n.next
-		if utils.Equals(n.val, val) {
+		if expected(n.val) {
 			list.removeNode(n)
 			removed++
 		}
@@ -193,7 +191,7 @@ func (list *LinkedList) RemoveByVal(val interface{}, count int) int {
 
 // ReverseRemoveByVal removes at most `count` values of the specified value in this list
 // scan from right to left
-func (list *LinkedList) ReverseRemoveByVal(val interface{}, count int) int {
+func (list *LinkedList) ReverseRemoveByVal(expected Expected, count int) int {
 	if list == nil {
 		panic("list is nil")
 	}
@@ -202,7 +200,7 @@ func (list *LinkedList) ReverseRemoveByVal(val interface{}, count int) int {
 	var prevNode *node
 	for n != nil {
 		prevNode = n.prev
-		if utils.Equals(n.val, val) {
+		if expected(n.val) {
 			list.removeNode(n)
 			removed++
 		}
@@ -224,7 +222,7 @@ func (list *LinkedList) Len() int {
 
 // ForEach visits each element in the list
 // if the consumer returns false, the loop will be break
-func (list *LinkedList) ForEach(consumer func(int, interface{}) bool) {
+func (list *LinkedList) ForEach(consumer Consumer) {
 	if list == nil {
 		panic("list is nil")
 	}
@@ -241,10 +239,10 @@ func (list *LinkedList) ForEach(consumer func(int, interface{}) bool) {
 }
 
 // Contains returns whether the given value exist in the list
-func (list *LinkedList) Contains(val interface{}) bool {
+func (list *LinkedList) Contains(expected Expected) bool {
 	contains := false
 	list.ForEach(func(i int, actual interface{}) bool {
-		if actual == val {
+		if expected(actual) {
 			contains = true
 			return false
 		}

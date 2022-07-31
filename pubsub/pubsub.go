@@ -3,6 +3,7 @@ package pubsub
 import (
 	"github.com/hdt3213/godis/datastruct/list"
 	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
 	"strconv"
 )
@@ -36,7 +37,9 @@ func subscribe0(hub *Hub, channel string, client redis.Connection) bool {
 		subscribers = list.Make()
 		hub.subs.Put(channel, subscribers)
 	}
-	if subscribers.Contains(client) {
+	if subscribers.Contains(func(a interface{}) bool {
+		return a == client
+	}) {
 		return false
 	}
 	subscribers.Add(client)
@@ -54,7 +57,9 @@ func unsubscribe0(hub *Hub, channel string, client redis.Connection) bool {
 	raw, ok := hub.subs.Get(channel)
 	if ok {
 		subscribers, _ := raw.(*list.LinkedList)
-		subscribers.RemoveAllByVal(client)
+		subscribers.RemoveAllByVal(func(a interface{}) bool {
+			return utils.Equals(a, client)
+		})
 
 		if subscribers.Len() == 0 {
 			// clean
