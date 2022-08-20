@@ -2,17 +2,33 @@ package dict
 
 import (
 	"github.com/hdt3213/godis/lib/utils"
+	"sort"
 	"testing"
 )
 
 func TestSimpleDict_Keys(t *testing.T) {
 	d := MakeSimple()
 	size := 10
+	var expectKeys []string
 	for i := 0; i < size; i++ {
-		d.Put(utils.RandString(5), utils.RandString(5))
+		str := utils.RandString(5)
+		d.Put(str, str)
+		expectKeys = append(expectKeys, str)
 	}
-	if len(d.Keys()) != size {
+	sort.Slice(expectKeys, func(i, j int) bool {
+		return expectKeys[i] > expectKeys[j]
+	})
+	keys := d.Keys()
+	if len(keys) != size {
 		t.Errorf("expect %d keys, actual: %d", size, len(d.Keys()))
+	}
+	sort.Slice(keys, func(i, j int) bool {
+		return keys[i] > keys[j]
+	})
+	for i, k := range keys {
+		if k != expectKeys[i] {
+			t.Errorf("expect %s actual %s", expectKeys[i], k)
+		}
 	}
 }
 

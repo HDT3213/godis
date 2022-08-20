@@ -35,6 +35,7 @@ type Connection struct {
 	multiState bool
 	queue      [][][]byte
 	watching   map[string]uint32
+	txErrors   []error
 
 	// selected db
 	selectedDB int
@@ -65,11 +66,9 @@ func (c *Connection) Write(b []byte) error {
 	if len(b) == 0 {
 		return nil
 	}
-	c.mu.Lock()
 	c.waitingReply.Add(1)
 	defer func() {
 		c.waitingReply.Done()
-		c.mu.Unlock()
 	}()
 
 	_, err := c.conn.Write(b)
@@ -149,6 +148,16 @@ func (c *Connection) GetQueuedCmdLine() [][][]byte {
 // EnqueueCmd  enqueues command of current transaction
 func (c *Connection) EnqueueCmd(cmdLine [][]byte) {
 	c.queue = append(c.queue, cmdLine)
+}
+
+// AddTxError stores syntax error within transaction
+func (c *Connection) AddTxError(err error) {
+	c.txErrors = append(c.txErrors, err)
+}
+
+// GetTxErrors returns syntax error within transaction
+func (c *Connection) GetTxErrors() []error {
+	return c.txErrors
 }
 
 // ClearQueuedCmds clears queued commands of current transaction

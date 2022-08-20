@@ -19,6 +19,8 @@ type Connection interface {
 	EnqueueCmd([][]byte)
 	ClearQueuedCmds()
 	GetWatching() map[string]uint32
+	AddTxError(err error)
+	GetTxErrors() []error
 
 	// used for multi database
 	GetDBIndex() int

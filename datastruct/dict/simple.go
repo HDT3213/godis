@@ -72,6 +72,7 @@ func (dict *SimpleDict) Keys() []string {
 	i := 0
 	for k := range dict.m {
 		result[i] = k
+		i++
 	}
 	return result
 }
