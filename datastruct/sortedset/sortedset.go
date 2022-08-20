@@ -204,11 +204,27 @@ func (sortedSet *SortedSet) RangeByScore(min *ScoreBorder, max *ScoreBorder, off
 
 // RemoveByScore removes members which score within the given border
 func (sortedSet *SortedSet) RemoveByScore(min *ScoreBorder, max *ScoreBorder) int64 {
-	removed := sortedSet.skiplist.RemoveRangeByScore(min, max)
+	removed := sortedSet.skiplist.RemoveRangeByScore(min, max, 0)
 	for _, element := range removed {
 		delete(sortedSet.dict, element.Member)
 	}
 	return int64(len(removed))
+}
+
+func (sortedSet *SortedSet) PopMin(count int) []*Element {
+	first := sortedSet.skiplist.getFirstInScoreRange(negativeInfBorder, positiveInfBorder)
+	if first == nil {
+		return nil
+	}
+	border := &ScoreBorder{
+		Value:   first.Score,
+		Exclude: false,
+	}
+	removed := sortedSet.skiplist.RemoveRangeByScore(border, border, count)
+	for _, element := range removed {
+		delete(sortedSet.dict, element.Member)
+	}
+	return removed
 }
 
 // RemoveByRank removes member ranking within [start, stop)

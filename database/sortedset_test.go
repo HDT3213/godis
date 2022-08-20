@@ -303,3 +303,21 @@ func TestZIncrBy(t *testing.T) {
 	result = testDB.Exec(nil, utils.ToCmdLine("ZScore", key, "a"))
 	asserts.AssertBulkReply(t, result, "20")
 }
+
+func TestZPopMin(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	result := testDB.Exec(nil, utils.ToCmdLine("ZAdd", key, "1", "a", "1", "b", "2", "c"))
+	asserts.AssertNotError(t, result)
+	result = testDB.Exec(nil, utils.ToCmdLine("ZPopMin", key, "2"))
+	asserts.AssertMultiBulkReply(t, result, []string{"a", "1", "b", "1"})
+	result = testDB.Exec(nil, utils.ToCmdLine("ZRange", key, "0", "-1"))
+	asserts.AssertMultiBulkReply(t, result, []string{"c"})
+
+	result = testDB.Exec(nil, utils.ToCmdLine("ZPopMin", key+"1", "2"))
+	asserts.AssertMultiBulkReplySize(t, result, 0)
+
+	testDB.Exec(nil, utils.ToCmdLine("set", key+"2", "2"))
+	result = testDB.Exec(nil, utils.ToCmdLine("ZPopMin", key+"2", "2"))
+	asserts.AssertErrReply(t, result, "WRONGTYPE Operation against a key holding the wrong kind of value")
+}

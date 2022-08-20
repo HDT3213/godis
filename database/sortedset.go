@@ -514,6 +514,37 @@ func execZRemRangeByRank(db *DB, args [][]byte) redis.Reply {
 	return protocol.MakeIntReply(removed)
 }
 
+func execZPopMin(db *DB, args [][]byte) redis.Reply {
+	key := string(args[0])
+	count := 1
+	if len(args) > 1 {
+		var err error
+		count, err = strconv.Atoi(string(args[1]))
+		if err != nil {
+			return protocol.MakeErrReply("ERR value is not an integer or out of range")
+		}
+	}
+
+	sortedSet, errReply := db.getAsSortedSet(key)
+	if errReply != nil {
+		return errReply
+	}
+	if sortedSet == nil {
+		return protocol.MakeEmptyMultiBulkReply()
+	}
+
+	removed := sortedSet.PopMin(count)
+	if len(removed) > 0 {
+		db.addAof(utils.ToCmdLine3("zpopmin", args...))
+	}
+	result := make([][]byte, 0, len(removed)*2)
+	for _, element := range removed {
+		scoreStr := strconv.FormatFloat(element.Score, 'f', -1, 64)
+		result = append(result, []byte(element.Member), []byte(scoreStr))
+	}
+	return protocol.MakeMultiBulkReply(result)
+}
+
 // execZRem removes given members
 func execZRem(db *DB, args [][]byte) redis.Reply {
 	// parse args
@@ -602,6 +633,7 @@ func init() {
 	RegisterCommand("ZRangeByScore", execZRangeByScore, readFirstKey, nil, -4, flagReadOnly)
 	RegisterCommand("ZRevRange", execZRevRange, readFirstKey, nil, -4, flagReadOnly)
 	RegisterCommand("ZRevRangeByScore", execZRevRangeByScore, readFirstKey, nil, -4, flagReadOnly)
+	RegisterCommand("ZPopMin", execZPopMin, writeFirstKey, rollbackFirstKey, -2, flagWrite)
 	RegisterCommand("ZRem", execZRem, writeFirstKey, undoZRem, -3, flagWrite)
 	RegisterCommand("ZRemRangeByScore", execZRemRangeByScore, writeFirstKey, rollbackFirstKey, 4, flagWrite)
 	RegisterCommand("ZRemRangeByRank", execZRemRangeByRank, writeFirstKey, rollbackFirstKey, 4, flagWrite)

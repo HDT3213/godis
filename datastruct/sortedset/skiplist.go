@@ -281,7 +281,7 @@ func (skiplist *skiplist) getLastInScoreRange(min *ScoreBorder, max *ScoreBorder
 /*
  * return removed elements
  */
-func (skiplist *skiplist) RemoveRangeByScore(min *ScoreBorder, max *ScoreBorder) (removed []*Element) {
+func (skiplist *skiplist) RemoveRangeByScore(min *ScoreBorder, max *ScoreBorder, limit int) (removed []*Element) {
 	update := make([]*node, maxLevel)
 	removed = make([]*Element, 0)
 	// find backward nodes (of target range) or last node of each level
@@ -308,6 +308,9 @@ func (skiplist *skiplist) RemoveRangeByScore(min *ScoreBorder, max *ScoreBorder)
 		removedElement := node.Element
 		removed = append(removed, &removedElement)
 		skiplist.removeNode(node, update)
+		if limit > 0 && len(removed) == limit {
+			break
+		}
 		node = next
 	}
 	return removed
