@@ -5,6 +5,7 @@ go 1.16
 require (
 	github.com/hdt3213/rdb v1.0.5
 	github.com/jolestar/go-commons-pool/v2 v2.1.1
+	github.com/libp2p/go-reuseport v0.2.0 // indirect
 	github.com/shopspring/decimal v1.2.0
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )

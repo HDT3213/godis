@@ -9,9 +9,11 @@ import (
 	"fmt"
 	"github.com/hdt3213/godis/interface/tcp"
 	"github.com/hdt3213/godis/lib/logger"
+	reuse "github.com/libp2p/go-reuseport"
 	"net"
 	"os"
 	"os/signal"
+	"runtime"
 	"sync"
 	"syscall"
 	"time"
@@ -22,6 +24,7 @@ type Config struct {
 	Address    string        `yaml:"address"`
 	MaxConnect uint32        `yaml:"max-connect"`
 	Timeout    time.Duration `yaml:"timeout"`
+	ReusePort  bool
 }
 
 // ListenAndServeWithSignal binds port and handle requests, blocking until receive stop signal
@@ -33,16 +36,35 @@ func ListenAndServeWithSignal(cfg *Config, handler tcp.Handler) error {
 		sig := <-sigCh
 		switch sig {
 		case syscall.SIGHUP, syscall.SIGQUIT, syscall.SIGTERM, syscall.SIGINT:
-			closeChan <- struct{}{}
+			close(closeChan)
 		}
 	}()
-	listener, err := net.Listen("tcp", cfg.Address)
-	if err != nil {
-		return err
+	if cfg.ReusePort {
+		size := runtime.NumCPU()
+		wg := &sync.WaitGroup{}
+		wg.Add(size)
+		for i := 0; i < size; i++ {
+			go func() {
+				defer wg.Done()
+				listener, err := reuse.Listen("tcp", cfg.Address)
+				if err != nil {
+					logger.Error(err)
+					return
+				}
+				logger.Info(fmt.Sprintf("bind: %s, start listening...", cfg.Address))
+				ListenAndServe(listener, handler, closeChan)
+			}()
+		}
+		wg.Wait()
+	} else {
+		listener, err := net.Listen("tcp", cfg.Address)
+		if err != nil {
+			return err
+		}
+		//cfg.Address = listener.Addr().String()
+		logger.Info(fmt.Sprintf("bind: %s, start listening...", cfg.Address))
+		ListenAndServe(listener, handler, closeChan)
 	}
-	//cfg.Address = listener.Addr().String()
-	logger.Info(fmt.Sprintf("bind: %s, start listening...", cfg.Address))
-	ListenAndServe(listener, handler, closeChan)
 	return nil
 }
 

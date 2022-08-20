@@ -50,7 +50,8 @@ func main() {
 	}
 
 	err := tcp.ListenAndServeWithSignal(&tcp.Config{
-		Address: fmt.Sprintf("%s:%d", config.Properties.Bind, config.Properties.Port),
+		Address:   fmt.Sprintf("%s:%d", config.Properties.Bind, config.Properties.Port),
+		ReusePort: config.Properties.ReusePort,
 	}, RedisServer.MakeHandler())
 	if err != nil {
 		logger.Error(err)

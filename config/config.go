@@ -26,8 +26,10 @@ type ServerProperties struct {
 	SlaveAnnounceIP   string `cfg:"slave-announce-ip"`
 	ReplTimeout       int    `cfg:"repl-timeout"`
 
-	Peers []string `cfg:"peers"`
-	Self  string   `cfg:"self"`
+	// godis customized properties
+	Peers     []string `cfg:"peers"`
+	Self      string   `cfg:"self"`
+	ReusePort bool     `cfg:"reuse-port"`
 }
 
 // Properties holds global config properties

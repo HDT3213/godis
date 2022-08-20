@@ -5,6 +5,8 @@ import (
 	"math/rand"
 	"net"
 	"strconv"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -50,4 +52,51 @@ func TestListenAndServe(t *testing.T) {
 	}
 	closeChan <- struct{}{}
 	time.Sleep(time.Second)
+}
+
+func TestEcho(t *testing.T) {
+	addr := "127.0.0.1:9999"
+	go ListenAndServeWithSignal(&Config{
+		Address:   addr,
+		ReusePort: true,
+	}, MakeEchoHandler())
+	time.Sleep(time.Second)
+
+	counter := int32(100000)
+	initCounter := counter
+	concurrent := 64
+	wg := &sync.WaitGroup{}
+	beg := time.Now()
+	for i := 0; i < concurrent; i++ {
+		wg.Add(1)
+		go func() {
+			conn, err := net.Dial("tcp", addr)
+			if err != nil {
+				t.Error(err)
+				return
+			}
+			for atomic.AddInt32(&counter, -1) > 0 {
+				_, err = conn.Write([]byte("a\n"))
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				bufReader := bufio.NewReader(conn)
+				line, _, err := bufReader.ReadLine()
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				if string(line) != "a" {
+					t.Error("wrong response: " + string(line))
+				}
+			}
+			wg.Done()
+		}()
+	}
+	wg.Wait()
+	elapsed := time.Now().Sub(beg)
+	count := initCounter - counter
+	qps := float64(count) / elapsed.Seconds()
+	t.Logf("qps: %f", qps)
 }
