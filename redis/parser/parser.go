@@ -240,7 +240,7 @@ func parseBulkHeader(msg []byte, state *readState) error {
 	}
 	if state.bulkLen == -1 { // null bulk
 		return nil
-	} else if state.bulkLen > 0 {
+	} else if state.bulkLen >= 0 {
 		state.msgType = msg[0]
 		state.readingMultiLine = true
 		state.expectedArgsCount = 1
@@ -281,13 +281,13 @@ func parseSingleLineReply(msg []byte) (redis.Reply, error) {
 func readBody(msg []byte, state *readState) error {
 	line := msg[0 : len(msg)-2]
 	var err error
-	if line[0] == '$' {
+	if len(line) > 0 && line[0] == '$' {
 		// bulk protocol
 		state.bulkLen, err = strconv.ParseInt(string(line[1:]), 10, 64)
 		if err != nil {
 			return errors.New("protocol error: " + string(msg))
 		}
-		if state.bulkLen <= 0 { // null bulk in multi bulks
+		if state.bulkLen < 0 { // null bulk in multi bulks
 			state.args = append(state.args, []byte{})
 			state.bulkLen = 0
 		}

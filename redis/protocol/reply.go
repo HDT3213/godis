@@ -28,7 +28,7 @@ func MakeBulkReply(arg []byte) *BulkReply {
 
 // ToBytes marshal redis.Reply
 func (r *BulkReply) ToBytes() []byte {
-	if len(r.Arg) == 0 {
+	if r.Arg == nil {
 		return nullBulkBytes
 	}
 	return []byte("$" + strconv.Itoa(len(r.Arg)) + CRLF + string(r.Arg) + CRLF)

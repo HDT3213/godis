@@ -25,6 +25,20 @@ func TestSet2(t *testing.T) {
 	}
 }
 
+func TestSetEmpty(t *testing.T) {
+	key := utils.RandString(10)
+	testDB.Exec(nil, utils.ToCmdLine("SET", key, ""))
+	actual := testDB.Exec(nil, utils.ToCmdLine("GET", key))
+	bulkReply, ok := actual.(*protocol.BulkReply)
+	if !ok {
+		t.Errorf("expected bulk protocol, actually %s", actual.ToBytes())
+		return
+	}
+	if !(bulkReply.Arg != nil && len(bulkReply.Arg) == 0) {
+		t.Error("illegal empty string")
+	}
+}
+
 func TestSet(t *testing.T) {
 	testDB.Flush()
 	key := utils.RandString(10)
