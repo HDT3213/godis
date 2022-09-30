@@ -7,7 +7,6 @@ import (
 )
 
 var (
-	nullBulkReplyBytes = []byte("$-1")
 
 	// CRLF is the line separator of redis serialization protocol
 	CRLF = "\r\n"
@@ -30,7 +29,7 @@ func MakeBulkReply(arg []byte) *BulkReply {
 // ToBytes marshal redis.Reply
 func (r *BulkReply) ToBytes() []byte {
 	if len(r.Arg) == 0 {
-		return nullBulkReplyBytes
+		return nullBulkBytes
 	}
 	return []byte("$" + strconv.Itoa(len(r.Arg)) + CRLF + string(r.Arg) + CRLF)
 }
