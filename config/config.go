@@ -2,12 +2,13 @@ package config
 
 import (
 	"bufio"
-	"github.com/hdt3213/godis/lib/logger"
 	"io"
 	"os"
 	"reflect"
 	"strconv"
 	"strings"
+
+	"github.com/hdt3213/godis/lib/logger"
 )
 
 // ServerProperties defines global config properties
@@ -20,7 +21,7 @@ type ServerProperties struct {
 	RequirePass       string `cfg:"requirepass"`
 	Databases         int    `cfg:"databases"`
 	RDBFilename       string `cfg:"dbfilename"`
-	MasterAuth        string `cfg:"masterauth""`
+	MasterAuth        string `cfg:"masterauth"`
 	SlaveAnnouncePort int    `cfg:"slave-announce-port"`
 	SlaveAnnounceIP   string `cfg:"slave-announce-ip"`
 	ReplTimeout       int    `cfg:"repl-timeout"`
