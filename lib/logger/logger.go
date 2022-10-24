@@ -55,7 +55,7 @@ func Setup(settings *Settings) {
 		time.Now().Format(settings.TimeFormat),
 		settings.Ext)
 
-	logFile, err := mustOpen(fileName, dir)
+	logFile, err = mustOpen(fileName, dir)
 	if err != nil {
 		log.Fatalf("logging.Setup err: %s", err)
 	}
