@@ -76,6 +76,7 @@ func parse0(reader io.Reader, ch chan<- *Payload) {
 	defer func() {
 		if err := recover(); err != nil {
 			logger.Error(err, string(debug.Stack()))
+			ch <- nil
 		}
 	}()
 
