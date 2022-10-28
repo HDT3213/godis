@@ -50,7 +50,7 @@ func parse(src io.Reader) *ServerProperties {
 	scanner := bufio.NewScanner(src)
 	for scanner.Scan() {
 		line := scanner.Text()
-		if len(line) > 0 && line[0] == '#' {
+		if len(line) > 0 && strings.TrimLeft(line, " ")[0] == '#' {
 			continue
 		}
 		pivot := strings.IndexAny(line, " ")
@@ -72,7 +72,7 @@ func parse(src io.Reader) *ServerProperties {
 		field := t.Elem().Field(i)
 		fieldVal := v.Elem().Field(i)
 		key, ok := field.Tag.Lookup("cfg")
-		if !ok {
+		if !ok || strings.TrimLeft(key, " ") == "" {
 			key = field.Name
 		}
 		value, ok := rawMap[strings.ToLower(key)]
