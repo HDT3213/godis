@@ -76,6 +76,7 @@ func parse0(reader io.Reader, ch chan<- *Payload) {
 	defer func() {
 		if err := recover(); err != nil {
 			logger.Error(err, string(debug.Stack()))
+			close(ch)
 		}
 	}()
 
@@ -88,17 +89,12 @@ func parse0(reader io.Reader, ch chan<- *Payload) {
 		var ioErr bool
 		msg, ioErr, err = readLine(bufReader, &state)
 		if err != nil {
+			ch <- &Payload{Err: err}
 			if ioErr { // encounter io err, stop read
-				ch <- &Payload{
-					Err: err,
-				}
 				close(ch)
 				return
 			}
 			// protocol err, reset read state
-			ch <- &Payload{
-				Err: err,
-			}
 			state = readState{}
 			continue
 		}
@@ -227,9 +223,8 @@ func parseMultiBulkHeader(msg []byte, state *readState) error {
 		state.expectedArgsCount = int(expectedLine)
 		state.args = make([][]byte, 0, expectedLine)
 		return nil
-	} else {
-		return errors.New("protocol error: " + string(msg))
 	}
+	return errors.New("protocol error: " + string(msg))
 }
 
 func parseBulkHeader(msg []byte, state *readState) error {
@@ -246,9 +241,8 @@ func parseBulkHeader(msg []byte, state *readState) error {
 		state.expectedArgsCount = 1
 		state.args = make([][]byte, 0, 1)
 		return nil
-	} else {
-		return errors.New("protocol error: " + string(msg))
 	}
+	return errors.New("protocol error: " + string(msg))
 }
 
 func parseSingleLineReply(msg []byte) (redis.Reply, error) {
