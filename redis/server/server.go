@@ -61,7 +61,7 @@ func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 	}
 
 	client := connection.NewConn(conn)
-	h.activeConn.Store(client, 1)
+	h.activeConn.Store(client, struct{}{})
 
 	ch := parser.ParseStream(conn)
 	for payload := range ch {
