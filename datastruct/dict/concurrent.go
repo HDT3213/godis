@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // ConcurrentDict is thread safe map using sharding lock
@@ -244,8 +245,10 @@ func (dict *ConcurrentDict) RandomKeys(limit int) []string {
 	shardCount := len(dict.table)
 
 	result := make([]string, limit)
-	for i := 0; i < limit; {
-		shard := dict.getShard(uint32(rand.Intn(shardCount)))
+	nR := rand.New(rand.NewSource(time.Now().UnixNano()))
+	cycleCount := 0
+	for i := 0; i < limit; cycleCount++ {
+		shard := dict.getShard(uint32(nR.Intn(shardCount)))
 		if shard == nil {
 			continue
 		}
@@ -253,6 +256,11 @@ func (dict *ConcurrentDict) RandomKeys(limit int) []string {
 		if key != "" {
 			result[i] = key
 			i++
+		}
+		if cycleCount > 0 && cycleCount%(limit*2) == 0 {
+			if limit >= dict.Len() {
+				return dict.Keys()
+			}
 		}
 	}
 	return result
@@ -266,16 +274,25 @@ func (dict *ConcurrentDict) RandomDistinctKeys(limit int) []string {
 	}
 
 	shardCount := len(dict.table)
-	result := make(map[string]bool)
-	for len(result) < limit {
-		shardIndex := uint32(rand.Intn(shardCount))
+	result := make(map[string]struct{})
+	nR := rand.New(rand.NewSource(time.Now().UnixNano()))
+	for cycleCount := 0; len(result) < limit; cycleCount++ {
+		shardIndex := uint32(nR.Intn(shardCount))
 		shard := dict.getShard(shardIndex)
 		if shard == nil {
 			continue
 		}
 		key := shard.RandomKey()
 		if key != "" {
-			result[key] = true
+			if _, exists := result[key]; !exists {
+				result[key] = struct{}{}
+			}
+		}
+		// the whole dict only has 1 item data, During this period, remove it, will get stuck in a loop
+		if cycleCount > 0 && cycleCount%(limit*2) == 0 {
+			if limit >= dict.Len() {
+				return dict.Keys()
+			}
 		}
 	}
 	arr := make([]string, limit)
