@@ -1,6 +1,9 @@
 package sortedset
 
-import "math/rand"
+import (
+	"math/bits"
+	"math/rand"
+)
 
 const (
 	maxLevel = 16
@@ -53,14 +56,9 @@ func makeSkiplist() *skiplist {
 }
 
 func randomLevel() int16 {
-	level := int16(1)
-	for float32(rand.Int31()&0xFFFF) < (0.25 * 0xFFFF) {
-		level++
-	}
-	if level < maxLevel {
-		return level
-	}
-	return maxLevel
+	total := uint64(1)<<uint64(maxLevel) - 1
+	k := rand.Uint64() % total
+	return maxLevel - int16(bits.Len64(k)) + 1
 }
 
 func (skiplist *skiplist) insert(member string, score float64) *node {
