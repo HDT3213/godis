@@ -285,7 +285,7 @@ func (mdb *MultiDB) doPsync() error {
 	logger.Info(fmt.Sprintf("receive %d bytes of rdb from master", len(psyncData.Arg)))
 	rdbDec := rdb.NewDecoder(bytes.NewReader(psyncData.Arg))
 	rdbHolder := MakeBasicMultiDB()
-	err = dumpRDB(rdbDec, rdbHolder)
+	err = importRDB(rdbDec, rdbHolder)
 	if err != nil {
 		return errors.New("dump rdb failed: " + err.Error())
 	}
