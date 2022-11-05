@@ -97,16 +97,16 @@ func (tx *Transaction) prepare() error {
 	timewheel.Delay(maxLockTime, taskKey, func() {
 		if tx.status == preparedStatus { // rollback transaction uncommitted until expire
 			logger.Info("abort transaction: " + tx.id)
-			_ = tx.rollback()
+			tx.mu.Lock()
+			defer tx.mu.Unlock()
+			_ = tx.rollbackWithLock()
 		}
 	})
 	return nil
 }
 
-func (tx *Transaction) rollback() error {
+func (tx *Transaction) rollbackWithLock() error {
 	curStatus := tx.status
-	tx.mu.Lock()
-	defer tx.mu.Unlock()
 
 	if tx.status != curStatus { // ensure status not changed by other goroutine
 		return fmt.Errorf("tx %s status changed", tx.id)
@@ -154,7 +154,10 @@ func execRollback(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.R
 		return protocol.MakeIntReply(0)
 	}
 	tx, _ := raw.(*Transaction)
-	err := tx.rollback()
+
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+	err := tx.rollbackWithLock()
 	if err != nil {
 		return protocol.MakeErrReply(err.Error())
 	}
@@ -184,7 +187,7 @@ func execCommit(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Rep
 
 	if protocol.IsErrorReply(result) {
 		// failed
-		err2 := tx.rollback()
+		err2 := tx.rollbackWithLock()
 		return protocol.MakeErrReply(fmt.Sprintf("err occurs when rollback: %v, origin err: %s", err2, result))
 	}
 	// after committed
