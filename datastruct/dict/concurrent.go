@@ -5,6 +5,7 @@ import (
 	"math/rand"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // ConcurrentDict is thread safe map using sharding lock
@@ -108,6 +109,7 @@ func (dict *ConcurrentDict) Put(key string, val interface{}) (result int) {
 	hashCode := fnv32(key)
 	index := dict.spread(hashCode)
 	shard := dict.getShard(index)
+	dict.addCount()
 	shard.mutex.Lock()
 	defer shard.mutex.Unlock()
 
@@ -116,7 +118,6 @@ func (dict *ConcurrentDict) Put(key string, val interface{}) (result int) {
 		return 0
 	}
 	shard.m[key] = val
-	dict.addCount()
 	return 1
 }
 
@@ -244,8 +245,9 @@ func (dict *ConcurrentDict) RandomKeys(limit int) []string {
 	shardCount := len(dict.table)
 
 	result := make([]string, limit)
+	nR := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := 0; i < limit; {
-		shard := dict.getShard(uint32(rand.Intn(shardCount)))
+		shard := dict.getShard(uint32(nR.Intn(shardCount)))
 		if shard == nil {
 			continue
 		}
@@ -266,16 +268,19 @@ func (dict *ConcurrentDict) RandomDistinctKeys(limit int) []string {
 	}
 
 	shardCount := len(dict.table)
-	result := make(map[string]bool)
+	result := make(map[string]struct{})
+	nR := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for len(result) < limit {
-		shardIndex := uint32(rand.Intn(shardCount))
+		shardIndex := uint32(nR.Intn(shardCount))
 		shard := dict.getShard(shardIndex)
 		if shard == nil {
 			continue
 		}
 		key := shard.RandomKey()
 		if key != "" {
-			result[key] = true
+			if _, exists := result[key]; !exists {
+				result[key] = struct{}{}
+			}
 		}
 	}
 	arr := make([]string, limit)
