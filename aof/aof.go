@@ -82,6 +82,7 @@ func (handler *Handler) handleAof() {
 			_, err := handler.aofFile.Write(data)
 			if err != nil {
 				logger.Warn(err)
+				handler.pausingAof.RUnlock()
 				continue // skip this command
 			}
 			handler.currentDB = p.dbIndex
