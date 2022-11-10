@@ -69,7 +69,7 @@ func (dict *ConcurrentDict) spread(hashCode uint32) uint32 {
 		panic("dict is nil")
 	}
 	tableSize := uint32(len(dict.table))
-	return (tableSize - 1) & uint32(hashCode)
+	return (tableSize - 1) & hashCode
 }
 
 func (dict *ConcurrentDict) getShard(index uint32) *shard {
@@ -86,10 +86,10 @@ func (dict *ConcurrentDict) Get(key string) (val interface{}, exists bool) {
 	}
 	hashCode := fnv32(key)
 	index := dict.spread(hashCode)
-	shard := dict.getShard(index)
-	shard.mutex.RLock()
-	defer shard.mutex.RUnlock()
-	val, exists = shard.m[key]
+	s := dict.getShard(index)
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
+	val, exists = s.m[key]
 	return
 }
 
@@ -108,16 +108,16 @@ func (dict *ConcurrentDict) Put(key string, val interface{}) (result int) {
 	}
 	hashCode := fnv32(key)
 	index := dict.spread(hashCode)
-	shard := dict.getShard(index)
+	s := dict.getShard(index)
 	dict.addCount()
-	shard.mutex.Lock()
-	defer shard.mutex.Unlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
-	if _, ok := shard.m[key]; ok {
-		shard.m[key] = val
+	if _, ok := s.m[key]; ok {
+		s.m[key] = val
 		return 0
 	}
-	shard.m[key] = val
+	s.m[key] = val
 	return 1
 }
 
@@ -128,14 +128,14 @@ func (dict *ConcurrentDict) PutIfAbsent(key string, val interface{}) (result int
 	}
 	hashCode := fnv32(key)
 	index := dict.spread(hashCode)
-	shard := dict.getShard(index)
-	shard.mutex.Lock()
-	defer shard.mutex.Unlock()
+	s := dict.getShard(index)
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
-	if _, ok := shard.m[key]; ok {
+	if _, ok := s.m[key]; ok {
 		return 0
 	}
-	shard.m[key] = val
+	s.m[key] = val
 	dict.addCount()
 	return 1
 }
@@ -147,12 +147,12 @@ func (dict *ConcurrentDict) PutIfExists(key string, val interface{}) (result int
 	}
 	hashCode := fnv32(key)
 	index := dict.spread(hashCode)
-	shard := dict.getShard(index)
-	shard.mutex.Lock()
-	defer shard.mutex.Unlock()
+	s := dict.getShard(index)
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
-	if _, ok := shard.m[key]; ok {
-		shard.m[key] = val
+	if _, ok := s.m[key]; ok {
+		s.m[key] = val
 		return 1
 	}
 	return 0
@@ -165,12 +165,12 @@ func (dict *ConcurrentDict) Remove(key string) (result int) {
 	}
 	hashCode := fnv32(key)
 	index := dict.spread(hashCode)
-	shard := dict.getShard(index)
-	shard.mutex.Lock()
-	defer shard.mutex.Unlock()
+	s := dict.getShard(index)
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
-	if _, ok := shard.m[key]; ok {
-		delete(shard.m, key)
+	if _, ok := s.m[key]; ok {
+		delete(s.m, key)
 		dict.decreaseCount()
 		return 1
 	}
@@ -192,11 +192,11 @@ func (dict *ConcurrentDict) ForEach(consumer Consumer) {
 		panic("dict is nil")
 	}
 
-	for _, shard := range dict.table {
-		shard.mutex.RLock()
+	for _, s := range dict.table {
+		s.mutex.RLock()
 		func() {
-			defer shard.mutex.RUnlock()
-			for key, value := range shard.m {
+			defer s.mutex.RUnlock()
+			for key, value := range s.m {
 				continues := consumer(key, value)
 				if !continues {
 					return
@@ -247,11 +247,11 @@ func (dict *ConcurrentDict) RandomKeys(limit int) []string {
 	result := make([]string, limit)
 	nR := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for i := 0; i < limit; {
-		shard := dict.getShard(uint32(nR.Intn(shardCount)))
-		if shard == nil {
+		s := dict.getShard(uint32(nR.Intn(shardCount)))
+		if s == nil {
 			continue
 		}
-		key := shard.RandomKey()
+		key := s.RandomKey()
 		if key != "" {
 			result[i] = key
 			i++
@@ -272,11 +272,11 @@ func (dict *ConcurrentDict) RandomDistinctKeys(limit int) []string {
 	nR := rand.New(rand.NewSource(time.Now().UnixNano()))
 	for len(result) < limit {
 		shardIndex := uint32(nR.Intn(shardCount))
-		shard := dict.getShard(shardIndex)
-		if shard == nil {
+		s := dict.getShard(shardIndex)
+		if s == nil {
 			continue
 		}
-		key := shard.RandomKey()
+		key := s.RandomKey()
 		if key != "" {
 			if _, exists := result[key]; !exists {
 				result[key] = struct{}{}
