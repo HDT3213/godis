@@ -2,7 +2,6 @@
 package cluster
 
 import (
-	"context"
 	"fmt"
 	"github.com/hdt3213/godis/config"
 	database2 "github.com/hdt3213/godis/database"
@@ -12,8 +11,10 @@ import (
 	"github.com/hdt3213/godis/lib/consistenthash"
 	"github.com/hdt3213/godis/lib/idgenerator"
 	"github.com/hdt3213/godis/lib/logger"
+	"github.com/hdt3213/godis/lib/pool"
+	"github.com/hdt3213/godis/lib/utils"
+	"github.com/hdt3213/godis/redis/client"
 	"github.com/hdt3213/godis/redis/protocol"
-	"github.com/jolestar/go-commons-pool/v2"
 	"runtime/debug"
 	"strings"
 )
@@ -28,9 +29,9 @@ type PeerPicker interface {
 type Cluster struct {
 	self string
 
-	nodes          []string
-	peerPicker     PeerPicker
-	peerConnection map[string]*pool.ObjectPool
+	nodes           []string
+	peerPicker      PeerPicker
+	nodeConnections map[string]*pool.Pool
 
 	db           database.EmbedDB
 	transactions *dict.SimpleDict // id -> Transaction
@@ -52,10 +53,10 @@ func MakeCluster() *Cluster {
 	cluster := &Cluster{
 		self: config.Properties.Self,
 
-		db:             database2.NewStandaloneServer(),
-		transactions:   dict.MakeSimple(),
-		peerPicker:     consistenthash.New(replicas, nil),
-		peerConnection: make(map[string]*pool.ObjectPool),
+		db:              database2.NewStandaloneServer(),
+		transactions:    dict.MakeSimple(),
+		peerPicker:      consistenthash.New(replicas, nil),
+		nodeConnections: make(map[string]*pool.Pool),
 
 		idGenerator: idgenerator.MakeGenerator(config.Properties.Self),
 		relayImpl:   defaultRelayImpl,
@@ -71,11 +72,32 @@ func MakeCluster() *Cluster {
 	}
 	nodes = append(nodes, config.Properties.Self)
 	cluster.peerPicker.AddNode(nodes...)
-	ctx := context.Background()
-	for _, peer := range config.Properties.Peers {
-		cluster.peerConnection[peer] = pool.NewObjectPoolWithDefaultConfig(ctx, &connectionFactory{
-			Peer: peer,
-		})
+	connectionPoolConfig := pool.Config{
+		MaxIdle:   1,
+		MaxActive: 16,
+	}
+	for _, p := range config.Properties.Peers {
+		peer := p
+		factory := func() (interface{}, error) {
+			c, err := client.MakeClient(peer)
+			if err != nil {
+				return nil, err
+			}
+			c.Start()
+			// all peers of cluster should use the same password
+			if config.Properties.RequirePass != "" {
+				c.Send(utils.ToCmdLine("AUTH", config.Properties.RequirePass))
+			}
+			return c, nil
+		}
+		finalizer := func(x interface{}) {
+			cli, ok := x.(client.Client)
+			if !ok {
+				return
+			}
+			cli.Close()
+		}
+		cluster.nodeConnections[peer] = pool.New(factory, finalizer, connectionPoolConfig)
 	}
 	cluster.nodes = nodes
 	return cluster
@@ -87,6 +109,9 @@ type CmdFunc func(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.R
 // Close stops current node of cluster
 func (cluster *Cluster) Close() {
 	cluster.db.Close()
+	for _, pool := range cluster.nodeConnections {
+		pool.Close()
+	}
 }
 
 var router = makeRouter()
