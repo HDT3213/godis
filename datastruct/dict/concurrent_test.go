@@ -1,10 +1,12 @@
 package dict
 
 import (
-	"github.com/hdt3213/godis/lib/utils"
+	"math/rand"
 	"strconv"
 	"sync"
 	"testing"
+
+	"github.com/hdt3213/godis/lib/utils"
 )
 
 func TestConcurrentPut(t *testing.T) {
@@ -123,7 +125,7 @@ func TestConcurrentRemove(t *testing.T) {
 		key := "k" + strconv.Itoa(i)
 		d.Put(key, i)
 	}
-	if d.Len()!=totalCount{
+	if d.Len() != totalCount {
 		t.Error("put test failed: expected len is 100, actual: " + strconv.Itoa(d.Len()))
 	}
 	for i := 0; i < totalCount; i++ {
@@ -143,7 +145,7 @@ func TestConcurrentRemove(t *testing.T) {
 		if ret != 1 {
 			t.Error("remove test failed: expected result 1, actual: " + strconv.Itoa(ret) + ", key:" + key)
 		}
-		if d.Len()!=totalCount-i-1{
+		if d.Len() != totalCount-i-1 {
 			t.Error("put test failed: expected len is 99, actual: " + strconv.Itoa(d.Len()))
 		}
 		_, ok = d.Get(key)
@@ -154,7 +156,7 @@ func TestConcurrentRemove(t *testing.T) {
 		if ret != 0 {
 			t.Error("remove test failed: expected result 0 actual: " + strconv.Itoa(ret))
 		}
-		if d.Len()!=totalCount-i-1{
+		if d.Len() != totalCount-i-1 {
 			t.Error("put test failed: expected len is 99, actual: " + strconv.Itoa(d.Len()))
 		}
 	}
@@ -286,5 +288,52 @@ func TestConcurrentDict_Keys(t *testing.T) {
 	}
 	if len(d.Keys()) != size {
 		t.Errorf("expect %d keys, actual: %d", size, len(d.Keys()))
+	}
+}
+
+// BenchmarkTestConcurrentMap test ConcurrentDictMap
+func BenchmarkTestConcurrentDictMap(b *testing.B) {
+	times := 10000000
+	for k := 0; k < b.N; k++ {
+		b.StopTimer()
+		// new 10000 (string -> int)
+		testKV := map[string]int{}
+		for i := 0; i < 10000; i++ {
+			testKV[strconv.Itoa(i)] = i
+		}
+
+		pMap := MakeConcurrent(0)
+
+		// set to map
+		for k, v := range testKV {
+			pMap.Put(k, v)
+		}
+
+		// start timer
+		b.StartTimer()
+
+		wg := sync.WaitGroup{}
+		wg.Add(2)
+
+		// put value
+		go func() {
+			for i := 0; i < times; i++ {
+				index := rand.Intn(times)
+				pMap.Put(strconv.Itoa(index), index+1)
+			}
+			wg.Done()
+		}()
+
+		// read
+		go func() {
+			// key read times
+			for i := 0; i < times; i++ {
+				index := rand.Intn(times)
+				pMap.Get(strconv.Itoa(index))
+			}
+			wg.Done()
+		}()
+
+		wg.Wait()
 	}
 }
