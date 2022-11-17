@@ -79,13 +79,16 @@ func TestReplication(t *testing.T) {
 		t.Error(err)
 		return
 	}
+	time.Sleep(3 * time.Second)
 
 	// test reconnect
 	config.Properties.ReplTimeout = 1
 	_ = mdb.replication.masterConn.Close()
+	mdb.replication.lastRecvTime = time.Now().Add(-time.Hour) // mock timeout
+	mdb.slaveCron()
+	time.Sleep(3 * time.Second)
 	ret = masterCli.Send(utils.ToCmdLine("set", "1", "3"))
 	asserts.AssertStatusReply(t, ret, "OK")
-	mdb.slaveCron()
 	success = false
 	for i := 0; i < 10; i++ {
 		// wait for sync

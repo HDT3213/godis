@@ -30,7 +30,7 @@ type MultiDB struct {
 	// store master node address
 	slaveOf     string
 	role        int32
-	replication *replicationStatus
+	replication *slaveStatus
 }
 
 // NewStandaloneServer creates a standalone redis server, with multi database and all other funtions

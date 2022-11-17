@@ -4,13 +4,13 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
-	"fmt"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/redis/protocol"
 	"io"
 	"runtime/debug"
 	"strconv"
+	"strings"
 )
 
 // Payload stores redis.Reply or error
@@ -75,14 +75,24 @@ func parse0(rawReader io.Reader, ch chan<- *Payload) {
 		}
 		length := len(line)
 		if length <= 2 || line[length-2] != '\r' {
-			protocolError(ch, line)
+			// there are some empty lines within replication traffic, ignore this error
+			//protocolError(ch, "empty line")
 			continue
 		}
 		line = bytes.TrimSuffix(line, []byte{'\r', '\n'})
 		switch line[0] {
 		case '+':
+			content := string(line[1:])
 			ch <- &Payload{
-				Data: protocol.MakeStatusReply(string(line[1:])),
+				Data: protocol.MakeStatusReply(content),
+			}
+			if strings.HasPrefix(content, "FULLRESYNC") {
+				err = parseRDBBulkString(reader, ch)
+				if err != nil {
+					ch <- &Payload{Err: err}
+					close(ch)
+					return
+				}
 			}
 		case '-':
 			ch <- &Payload{
@@ -91,7 +101,7 @@ func parse0(rawReader io.Reader, ch chan<- *Payload) {
 		case ':':
 			value, err := strconv.ParseInt(string(line[1:]), 10, 64)
 			if err != nil {
-				protocolError(ch, line)
+				protocolError(ch, "illegal number "+string(line[1:]))
 				continue
 			}
 			ch <- &Payload{
@@ -123,7 +133,7 @@ func parse0(rawReader io.Reader, ch chan<- *Payload) {
 func parseBulkString(header []byte, reader *bufio.Reader, ch chan<- *Payload) error {
 	strLen, err := strconv.ParseInt(string(header[1:]), 10, 64)
 	if err != nil || strLen < -1 {
-		protocolError(ch, header)
+		protocolError(ch, "illegal bulk string header: "+string(header))
 		return nil
 	} else if strLen == -1 {
 		ch <- &Payload{
@@ -142,10 +152,29 @@ func parseBulkString(header []byte, reader *bufio.Reader, ch chan<- *Payload) er
 	return nil
 }
 
+// there is no CRLF between RDB and following AOF, therefore it needs to be treated differently
+func parseRDBBulkString(reader *bufio.Reader, ch chan<- *Payload) error {
+	header, err := reader.ReadBytes('\n')
+	header = bytes.TrimSuffix(header, []byte{'\r', '\n'})
+	strLen, err := strconv.ParseInt(string(header[1:]), 10, 64)
+	if err != nil || strLen <= 0 {
+		return errors.New("illegal bulk header: " + string(header))
+	}
+	body := make([]byte, strLen)
+	_, err = io.ReadFull(reader, body)
+	if err != nil {
+		return err
+	}
+	ch <- &Payload{
+		Data: protocol.MakeBulkReply(body[:len(body)]),
+	}
+	return nil
+}
+
 func parseArray(header []byte, reader *bufio.Reader, ch chan<- *Payload) error {
 	nStrs, err := strconv.ParseInt(string(header[1:]), 10, 64)
 	if err != nil || nStrs < 0 {
-		protocolError(ch, header)
+		protocolError(ch, "illegal array header "+string(header[1:]))
 		return nil
 	} else if nStrs == 0 {
 		ch <- &Payload{
@@ -162,12 +191,12 @@ func parseArray(header []byte, reader *bufio.Reader, ch chan<- *Payload) error {
 		}
 		length := len(line)
 		if length < 4 || line[length-2] != '\r' || line[0] != '$' {
-			protocolError(ch, line)
+			protocolError(ch, "illegal bulk string header "+string(line))
 			break
 		}
 		strLen, err := strconv.ParseInt(string(line[1:length-2]), 10, 64)
 		if err != nil || strLen < -1 {
-			protocolError(ch, header)
+			protocolError(ch, "illegal bulk string length "+string(line))
 			break
 		} else if strLen == -1 {
 			lines = append(lines, []byte{})
@@ -186,7 +215,7 @@ func parseArray(header []byte, reader *bufio.Reader, ch chan<- *Payload) error {
 	return nil
 }
 
-func protocolError(ch chan<- *Payload, msg []byte) {
-	err := errors.New(fmt.Sprintf("Protocol error: %s", string(msg)))
+func protocolError(ch chan<- *Payload, msg string) {
+	err := errors.New("protocol error: " + msg)
 	ch <- &Payload{Err: err}
 }
