@@ -12,3 +12,26 @@ func TestRandomLevel(t *testing.T) {
 		t.Logf("level %d, count %d", i, m[int16(i)])
 	}
 }
+
+func TestSortedSet_GetByRank(t *testing.T) {
+	var list = makeSkiplist()
+	list.insert("m1", 1)
+	list.insert("m2", 2)
+	list.insert("m3", 3)
+	node := list.getByRank(3)
+	if node.Element.Member != "m3" {
+		t.Failed()
+	}
+	node = list.getByRank(2)
+	if node.Element.Member != "m2" {
+		t.Failed()
+	}
+	node = list.getByRank(1)
+	if node.Element.Member != "m1" {
+		t.Failed()
+	}
+	node = list.getByRank(5)
+	if node != nil {
+		t.Failed()
+	}
+}

@@ -206,8 +206,8 @@ func (skiplist *skiplist) getRank(member string, score float64) int64 {
  * 1-based rank
  */
 func (skiplist *skiplist) getByRank(rank int64) *node {
-	var i int64 = 0
-	n := skiplist.header
+	var i int64 = 1
+	n := skiplist.header.level[0].forward
 	// scan from top level
 	for level := skiplist.level - 1; level >= 0; level-- {
 		for n.level[level].forward != nil && (i+n.level[level].span) <= rank {
