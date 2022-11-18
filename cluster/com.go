@@ -1,7 +1,6 @@
 package cluster
 
 import (
-	"context"
 	"errors"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/utils"
@@ -11,27 +10,28 @@ import (
 )
 
 func (cluster *Cluster) getPeerClient(peer string) (*client.Client, error) {
-	factory, ok := cluster.peerConnection[peer]
+	pool, ok := cluster.nodeConnections[peer]
 	if !ok {
-		return nil, errors.New("connection factory not found")
+		return nil, errors.New("connection pool not found")
 	}
-	raw, err := factory.BorrowObject(context.Background())
+	raw, err := pool.Get()
 	if err != nil {
 		return nil, err
 	}
 	conn, ok := raw.(*client.Client)
 	if !ok {
-		return nil, errors.New("connection factory make wrong type")
+		return nil, errors.New("connection pool make wrong type")
 	}
 	return conn, nil
 }
 
 func (cluster *Cluster) returnPeerClient(peer string, peerClient *client.Client) error {
-	connectionFactory, ok := cluster.peerConnection[peer]
+	pool, ok := cluster.nodeConnections[peer]
 	if !ok {
-		return errors.New("connection factory not found")
+		return errors.New("connection pool not found")
 	}
-	return connectionFactory.ReturnObject(context.Background(), peerClient)
+	pool.Put(peerClient)
+	return nil
 }
 
 var defaultRelayImpl = func(cluster *Cluster, node string, c redis.Connection, cmdLine CmdLine) redis.Reply {

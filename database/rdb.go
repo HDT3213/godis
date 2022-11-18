@@ -22,14 +22,14 @@ func loadRdbFile(mdb *MultiDB) {
 		_ = rdbFile.Close()
 	}()
 	decoder := rdb.NewDecoder(rdbFile)
-	err = dumpRDB(decoder, mdb)
+	err = importRDB(decoder, mdb)
 	if err != nil {
 		logger.Error("dump rdb file failed " + err.Error())
 		return
 	}
 }
 
-func dumpRDB(dec *core.Decoder, mdb *MultiDB) error {
+func importRDB(dec *core.Decoder, mdb *MultiDB) error {
 	return dec.Parse(func(o rdb.RedisObject) bool {
 		db := mdb.mustSelectDB(o.GetDBIndex())
 		switch o.GetType() {
