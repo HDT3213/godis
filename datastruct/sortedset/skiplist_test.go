@@ -15,10 +15,14 @@ func TestRandomLevel(t *testing.T) {
 
 func TestSortedSet_GetByRank(t *testing.T) {
 	var list = makeSkiplist()
+	node := list.getByRank(1)
+	if node != nil {
+		t.Failed()
+	}
 	list.insert("m1", 1)
 	list.insert("m2", 2)
 	list.insert("m3", 3)
-	node := list.getByRank(3)
+	node = list.getByRank(3)
 	if node.Element.Member != "m3" {
 		t.Failed()
 	}
