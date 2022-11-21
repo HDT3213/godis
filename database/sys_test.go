@@ -20,7 +20,7 @@ func TestPing(t *testing.T) {
 
 func TestAuth(t *testing.T) {
 	passwd := utils.RandString(10)
-	c := &connection.FakeConn{}
+	c := connection.NewFakeConn()
 	ret := testServer.Exec(c, utils.ToCmdLine("AUTH"))
 	asserts.AssertErrReply(t, ret, "ERR wrong number of arguments for 'auth' command")
 	ret = testServer.Exec(c, utils.ToCmdLine("AUTH", passwd))

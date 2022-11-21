@@ -8,22 +8,12 @@ import (
 	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/protocol"
 	"github.com/hdt3213/godis/redis/protocol/asserts"
-	"sync/atomic"
 	"testing"
 	"time"
 )
 
-func TestReplication(t *testing.T) {
-	mdb := &MultiDB{}
-	mdb.dbSet = make([]*atomic.Value, 16)
-	for i := range mdb.dbSet {
-		singleDB := makeDB()
-		singleDB.index = i
-		holder := &atomic.Value{}
-		holder.Store(singleDB)
-		mdb.dbSet[i] = holder
-	}
-	mdb.replication = initReplStatus()
+func TestReplicationSlaveSide(t *testing.T) {
+	mdb := mockServer()
 	masterCli, err := client.MakeClient("127.0.0.1:6379")
 	if err != nil {
 		t.Error(err)
@@ -33,7 +23,7 @@ func TestReplication(t *testing.T) {
 	// sync with master
 	ret := masterCli.Send(utils.ToCmdLine("set", "1", "1"))
 	asserts.AssertStatusReply(t, ret, "OK")
-	conn := &connection.FakeConn{}
+	conn := connection.NewFakeConn()
 	ret = mdb.Exec(conn, utils.ToCmdLine("SLAVEOF", "127.0.0.1", "6379"))
 	asserts.AssertStatusReply(t, ret, "OK")
 	success := false
@@ -74,7 +64,7 @@ func TestReplication(t *testing.T) {
 		t.Error("sync failed")
 		return
 	}
-	err = mdb.replication.sendAck2Master()
+	err = mdb.slaveStatus.sendAck2Master()
 	if err != nil {
 		t.Error(err)
 		return
@@ -83,8 +73,8 @@ func TestReplication(t *testing.T) {
 
 	// test reconnect
 	config.Properties.ReplTimeout = 1
-	_ = mdb.replication.masterConn.Close()
-	mdb.replication.lastRecvTime = time.Now().Add(-time.Hour) // mock timeout
+	_ = mdb.slaveStatus.masterConn.Close()
+	mdb.slaveStatus.lastRecvTime = time.Now().Add(-time.Hour) // mock timeout
 	mdb.slaveCron()
 	time.Sleep(3 * time.Second)
 	ret = masterCli.Send(utils.ToCmdLine("set", "1", "3"))
@@ -134,7 +124,7 @@ func TestReplication(t *testing.T) {
 		return
 	}
 
-	err = mdb.replication.close()
+	err = mdb.slaveStatus.close()
 	if err != nil {
 		t.Error("cannot close")
 	}

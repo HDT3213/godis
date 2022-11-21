@@ -31,9 +31,9 @@ type slaveStatus struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 
-	// configVersion stands for the version of replication config. Any change of master host/port will cause configVersion increment
-	// If configVersion change has been found during replication current replication procedure will stop.
-	// It is designed to abort a running replication procedure
+	// configVersion stands for the version of slaveStatus config. Any change of master host/port will cause configVersion increment
+	// If configVersion change has been found during slaveStatus current slaveStatus procedure will stop.
+	// It is designed to abort a running slaveStatus procedure
 	configVersion int32
 
 	masterHost string
@@ -47,26 +47,10 @@ type slaveStatus struct {
 	running      sync.WaitGroup
 }
 
-var configChangedErr = errors.New("replication config changed")
+var configChangedErr = errors.New("slaveStatus config changed")
 
-func initReplStatus() *slaveStatus {
-	repl := &slaveStatus{}
-	// start cron
-	return repl
-}
-
-func (mdb *MultiDB) startReplCron() {
-	go func() {
-		defer func() {
-			if err := recover(); err != nil {
-				logger.Error("panic", err)
-			}
-		}()
-		ticker := time.Tick(time.Second)
-		for range ticker {
-			mdb.slaveCron()
-		}
-	}()
+func initReplSlaveStatus() *slaveStatus {
+	return &slaveStatus{}
 }
 
 func (mdb *MultiDB) execSlaveOf(c redis.Connection, args [][]byte) redis.Reply {
@@ -80,29 +64,29 @@ func (mdb *MultiDB) execSlaveOf(c redis.Connection, args [][]byte) redis.Reply {
 	if err != nil {
 		return protocol.MakeErrReply("ERR value is not an integer or out of range")
 	}
-	mdb.replication.mutex.Lock()
+	mdb.slaveStatus.mutex.Lock()
 	atomic.StoreInt32(&mdb.role, slaveRole)
-	mdb.replication.masterHost = host
-	mdb.replication.masterPort = port
+	mdb.slaveStatus.masterHost = host
+	mdb.slaveStatus.masterPort = port
 	// use buffered channel in case receiver goroutine exited before controller send stop signal
-	atomic.AddInt32(&mdb.replication.configVersion, 1)
-	mdb.replication.mutex.Unlock()
+	atomic.AddInt32(&mdb.slaveStatus.configVersion, 1)
+	mdb.slaveStatus.mutex.Unlock()
 	go mdb.setupMaster()
 	return protocol.MakeOkReply()
 }
 
 func (mdb *MultiDB) slaveOfNone() {
-	mdb.replication.mutex.Lock()
-	defer mdb.replication.mutex.Unlock()
-	mdb.replication.masterHost = ""
-	mdb.replication.masterPort = 0
-	mdb.replication.replId = ""
-	mdb.replication.replOffset = -1
-	mdb.replication.stopSlaveWithMutex()
+	mdb.slaveStatus.mutex.Lock()
+	defer mdb.slaveStatus.mutex.Unlock()
+	mdb.slaveStatus.masterHost = ""
+	mdb.slaveStatus.masterPort = 0
+	mdb.slaveStatus.replId = ""
+	mdb.slaveStatus.replOffset = -1
+	mdb.slaveStatus.stopSlaveWithMutex()
 }
 
 // stopSlaveWithMutex stops in-progress connectWithMaster/fullSync/receiveAOF
-// invoker should have replication mutex
+// invoker should have slaveStatus mutex
 func (repl *slaveStatus) stopSlaveWithMutex() {
 	// update configVersion to stop connectWithMaster and fullSync
 	atomic.AddInt32(&repl.configVersion, 1)
@@ -135,11 +119,11 @@ func (mdb *MultiDB) setupMaster() {
 	}()
 	var configVersion int32
 	ctx, cancel := context.WithCancel(context.Background())
-	mdb.replication.mutex.Lock()
-	mdb.replication.ctx = ctx
-	mdb.replication.cancel = cancel
-	configVersion = mdb.replication.configVersion
-	mdb.replication.mutex.Unlock()
+	mdb.slaveStatus.mutex.Lock()
+	mdb.slaveStatus.ctx = ctx
+	mdb.slaveStatus.cancel = cancel
+	configVersion = mdb.slaveStatus.configVersion
+	mdb.slaveStatus.mutex.Unlock()
 	isFullReSync, err := mdb.connectWithMaster(configVersion)
 	if err != nil {
 		// connect failed, abort master
@@ -167,7 +151,7 @@ func (mdb *MultiDB) setupMaster() {
 // connectWithMaster finishes handshake with master
 // returns: isFullReSync, error
 func (mdb *MultiDB) connectWithMaster(configVersion int32) (bool, error) {
-	addr := mdb.replication.masterHost + ":" + strconv.Itoa(mdb.replication.masterPort)
+	addr := mdb.slaveStatus.masterHost + ":" + strconv.Itoa(mdb.slaveStatus.masterPort)
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
 		mdb.slaveOfNone() // abort
@@ -256,34 +240,34 @@ func (mdb *MultiDB) connectWithMaster(configVersion int32) (bool, error) {
 	}
 
 	// update connection
-	mdb.replication.mutex.Lock()
-	defer mdb.replication.mutex.Unlock()
-	if mdb.replication.configVersion != configVersion {
-		// replication conf changed during connecting and waiting mutex
+	mdb.slaveStatus.mutex.Lock()
+	defer mdb.slaveStatus.mutex.Unlock()
+	if mdb.slaveStatus.configVersion != configVersion {
+		// slaveStatus conf changed during connecting and waiting mutex
 		return false, configChangedErr
 	}
-	mdb.replication.masterConn = conn
-	mdb.replication.masterChan = masterChan
-	mdb.replication.lastRecvTime = time.Now()
+	mdb.slaveStatus.masterConn = conn
+	mdb.slaveStatus.masterChan = masterChan
+	mdb.slaveStatus.lastRecvTime = time.Now()
 	return mdb.psyncHandshake()
 }
 
 // psyncHandshake send `psync` to master and sync repl-id/offset with master
-// invoker should provide with replication.mutex
+// invoker should provide with slaveStatus.mutex
 func (mdb *MultiDB) psyncHandshake() (bool, error) {
 	replId := "?"
 	var replOffset int64 = -1
-	if mdb.replication.replId != "" {
-		replId = mdb.replication.replId
-		replOffset = mdb.replication.replOffset
+	if mdb.slaveStatus.replId != "" {
+		replId = mdb.slaveStatus.replId
+		replOffset = mdb.slaveStatus.replOffset
 	}
 	psyncCmdLine := utils.ToCmdLine("psync", replId, strconv.FormatInt(replOffset, 10))
 	psyncReq := protocol.MakeMultiBulkReply(psyncCmdLine)
-	_, err := mdb.replication.masterConn.Write(psyncReq.ToBytes())
+	_, err := mdb.slaveStatus.masterConn.Write(psyncReq.ToBytes())
 	if err != nil {
 		return false, errors.New("send failed " + err.Error())
 	}
-	psyncPayload := <-mdb.replication.masterChan
+	psyncPayload := <-mdb.slaveStatus.masterChan
 	if psyncPayload.Err != nil {
 		return false, errors.New("read response failed: " + psyncPayload.Err.Error())
 	}
@@ -300,12 +284,12 @@ func (mdb *MultiDB) psyncHandshake() (bool, error) {
 	var isFullReSync bool
 	if headers[0] == "FULLRESYNC" {
 		logger.Info("full re-sync with master")
-		mdb.replication.replId = headers[1]
-		mdb.replication.replOffset, err = strconv.ParseInt(headers[2], 10, 64)
+		mdb.slaveStatus.replId = headers[1]
+		mdb.slaveStatus.replOffset, err = strconv.ParseInt(headers[2], 10, 64)
 		isFullReSync = true
 	} else if headers[0] == "CONTINUE" {
 		logger.Info("continue partial sync")
-		mdb.replication.replId = headers[1]
+		mdb.slaveStatus.replId = headers[1]
 		isFullReSync = false
 	} else {
 		return false, errors.New("illegal psync resp: " + psyncHeader.Status)
@@ -314,13 +298,13 @@ func (mdb *MultiDB) psyncHandshake() (bool, error) {
 	if err != nil {
 		return false, errors.New("get illegal repl offset: " + headers[2])
 	}
-	logger.Info(fmt.Sprintf("repl id: %s, current offset: %d", mdb.replication.replId, mdb.replication.replOffset))
+	logger.Info(fmt.Sprintf("repl id: %s, current offset: %d", mdb.slaveStatus.replId, mdb.slaveStatus.replOffset))
 	return isFullReSync, nil
 }
 
 // loadMasterRDB downloads rdb after handshake has been done
 func (mdb *MultiDB) loadMasterRDB(configVersion int32) error {
-	rdbPayload := <-mdb.replication.masterChan
+	rdbPayload := <-mdb.slaveStatus.masterChan
 	if rdbPayload.Err != nil {
 		return errors.New("read response failed: " + rdbPayload.Err.Error())
 	}
@@ -337,10 +321,10 @@ func (mdb *MultiDB) loadMasterRDB(configVersion int32) error {
 		return errors.New("dump rdb failed: " + err.Error())
 	}
 
-	mdb.replication.mutex.Lock()
-	defer mdb.replication.mutex.Unlock()
-	if mdb.replication.configVersion != configVersion {
-		// replication conf changed during connecting and waiting mutex
+	mdb.slaveStatus.mutex.Lock()
+	defer mdb.slaveStatus.mutex.Unlock()
+	if mdb.slaveStatus.configVersion != configVersion {
+		// slaveStatus conf changed during connecting and waiting mutex
 		return configChangedErr
 	}
 	for i, h := range rdbHolder.dbSet {
@@ -353,13 +337,13 @@ func (mdb *MultiDB) loadMasterRDB(configVersion int32) error {
 }
 
 func (mdb *MultiDB) receiveAOF(ctx context.Context, configVersion int32) error {
-	conn := connection.NewConn(mdb.replication.masterConn)
-	conn.SetRole(connection.ReplicationRecvCli)
-	mdb.replication.running.Add(1)
-	defer mdb.replication.running.Done()
+	conn := connection.NewConn(mdb.slaveStatus.masterConn)
+	conn.SetMaster()
+	mdb.slaveStatus.running.Add(1)
+	defer mdb.slaveStatus.running.Done()
 	for {
 		select {
-		case payload, open := <-mdb.replication.masterChan:
+		case payload, open := <-mdb.slaveStatus.masterChan:
 			if !open {
 				return errors.New("master channel unexpected close")
 			}
@@ -370,31 +354,32 @@ func (mdb *MultiDB) receiveAOF(ctx context.Context, configVersion int32) error {
 			if !ok {
 				return errors.New("unexpected payload: " + string(payload.Data.ToBytes()))
 			}
-			mdb.replication.mutex.Lock()
-			if mdb.replication.configVersion != configVersion {
-				// replication conf changed during connecting and waiting mutex
+			mdb.slaveStatus.mutex.Lock()
+			if mdb.slaveStatus.configVersion != configVersion {
+				// slaveStatus conf changed during connecting and waiting mutex
 				return configChangedErr
 			}
 			mdb.Exec(conn, cmdLine.Args)
 			n := len(cmdLine.ToBytes()) // todo: directly get size from socket
-			mdb.replication.replOffset += int64(n)
-			mdb.replication.lastRecvTime = time.Now()
+			mdb.slaveStatus.replOffset += int64(n)
+			mdb.slaveStatus.lastRecvTime = time.Now()
 			logger.Info(fmt.Sprintf("receive %d bytes from master, current offset %d, %s",
-				n, mdb.replication.replOffset, strconv.Quote(string(cmdLine.ToBytes()))))
-			mdb.replication.mutex.Unlock()
+				n, mdb.slaveStatus.replOffset, strconv.Quote(string(cmdLine.ToBytes()))))
+			mdb.slaveStatus.mutex.Unlock()
 		case <-ctx.Done():
-			conn.GetConnPool().Put(conn)
+			_ = conn.Close()
 			return nil
 		}
 	}
 }
 
 func (mdb *MultiDB) slaveCron() {
-	repl := mdb.replication
+	repl := mdb.slaveStatus
 	if repl.masterConn == nil {
 		return
 	}
 
+	// check master timeout
 	replTimeout := 60 * time.Second
 	if config.Properties.ReplTimeout != 0 {
 		replTimeout = time.Duration(config.Properties.ReplTimeout) * time.Second
@@ -427,9 +412,9 @@ func (repl *slaveStatus) sendAck2Master() error {
 
 func (mdb *MultiDB) reconnectWithMaster() error {
 	logger.Info("reconnecting with master")
-	mdb.replication.mutex.Lock()
-	defer mdb.replication.mutex.Unlock()
-	mdb.replication.stopSlaveWithMutex()
+	mdb.slaveStatus.mutex.Lock()
+	defer mdb.slaveStatus.mutex.Unlock()
+	mdb.slaveStatus.stopSlaveWithMutex()
 	go mdb.setupMaster()
 	return nil
 }

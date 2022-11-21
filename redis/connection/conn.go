@@ -1,7 +1,6 @@
 package connection
 
 import (
-	"bytes"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/sync/wait"
 	"net"
@@ -10,21 +9,24 @@ import (
 )
 
 const (
-	// NormalCli is client with user
-	NormalCli = iota
-	// ReplicationRecvCli is fake client with replication master
-	ReplicationRecvCli
+	// flagSlave means this a connection with slave
+	flagSlave = uint64(1 << iota)
+	// flagSlave means this a connection with master
+	flagMaster
+	// flagMulti means this connection is within a transaction
+	flagMulti
 )
 
 // Connection represents a connection with a redis-cli
 type Connection struct {
 	conn net.Conn
 
-	// waiting until protocol finished
-	waitingReply wait.Wait
+	// waiting until finish sending data, used for graceful shutdown
+	sendingData wait.Wait
 
 	// lock while server sending response
-	mu sync.Mutex
+	mu    sync.Mutex
+	flags uint64
 
 	// subscribing channels
 	subs map[string]bool
@@ -33,25 +35,18 @@ type Connection struct {
 	password string
 
 	// queued commands for `multi`
-	multiState bool
-	queue      [][][]byte
-	watching   map[string]uint32
-	txErrors   []error
+	queue    [][][]byte
+	watching map[string]uint32
+	txErrors []error
 
 	// selected db
 	selectedDB int
-	role       int32
 }
 
 var connPool = sync.Pool{
 	New: func() interface{} {
 		return &Connection{}
 	},
-}
-
-// GetConnPool returns the connection pool pointer for putting and getting connection
-func (c *Connection) GetConnPool() *sync.Pool {
-	return &connPool
 }
 
 // RemoteAddr returns the remote network address
@@ -61,8 +56,15 @@ func (c *Connection) RemoteAddr() net.Addr {
 
 // Close disconnect with the client
 func (c *Connection) Close() error {
-	c.waitingReply.WaitWithTimeout(10 * time.Second)
+	c.sendingData.WaitWithTimeout(10 * time.Second)
 	_ = c.conn.Close()
+	c.subs = nil
+	c.password = ""
+	c.queue = nil
+	c.watching = nil
+	c.txErrors = nil
+	c.selectedDB = 0
+	connPool.Put(c)
 	return nil
 }
 
@@ -80,17 +82,16 @@ func NewConn(conn net.Conn) *Connection {
 }
 
 // Write sends response to client over tcp connection
-func (c *Connection) Write(b []byte) error {
+func (c *Connection) Write(b []byte) (int, error) {
 	if len(b) == 0 {
-		return nil
+		return 0, nil
 	}
-	c.waitingReply.Add(1)
+	c.sendingData.Add(1)
 	defer func() {
-		c.waitingReply.Done()
+		c.sendingData.Done()
 	}()
 
-	_, err := c.conn.Write(b)
-	return err
+	return c.conn.Write(b)
 }
 
 // Subscribe add current connection into subscribers of the given channel
@@ -146,7 +147,7 @@ func (c *Connection) GetPassword() string {
 
 // InMultiState tells is connection in an uncommitted transaction
 func (c *Connection) InMultiState() bool {
-	return c.multiState
+	return c.flags&flagMulti > 0
 }
 
 // SetMultiState sets transaction flag
@@ -154,8 +155,10 @@ func (c *Connection) SetMultiState(state bool) {
 	if !state { // reset data when cancel multi
 		c.watching = nil
 		c.queue = nil
+		c.flags &= ^flagMulti // clean multi flag
+		return
 	}
-	c.multiState = state
+	c.flags |= flagMulti
 }
 
 // GetQueuedCmdLine returns queued commands of current transaction
@@ -183,18 +186,6 @@ func (c *Connection) ClearQueuedCmds() {
 	c.queue = nil
 }
 
-// GetRole returns role of connection, such as connection with master
-func (c *Connection) GetRole() int32 {
-	if c == nil {
-		return NormalCli
-	}
-	return c.role
-}
-
-func (c *Connection) SetRole(r int32) {
-	c.role = r
-}
-
 // GetWatching returns watching keys and their version code when started watching
 func (c *Connection) GetWatching() map[string]uint32 {
 	if c.watching == nil {
@@ -213,24 +204,18 @@ func (c *Connection) SelectDB(dbNum int) {
 	c.selectedDB = dbNum
 }
 
-// FakeConn implements redis.Connection for test
-type FakeConn struct {
-	Connection
-	buf bytes.Buffer
+func (c *Connection) SetSlave() {
+	c.flags |= flagSlave
 }
 
-// Write writes data to buffer
-func (c *FakeConn) Write(b []byte) error {
-	c.buf.Write(b)
-	return nil
+func (c *Connection) IsSlave() bool {
+	return c.flags&flagSlave > 0
 }
 
-// Clean resets the buffer
-func (c *FakeConn) Clean() {
-	c.buf.Reset()
+func (c *Connection) SetMaster() {
+	c.flags |= flagMaster
 }
 
-// Bytes returns written data
-func (c *FakeConn) Bytes() []byte {
-	return c.buf.Bytes()
+func (c *Connection) IsMaster() bool {
+	return c.flags&flagMaster > 0
 }

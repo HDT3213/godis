@@ -17,7 +17,7 @@ func TestLoadRDB(t *testing.T) {
 		AppendOnly:  false,
 		RDBFilename: filepath.Join(projectRoot, "test.rdb"), // set working directory to project root
 	}
-	conn := &connection.FakeConn{}
+	conn := connection.NewFakeConn()
 	rdbDB := NewStandaloneServer()
 	result := rdbDB.Exec(conn, utils.ToCmdLine("Get", "str"))
 	asserts.AssertBulkReply(t, result, "str")

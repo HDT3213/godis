@@ -2,7 +2,9 @@ package redis
 
 // Connection represents a connection with redis client
 type Connection interface {
-	Write([]byte) error
+	Write([]byte) (int, error)
+	Close() error
+
 	SetPassword(string)
 	GetPassword() string
 
@@ -12,7 +14,6 @@ type Connection interface {
 	SubsCount() int
 	GetChannels() []string
 
-	// used for `Multi` command
 	InMultiState() bool
 	SetMultiState(bool)
 	GetQueuedCmdLine() [][][]byte
@@ -22,10 +23,12 @@ type Connection interface {
 	AddTxError(err error)
 	GetTxErrors() []error
 
-	// used for multi database
 	GetDBIndex() int
 	SelectDB(int)
-	// returns role of conn, such as connection with client, connection with master node
-	GetRole() int32
-	SetRole(int32)
+
+	SetSlave()
+	IsSlave() bool
+
+	SetMaster()
+	IsMaster() bool
 }

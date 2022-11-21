@@ -9,7 +9,6 @@ import (
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/pubsub"
-	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/protocol"
 	"runtime/debug"
 	"strconv"
@@ -27,10 +26,10 @@ type MultiDB struct {
 	// handle aof persistence
 	aofHandler *aof.Handler
 
-	// store master node address
-	slaveOf     string
-	role        int32
-	replication *slaveStatus
+	// for replication
+	role         int32
+	slaveStatus  *slaveStatus
+	masterStatus *masterStatus
 }
 
 // NewStandaloneServer creates a standalone redis server, with multi database and all other funtions
@@ -50,29 +49,34 @@ func NewStandaloneServer() *MultiDB {
 	mdb.hub = pubsub.MakeHub()
 	validAof := false
 	if config.Properties.AppendOnly {
-		aofHandler, err := aof.NewAOFHandler(mdb, func() database.EmbedDB {
-			return MakeBasicMultiDB()
-		})
-		if err != nil {
-			panic(err)
-		}
-		mdb.aofHandler = aofHandler
-		for _, db := range mdb.dbSet {
-			singleDB := db.Load().(*DB)
-			singleDB.addAof = func(line CmdLine) {
-				mdb.aofHandler.AddAof(singleDB.index, line)
-			}
-		}
+		mdb.initAof()
 		validAof = true
 	}
 	if config.Properties.RDBFilename != "" && !validAof {
 		// load rdb
 		loadRdbFile(mdb)
 	}
-	mdb.replication = initReplStatus()
+	mdb.slaveStatus = initReplSlaveStatus()
+	mdb.startAsMaster()
 	mdb.startReplCron()
 	mdb.role = masterRole // The initialization process does not require atomicity
 	return mdb
+}
+
+func (mdb *MultiDB) initAof() {
+	aofHandler, err := aof.NewAOFHandler(mdb, func() database.EmbedDB {
+		return MakeBasicMultiDB()
+	})
+	if err != nil {
+		panic(err)
+	}
+	mdb.aofHandler = aofHandler
+	for _, db := range mdb.dbSet {
+		singleDB := db.Load().(*DB)
+		singleDB.addAof = func(line CmdLine) {
+			mdb.aofHandler.AddAof(singleDB.index, line)
+		}
+	}
 }
 
 // MakeBasicMultiDB create a MultiDB only with basic abilities for aof rewrite and other usages
@@ -117,8 +121,7 @@ func (mdb *MultiDB) Exec(c redis.Connection, cmdLine [][]byte) (result redis.Rep
 
 	// read only slave
 	role := atomic.LoadInt32(&mdb.role)
-	if role == slaveRole &&
-		c.GetRole() != connection.ReplicationRecvCli {
+	if role == slaveRole && !c.IsMaster() {
 		// only allow read only command, forbid all special commands except `auth` and `slaveof`
 		if !isReadOnlyCommand(cmdName) {
 			return protocol.MakeErrReply("READONLY You can't write against a read only slave.")
@@ -167,6 +170,10 @@ func (mdb *MultiDB) Exec(c redis.Connection, cmdLine [][]byte) (result redis.Rep
 			return protocol.MakeArgNumErrReply("copy")
 		}
 		return execCopy(mdb, c, cmdLine[1:])
+	} else if cmdName == "replconf" {
+		return mdb.execReplConf(c, cmdLine[1:])
+	} else if cmdName == "psync" {
+		return mdb.execPSync(c, cmdLine[1:])
 	}
 	// todo: support multi database transaction
 
@@ -186,8 +193,8 @@ func (mdb *MultiDB) AfterClientClose(c redis.Connection) {
 
 // Close graceful shutdown database
 func (mdb *MultiDB) Close() {
-	// stop replication first
-	mdb.replication.close()
+	// stop slaveStatus first
+	mdb.slaveStatus.close()
 	if mdb.aofHandler != nil {
 		mdb.aofHandler.Close()
 	}
@@ -308,7 +315,11 @@ func SaveRDB(db *MultiDB, args [][]byte) redis.Reply {
 	if db.aofHandler == nil {
 		return protocol.MakeErrReply("please enable aof before using save")
 	}
-	err := db.aofHandler.Rewrite2RDB()
+	rdbFilename := config.Properties.RDBFilename
+	if rdbFilename == "" {
+		rdbFilename = "dump.rdb"
+	}
+	err := db.aofHandler.Rewrite2RDB(rdbFilename, nil)
 	if err != nil {
 		return protocol.MakeErrReply(err.Error())
 	}
@@ -326,7 +337,11 @@ func BGSaveRDB(db *MultiDB, args [][]byte) redis.Reply {
 				logger.Error(err)
 			}
 		}()
-		err := db.aofHandler.Rewrite2RDB()
+		rdbFilename := config.Properties.RDBFilename
+		if rdbFilename == "" {
+			rdbFilename = "dump.rdb"
+		}
+		err := db.aofHandler.Rewrite2RDB(rdbFilename, nil)
 		if err != nil {
 			logger.Error(err)
 		}
@@ -338,4 +353,19 @@ func BGSaveRDB(db *MultiDB, args [][]byte) redis.Reply {
 func (mdb *MultiDB) GetDBSize(dbIndex int) (int, int) {
 	db := mdb.mustSelectDB(dbIndex)
 	return db.data.Len(), db.ttlMap.Len()
+}
+
+func (mdb *MultiDB) startReplCron() {
+	go func() {
+		defer func() {
+			if err := recover(); err != nil {
+				logger.Error("panic", err)
+			}
+		}()
+		ticker := time.Tick(time.Second * 10)
+		for range ticker {
+			mdb.slaveCron()
+			mdb.masterCron()
+		}
+	}()
 }

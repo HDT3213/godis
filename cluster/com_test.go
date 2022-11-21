@@ -10,7 +10,7 @@ import (
 
 func TestExec(t *testing.T) {
 	testCluster2 := MakeTestCluster([]string{"127.0.0.1:6379"})
-	conn := &connection.FakeConn{}
+	conn := connection.NewFakeConn()
 	for i := 0; i < 1000; i++ {
 		key := RandString(4)
 		value := RandString(4)
@@ -26,7 +26,7 @@ func TestAuth(t *testing.T) {
 	defer func() {
 		config.Properties.RequirePass = ""
 	}()
-	conn := &connection.FakeConn{}
+	conn := connection.NewFakeConn()
 	ret := testNodeA.Exec(conn, toArgs("GET", "a"))
 	asserts.AssertErrReply(t, ret, "NOAUTH Authentication required")
 	ret = testNodeA.Exec(conn, toArgs("AUTH", passwd))
@@ -39,7 +39,7 @@ func TestRelay(t *testing.T) {
 	testCluster2 := MakeTestCluster([]string{"127.0.0.1:6379"})
 	key := RandString(4)
 	value := RandString(4)
-	conn := &connection.FakeConn{}
+	conn := connection.NewFakeConn()
 	ret := testCluster2.relay("127.0.0.1:6379", conn, toArgs("SET", key, value))
 	asserts.AssertNotError(t, ret)
 	ret = testCluster2.relay("127.0.0.1:6379", conn, toArgs("GET", key))
@@ -50,7 +50,7 @@ func TestBroadcast(t *testing.T) {
 	testCluster2 := MakeTestCluster([]string{"127.0.0.1:6379"})
 	key := RandString(4)
 	value := RandString(4)
-	rets := testCluster2.broadcast(&connection.FakeConn{}, toArgs("SET", key, value))
+	rets := testCluster2.broadcast(connection.NewFakeConn(), toArgs("SET", key, value))
 	for _, v := range rets {
 		asserts.AssertNotError(t, v)
 	}

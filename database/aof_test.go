@@ -17,7 +17,7 @@ import (
 )
 
 func makeTestData(db database.DB, dbIndex int, prefix string, size int) {
-	conn := &connection.FakeConn{}
+	conn := connection.NewFakeConn()
 	conn.SelectDB(dbIndex)
 	db.Exec(conn, utils.ToCmdLine("FlushDB"))
 	cursor := 0
@@ -49,7 +49,7 @@ func makeTestData(db database.DB, dbIndex int, prefix string, size int) {
 }
 
 func validateTestData(t *testing.T, db database.DB, dbIndex int, prefix string, size int) {
-	conn := &connection.FakeConn{}
+	conn := connection.NewFakeConn()
 	conn.SelectDB(dbIndex)
 	cursor := 0
 	var ret redis.Reply
@@ -146,7 +146,7 @@ func TestRDB(t *testing.T) {
 	dbNum := 4
 	size := 10
 	var prefixes []string
-	conn := &connection.FakeConn{}
+	conn := connection.NewFakeConn()
 	writeDB := NewStandaloneServer()
 	for i := 0; i < dbNum; i++ {
 		prefix := utils.RandString(8)
@@ -216,7 +216,7 @@ func TestRewriteAOF2(t *testing.T) {
 	}
 	aofWriteDB := NewStandaloneServer()
 	dbNum := 4
-	conn := &connection.FakeConn{}
+	conn := connection.NewFakeConn()
 	for i := 0; i < dbNum; i++ {
 		conn.SelectDB(i)
 		key := strconv.Itoa(i)

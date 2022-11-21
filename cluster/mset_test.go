@@ -7,7 +7,7 @@ import (
 )
 
 func TestMSet(t *testing.T) {
-	conn := &connection.FakeConn{}
+	conn := connection.NewFakeConn()
 	allowFastTransaction = false
 	ret := MSet(testNodeA, conn, toArgs("MSET", "a", "a", "b", "b"))
 	asserts.AssertNotError(t, ret)
@@ -16,7 +16,7 @@ func TestMSet(t *testing.T) {
 }
 
 func TestMSetNx(t *testing.T) {
-	conn := &connection.FakeConn{}
+	conn := connection.NewFakeConn()
 	allowFastTransaction = false
 	FlushAll(testNodeA, conn, toArgs("FLUSHALL"))
 	ret := MSetNX(testNodeA, conn, toArgs("MSETNX", "a", "a", "b", "b"))

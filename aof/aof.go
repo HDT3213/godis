@@ -26,6 +26,10 @@ type payload struct {
 	dbIndex int
 }
 
+// Listener is a channel receive a replication of all aof payloads
+// with a listener we can forward the updates to slave nodes etc.
+type Listener chan<- CmdLine
+
 // Handler receive msgs from channel and write to AOF file
 type Handler struct {
 	db          database.EmbedDB
@@ -38,6 +42,7 @@ type Handler struct {
 	// pause aof for start/finish aof rewrite progress
 	pausingAof sync.RWMutex
 	currentDB  int
+	listeners  map[Listener]struct{}
 }
 
 // NewAOFHandler creates a new aof.Handler
@@ -54,10 +59,18 @@ func NewAOFHandler(db database.EmbedDB, tmpDBMaker func() database.EmbedDB) (*Ha
 	handler.aofFile = aofFile
 	handler.aofChan = make(chan *payload, aofQueueSize)
 	handler.aofFinished = make(chan struct{})
+	handler.listeners = make(map[Listener]struct{})
 	go func() {
 		handler.handleAof()
 	}()
 	return handler, nil
+}
+
+// RemoveListener removes a listener from aof handler, so we can close the listener
+func (handler *Handler) RemoveListener(listener Listener) {
+	handler.pausingAof.Lock()
+	defer handler.pausingAof.Unlock()
+	delete(handler.listeners, listener)
 }
 
 // AddAof send command to aof goroutine through channel
@@ -73,12 +86,16 @@ func (handler *Handler) AddAof(dbIndex int, cmdLine CmdLine) {
 // handleAof listen aof channel and write into file
 func (handler *Handler) handleAof() {
 	// serialized execution
+	var cmdLines []CmdLine
 	handler.currentDB = 0
 	for p := range handler.aofChan {
+		cmdLines = cmdLines[:0]    // reuse underlying array
 		handler.pausingAof.RLock() // prevent other goroutines from pausing aof
 		if p.dbIndex != handler.currentDB {
 			// select db
-			data := protocol.MakeMultiBulkReply(utils.ToCmdLine("SELECT", strconv.Itoa(p.dbIndex))).ToBytes()
+			selectCmd := utils.ToCmdLine("SELECT", strconv.Itoa(p.dbIndex))
+			cmdLines = append(cmdLines, selectCmd)
+			data := protocol.MakeMultiBulkReply(selectCmd).ToBytes()
 			_, err := handler.aofFile.Write(data)
 			if err != nil {
 				logger.Warn(err)
@@ -88,11 +105,17 @@ func (handler *Handler) handleAof() {
 			handler.currentDB = p.dbIndex
 		}
 		data := protocol.MakeMultiBulkReply(p.cmdLine).ToBytes()
+		cmdLines = append(cmdLines, p.cmdLine)
 		_, err := handler.aofFile.Write(data)
 		if err != nil {
 			logger.Warn(err)
 		}
 		handler.pausingAof.RUnlock()
+		for listener := range handler.listeners {
+			for _, line := range cmdLines {
+				listener <- line
+			}
+		}
 	}
 	handler.aofFinished <- struct{}{}
 }
@@ -123,7 +146,7 @@ func (handler *Handler) LoadAof(maxBytes int) {
 		reader = file
 	}
 	ch := parser.ParseStream(reader)
-	fakeConn := &connection.FakeConn{} // only used for save dbIndex
+	fakeConn := connection.NewFakeConn() // only used for save dbIndex
 	for p := range ch {
 		if p.Err != nil {
 			if p.Err == io.EOF {
@@ -143,7 +166,7 @@ func (handler *Handler) LoadAof(maxBytes int) {
 		}
 		ret := handler.db.Exec(fakeConn, r.Args)
 		if protocol.IsErrorReply(ret) {
-			logger.Error("exec err", ret.ToBytes())
+			logger.Error("exec err", string(ret.ToBytes()))
 		}
 	}
 }

@@ -16,3 +16,13 @@ func RandString(n int) string {
 	}
 	return string(b)
 }
+
+var hexLetters = []rune("0123456789abcdef")
+
+func RandHexString(n int) string {
+	b := make([]rune, n)
+	for i := range b {
+		b[i] = hexLetters[rand.Intn(len(hexLetters))]
+	}
+	return string(b)
+}

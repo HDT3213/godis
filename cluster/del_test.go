@@ -7,7 +7,7 @@ import (
 )
 
 func TestDel(t *testing.T) {
-	conn := &connection.FakeConn{}
+	conn := connection.NewFakeConn()
 	allowFastTransaction = false
 	testNodeA.Exec(conn, toArgs("SET", "a", "a"))
 	ret := Del(testNodeA, conn, toArgs("DEL", "a", "b", "c"))

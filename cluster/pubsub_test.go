@@ -11,7 +11,7 @@ import (
 func TestPublish(t *testing.T) {
 	channel := utils.RandString(5)
 	msg := utils.RandString(5)
-	conn := &connection.FakeConn{}
+	conn := connection.NewFakeConn()
 	Subscribe(testNodeA, conn, utils.ToCmdLine("SUBSCRIBE", channel))
 	conn.Clean() // clean subscribe success
 	Publish(testNodeA, conn, utils.ToCmdLine("PUBLISH", channel, msg))

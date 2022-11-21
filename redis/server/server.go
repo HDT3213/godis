@@ -50,8 +50,6 @@ func (h *Handler) closeClient(client *connection.Connection) {
 	_ = client.Close()
 	h.db.AfterClientClose(client)
 	h.activeConn.Delete(client)
-
-	client.GetConnPool().Put(client)
 }
 
 // Handle receives and executes redis commands
@@ -78,7 +76,7 @@ func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 			}
 			// protocol err
 			errReply := protocol.MakeErrReply(payload.Err.Error())
-			err := client.Write(errReply.ToBytes())
+			_, err := client.Write(errReply.ToBytes())
 			if err != nil {
 				h.closeClient(client)
 				logger.Info("connection closed: " + client.RemoteAddr().String())
@@ -97,9 +95,9 @@ func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 		}
 		result := h.db.Exec(client, r.Args)
 		if result != nil {
-			_ = client.Write(result.ToBytes())
+			_, _ = client.Write(result.ToBytes())
 		} else {
-			_ = client.Write(unknownErrReplyBytes)
+			_, _ = client.Write(unknownErrReplyBytes)
 		}
 	}
 }
