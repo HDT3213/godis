@@ -109,7 +109,6 @@ func (dict *ConcurrentDict) Put(key string, val interface{}) (result int) {
 	hashCode := fnv32(key)
 	index := dict.spread(hashCode)
 	s := dict.getShard(index)
-	dict.addCount()
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
@@ -117,6 +116,7 @@ func (dict *ConcurrentDict) Put(key string, val interface{}) (result int) {
 		s.m[key] = val
 		return 0
 	}
+	dict.addCount()
 	s.m[key] = val
 	return 1
 }
