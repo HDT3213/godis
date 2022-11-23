@@ -220,7 +220,7 @@ func (sortedSet *SortedSet) PopMin(count int) []*Element {
 		Value:   first.Score,
 		Exclude: false,
 	}
-	removed := sortedSet.skiplist.RemoveRangeByScore(border, border, count)
+	removed := sortedSet.skiplist.RemoveRangeByScore(border, positiveInfBorder, count)
 	for _, element := range removed {
 		delete(sortedSet.dict, element.Member)
 	}
