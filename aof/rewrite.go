@@ -7,7 +7,6 @@ import (
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
 	"io"
-	"io/ioutil"
 	"os"
 	"strconv"
 	"time"
@@ -93,7 +92,8 @@ func (handler *Handler) StartRewrite() (*RewriteCtx, error) {
 	filesize := fileInfo.Size()
 
 	// create tmp file
-	file, err := ioutil.TempFile("", "*.aof")
+	//file, err := ioutil.TempFile("", "*.aof")
+	file, err := os.Create("tmpAofFile.aof")
 	if err != nil {
 		logger.Warn("tmp file create failed")
 		return nil, err
@@ -142,6 +142,8 @@ func (handler *Handler) FinishRewrite(ctx *RewriteCtx) {
 
 	// replace current aof file by tmp file
 	_ = handler.aofFile.Close()
+	_ = src.Close()
+	_ = tmpFile.Close()
 	_ = os.Rename(tmpFile.Name(), handler.aofFilename)
 
 	// reopen aof file for further write
