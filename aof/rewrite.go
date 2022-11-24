@@ -142,7 +142,10 @@ func (handler *Handler) FinishRewrite(ctx *RewriteCtx) {
 	_ = handler.aofFile.Close()
 	_ = src.Close()
 	_ = tmpFile.Close()
-	_ = os.Rename(tmpFile.Name(), handler.aofFilename)
+	err = os.Rename(tmpFile.Name(), handler.aofFilename)
+	if err != nil {
+		logger.Warn("update aof file failed: " + err.Error())
+	}
 
 	// reopen aof file for further write
 	aofFile, err := os.OpenFile(handler.aofFilename, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0600)
