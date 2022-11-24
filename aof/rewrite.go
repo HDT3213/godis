@@ -117,9 +117,7 @@ func (handler *Handler) FinishRewrite(ctx *RewriteCtx) {
 		logger.Error("open aofFilename failed: " + err.Error())
 		return
 	}
-	defer func() {
-		_ = src.Close()
-	}()
+
 	_, err = src.Seek(ctx.fileSize, 0)
 	if err != nil {
 		logger.Error("seek failed: " + err.Error())
