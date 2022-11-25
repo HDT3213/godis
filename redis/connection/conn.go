@@ -2,6 +2,7 @@ package connection
 
 import (
 	"bytes"
+	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/sync/wait"
 	"net"
 	"sync"
@@ -42,6 +43,17 @@ type Connection struct {
 	role       int32
 }
 
+var connPool = sync.Pool{
+	New: func() interface{} {
+		return &Connection{}
+	},
+}
+
+// GetConnPool returns the connection pool pointer for putting and getting connection
+func (c *Connection) GetConnPool() *sync.Pool {
+	return &connPool
+}
+
 // RemoteAddr returns the remote network address
 func (c *Connection) RemoteAddr() net.Addr {
 	return c.conn.RemoteAddr()
@@ -56,9 +68,15 @@ func (c *Connection) Close() error {
 
 // NewConn creates Connection instance
 func NewConn(conn net.Conn) *Connection {
-	return &Connection{
-		conn: conn,
+	c, ok := connPool.Get().(*Connection)
+	if !ok {
+		logger.Error("connection pool make wrong type")
+		return &Connection{
+			conn: conn,
+		}
 	}
+	c.conn = conn
+	return c
 }
 
 // Write sends response to client over tcp connection

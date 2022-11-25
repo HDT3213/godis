@@ -50,6 +50,8 @@ func (h *Handler) closeClient(client *connection.Connection) {
 	_ = client.Close()
 	h.db.AfterClientClose(client)
 	h.activeConn.Delete(client)
+
+	client.GetConnPool().Put(client)
 }
 
 // Handle receives and executes redis commands
