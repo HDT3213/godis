@@ -383,6 +383,7 @@ func (mdb *MultiDB) receiveAOF(ctx context.Context, configVersion int32) error {
 				n, mdb.replication.replOffset, strconv.Quote(string(cmdLine.ToBytes()))))
 			mdb.replication.mutex.Unlock()
 		case <-ctx.Done():
+			conn.GetConnPool().Put(conn)
 			return nil
 		}
 	}
@@ -420,7 +421,7 @@ func (repl *slaveStatus) sendAck2Master() error {
 		strconv.FormatInt(repl.replOffset, 10))
 	psyncReq := protocol.MakeMultiBulkReply(psyncCmdLine)
 	_, err := repl.masterConn.Write(psyncReq.ToBytes())
-	//logger.Info("send ack to master")
+	// logger.Info("send ack to master")
 	return err
 }
 
