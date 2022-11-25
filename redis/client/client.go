@@ -99,9 +99,8 @@ func (client *Client) reconnect() {
 			logger.Error("reconnect error: " + err.Error())
 			time.Sleep(time.Second)
 			continue
-		} else {
-			break
 		}
+		break
 	}
 	if conn == nil { // reach max retry, abort
 		client.Close()
@@ -185,10 +184,9 @@ func (client *Client) doRequest(req *request) {
 	}
 	if err == nil {
 		client.waitingReqs <- req
-	} else {
-		req.err = err
-		req.waiting.Done()
 	}
+	req.err = err
+	req.waiting.Done()
 }
 
 func (client *Client) finishRequest(reply redis.Reply) {

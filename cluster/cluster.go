@@ -139,27 +139,29 @@ func (cluster *Cluster) Exec(c redis.Connection, cmdLine [][]byte) (result redis
 		return protocol.MakeErrReply("NOAUTH Authentication required")
 	}
 
-	if cmdName == "multi" {
+	switch cmdName {
+	case "multi":
 		if len(cmdLine) != 1 {
 			return protocol.MakeArgNumErrReply(cmdName)
 		}
 		return database2.StartMulti(c)
-	} else if cmdName == "discard" {
+	case "discard":
 		if len(cmdLine) != 1 {
 			return protocol.MakeArgNumErrReply(cmdName)
 		}
 		return database2.DiscardMulti(c)
-	} else if cmdName == "exec" {
+	case "exec":
 		if len(cmdLine) != 1 {
 			return protocol.MakeArgNumErrReply(cmdName)
 		}
 		return execMulti(cluster, c, nil)
-	} else if cmdName == "select" {
+	case "select":
 		if len(cmdLine) != 2 {
 			return protocol.MakeArgNumErrReply(cmdName)
 		}
 		return execSelect(c, cmdLine)
 	}
+
 	if c != nil && c.InMultiState() {
 		return database2.EnqueueCmd(c, cmdLine)
 	}
