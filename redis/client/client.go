@@ -184,6 +184,7 @@ func (client *Client) doRequest(req *request) {
 	}
 	if err == nil {
 		client.waitingReqs <- req
+		return
 	}
 	req.err = err
 	req.waiting.Done()
