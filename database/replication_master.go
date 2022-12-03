@@ -1,11 +1,11 @@
 package database
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
+	"github.com/hdt3213/godis/lib/sync/atomic"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
 	"io"
@@ -47,23 +47,42 @@ type slaveClient struct {
 	capacity     uint8
 }
 
-type masterStatus struct {
-	ctx           context.Context
-	mu            sync.RWMutex
-	replId        string
-	backlog       []byte // backlog can be appended or replaced as a whole, cannot be modified(insert/set/delete)
+// aofListener 只负责更新 backlog
+type replBacklog struct {
+	buf           []byte
 	beginOffset   int64
 	currentOffset int64
-	slaveMap      map[redis.Connection]*slaveClient
-	waitSlaves    map[*slaveClient]struct{}
-	onlineSlaves  map[*slaveClient]struct{}
-	bgSaveState   uint8
-	rdbFilename   string
 }
 
-func (master *masterStatus) appendBacklog(bin []byte) {
-	master.backlog = append(master.backlog, bin...)
-	master.currentOffset += int64(len(bin))
+func (backlog *replBacklog) appendBytes(bin []byte) {
+	backlog.buf = append(backlog.buf, bin...)
+	backlog.currentOffset += int64(len(bin))
+}
+
+func (backlog *replBacklog) getSnapshot() ([]byte, int64) {
+	return backlog.buf[:], backlog.currentOffset
+}
+
+func (backlog *replBacklog) getSnapshotAfter(beginOffset int64) ([]byte, int64) {
+	beg := beginOffset - backlog.beginOffset
+	return backlog.buf[beg:], backlog.currentOffset
+}
+
+func (backlog *replBacklog) isValidOffset(offset int64) bool {
+	return offset >= backlog.beginOffset && offset < backlog.currentOffset
+}
+
+type masterStatus struct {
+	mu           sync.RWMutex
+	replId       string
+	backlog      *replBacklog
+	slaveMap     map[redis.Connection]*slaveClient
+	waitSlaves   map[*slaveClient]struct{}
+	onlineSlaves map[*slaveClient]struct{}
+	bgSaveState  uint8
+	rdbFilename  string
+	aofListener  *replAofListener
+	rewriting    atomic.Boolean
 }
 
 func (mdb *MultiDB) bgSaveForReplication() {
@@ -90,16 +109,18 @@ func (mdb *MultiDB) saveForReplication() error {
 	mdb.masterStatus.mu.Lock()
 	mdb.masterStatus.bgSaveState = bgSaveRunning
 	mdb.masterStatus.rdbFilename = rdbFilename // todo: can reuse config.Properties.RDBFilename?
+	aofListener := &replAofListener{
+		mdb:     mdb,
+		backlog: mdb.masterStatus.backlog,
+	}
+	mdb.masterStatus.aofListener = aofListener
 	mdb.masterStatus.mu.Unlock()
 
-	aofListener := make(chan CmdLine, 1024) // give channel enough capacity to store all updates during rewrite to db
-	err = mdb.aofHandler.Rewrite2RDB(rdbFilename, aofListener)
+	err = mdb.aofHandler.Rewrite2RDBForReplication(rdbFilename, aofListener, nil)
 	if err != nil {
 		return err
 	}
-	go func() {
-		mdb.masterListenAof(aofListener)
-	}()
+	aofListener.readyToSend = true
 
 	// change bgSaveState and get waitSlaves for sending
 	waitSlaves := make(map[*slaveClient]struct{})
@@ -122,11 +143,43 @@ func (mdb *MultiDB) saveForReplication() error {
 	return nil
 }
 
+func (mdb *MultiDB) rewriteRDB() error {
+	rdbFile, err := ioutil.TempFile("", "*.rdb")
+	if err != nil {
+		return fmt.Errorf("create temp rdb failed: %v", err)
+	}
+	rdbFilename := rdbFile.Name()
+	newBacklog := &replBacklog{}
+	aofListener := &replAofListener{
+		backlog: newBacklog,
+		mdb:     mdb,
+	}
+	hook := func() {
+		// pausing aof first, then lock masterStatus.
+		// use the same order as replAofListener to avoid dead lock
+		mdb.masterStatus.mu.Lock()
+		defer mdb.masterStatus.mu.Unlock()
+		newBacklog.beginOffset = mdb.masterStatus.backlog.currentOffset
+	}
+	err = mdb.aofHandler.Rewrite2RDBForReplication(rdbFilename, aofListener, hook)
+	if err != nil { // wait rdb result
+		return err
+	}
+	mdb.masterStatus.mu.Lock()
+	mdb.masterStatus.rdbFilename = rdbFilename
+	mdb.masterStatus.backlog = newBacklog
+	mdb.masterStatus.mu.Unlock()
+	// It is ok to know that new backlog is ready later, so we change readyToSend without sync
+	// But setting readyToSend=true must after new backlog is really ready (that means master.mu.Unlock)
+	aofListener.readyToSend = true
+	return nil
+}
+
 // masterFullReSyncWithSlave send replication header, rdb file and all backlogs to slave
 func (mdb *MultiDB) masterFullReSyncWithSlave(slave *slaveClient) error {
 	// write replication header
 	header := "+FULLRESYNC " + mdb.masterStatus.replId + " " +
-		strconv.FormatInt(mdb.masterStatus.beginOffset, 10) + protocol.CRLF
+		strconv.FormatInt(mdb.masterStatus.backlog.beginOffset, 10) + protocol.CRLF
 	_, err := slave.conn.Write([]byte(header))
 	if err != nil {
 		return fmt.Errorf("write replication header to slave failed: %v", err)
@@ -151,8 +204,7 @@ func (mdb *MultiDB) masterFullReSyncWithSlave(slave *slaveClient) error {
 
 	// send backlog
 	mdb.masterStatus.mu.RLock()
-	currentOffset := mdb.masterStatus.currentOffset
-	backlog := mdb.masterStatus.backlog[:currentOffset-mdb.masterStatus.beginOffset]
+	backlog, currentOffset := mdb.masterStatus.backlog.getSnapshot()
 	mdb.masterStatus.mu.RUnlock()
 	_, err = slave.conn.Write(backlog)
 	if err != nil {
@@ -172,12 +224,11 @@ func (mdb *MultiDB) masterTryPartialSyncWithSlave(slave *slaveClient, replId str
 		mdb.masterStatus.mu.RUnlock()
 		return cannotPartialSync
 	}
-	if slaveOffset < mdb.masterStatus.beginOffset || slaveOffset > mdb.masterStatus.currentOffset {
+	if !mdb.masterStatus.backlog.isValidOffset(slaveOffset) {
 		mdb.masterStatus.mu.RUnlock()
 		return cannotPartialSync
 	}
-	currentOffset := mdb.masterStatus.currentOffset
-	backlog := mdb.masterStatus.backlog[slaveOffset-mdb.masterStatus.beginOffset : currentOffset-mdb.masterStatus.beginOffset]
+	backlog, currentOffset := mdb.masterStatus.backlog.getSnapshotAfter(slaveOffset)
 	mdb.masterStatus.mu.RUnlock()
 
 	// send replication header
@@ -197,12 +248,13 @@ func (mdb *MultiDB) masterTryPartialSyncWithSlave(slave *slaveClient, replId str
 	return nil
 }
 
+// masterSendUpdatesToSlave only sends data to online slaves after bgSave is finished
+// if bgSave is running, updates will be sent after the saving finished
 func (mdb *MultiDB) masterSendUpdatesToSlave() error {
 	onlineSlaves := make(map[*slaveClient]struct{})
 	mdb.masterStatus.mu.RLock()
-	currentOffset := mdb.masterStatus.currentOffset
-	beginOffset := mdb.masterStatus.beginOffset
-	backlog := mdb.masterStatus.backlog[:currentOffset-beginOffset]
+	beginOffset := mdb.masterStatus.backlog.beginOffset
+	backlog, currentOffset := mdb.masterStatus.backlog.getSnapshot()
 	for slave := range mdb.masterStatus.onlineSlaves {
 		onlineSlaves[slave] = struct{}{}
 	}
@@ -211,7 +263,7 @@ func (mdb *MultiDB) masterSendUpdatesToSlave() error {
 		slaveBeginOffset := slave.offset - beginOffset
 		_, err := slave.conn.Write(backlog[slaveBeginOffset:])
 		if err != nil {
-			logger.Errorf("send updates write backlog to slave failed: %v", err)
+			logger.Errorf("send updates backlog to slave failed: %v", err)
 			mdb.removeSlave(slave)
 			continue
 		}
@@ -313,50 +365,64 @@ func (mdb *MultiDB) setSlaveOnline(slave *slaveClient, currentOffset int64) {
 
 var pingBytes = protocol.MakeMultiBulkReply(utils.ToCmdLine("ping")).ToBytes()
 
+const maxBacklogSize = 10 * 1024 * 1024 // 10MB
+
 func (mdb *MultiDB) masterCron() {
 	if mdb.role != masterRole {
 		return
 	}
 	mdb.masterStatus.mu.Lock()
 	if mdb.masterStatus.bgSaveState == bgSaveFinish {
-		mdb.masterStatus.appendBacklog(pingBytes)
+		mdb.masterStatus.backlog.appendBytes(pingBytes)
 	}
+	backlogSize := len(mdb.masterStatus.backlog.buf)
 	mdb.masterStatus.mu.Unlock()
 	if err := mdb.masterSendUpdatesToSlave(); err != nil {
 		logger.Errorf("masterSendUpdatesToSlave error: %v", err)
 	}
+	if backlogSize > maxBacklogSize && !mdb.masterStatus.rewriting.Get() {
+		go func() {
+			mdb.masterStatus.rewriting.Set(true)
+			defer mdb.masterStatus.rewriting.Set(false)
+			if err := mdb.rewriteRDB(); err != nil {
+				mdb.masterStatus.rewriting.Set(false)
+				logger.Errorf("rewrite error: %v", err)
+			}
+		}()
+	}
 }
 
-func (mdb *MultiDB) masterListenAof(listener chan CmdLine) {
-	for {
-		select {
-		case cmdLine := <-listener:
-			mdb.masterStatus.mu.Lock()
-			reply := protocol.MakeMultiBulkReply(cmdLine)
-			mdb.masterStatus.appendBacklog(reply.ToBytes())
-			mdb.masterStatus.mu.Unlock()
-			if err := mdb.masterSendUpdatesToSlave(); err != nil {
-				logger.Errorf("masterSendUpdatesToSlave after receive aof error: %v", err)
-			}
-			// if bgSave is running, updates will be sent after the save finished
-		case <-mdb.masterStatus.ctx.Done():
-			break
+type replAofListener struct {
+	mdb         *MultiDB
+	backlog     *replBacklog // may NOT be mdb.masterStatus.backlog
+	readyToSend bool
+}
+
+func (listener *replAofListener) Callback(cmdLines []CmdLine) {
+	listener.mdb.masterStatus.mu.Lock()
+	for _, cmdLine := range cmdLines {
+		reply := protocol.MakeMultiBulkReply(cmdLine)
+		listener.backlog.appendBytes(reply.ToBytes())
+	}
+	listener.mdb.masterStatus.mu.Unlock()
+	// listener could receive updates generated during rdb saving in progress
+	// Do not send updates to slave before rdb saving is finished
+	if listener.readyToSend {
+		if err := listener.mdb.masterSendUpdatesToSlave(); err != nil {
+			logger.Errorf("masterSendUpdatesToSlave after receive aof error: %v", err)
 		}
 	}
 }
 
 func (mdb *MultiDB) startAsMaster() {
 	mdb.masterStatus = &masterStatus{
-		ctx:           context.Background(),
-		mu:            sync.RWMutex{},
-		replId:        utils.RandHexString(40),
-		backlog:       nil,
-		beginOffset:   0,
-		currentOffset: 0,
-		slaveMap:      make(map[redis.Connection]*slaveClient),
-		waitSlaves:    make(map[*slaveClient]struct{}),
-		onlineSlaves:  make(map[*slaveClient]struct{}),
-		bgSaveState:   bgSaveIdle,
-		rdbFilename:   "",
+		mu:           sync.RWMutex{},
+		replId:       utils.RandHexString(40),
+		backlog:      &replBacklog{},
+		slaveMap:     make(map[redis.Connection]*slaveClient),
+		waitSlaves:   make(map[*slaveClient]struct{}),
+		onlineSlaves: make(map[*slaveClient]struct{}),
+		bgSaveState:  bgSaveIdle,
+		rdbFilename:  "",
 	}
 }

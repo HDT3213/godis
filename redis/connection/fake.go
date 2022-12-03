@@ -1,7 +1,8 @@
 package connection
 
 import (
-	"bytes"
+	"fmt"
+	"github.com/hdt3213/godis/lib/logger"
 	"io"
 	"sync"
 )
@@ -9,8 +10,9 @@ import (
 // FakeConn implements redis.Connection for test
 type FakeConn struct {
 	Connection
-	buf    bytes.Buffer
-	wait   chan struct{}
+	buf    []byte
+	offset int
+	waitOn chan struct{}
 	closed bool
 	mu     sync.Mutex
 }
@@ -25,51 +27,76 @@ func (c *FakeConn) Write(b []byte) (int, error) {
 	if c.closed {
 		return 0, io.EOF
 	}
-	n, _ := c.buf.Write(b)
+	c.mu.Lock()
+	c.buf = append(c.buf, b...)
+	c.mu.Unlock()
 	c.notify()
-	return n, nil
+	return len(b), nil
 }
 
 func (c *FakeConn) notify() {
-	if c.wait != nil {
+	if c.waitOn != nil {
 		c.mu.Lock()
-		if c.wait != nil {
-			close(c.wait)
-			c.wait = nil
+		if c.waitOn != nil {
+			logger.Debug(fmt.Sprintf("notify %p", c.waitOn))
+			close(c.waitOn)
+			c.waitOn = nil
 		}
 		c.mu.Unlock()
 	}
 }
 
-func (c *FakeConn) waiting() {
+func (c *FakeConn) wait(offset int) {
 	c.mu.Lock()
-	c.wait = make(chan struct{})
+	if c.offset != offset { // new data during waiting lock
+		return
+	}
+	if c.waitOn == nil {
+		c.waitOn = make(chan struct{})
+	}
+	waitOn := c.waitOn
+	logger.Debug(fmt.Sprintf("wait on %p", waitOn))
 	c.mu.Unlock()
-	<-c.wait
+	<-waitOn
+	logger.Debug(fmt.Sprintf("wait on %p finish", waitOn))
 }
 
 // Read reads data from buffer
 func (c *FakeConn) Read(p []byte) (int, error) {
-	n, err := c.buf.Read(p)
-	if err == io.EOF {
+	c.mu.Lock()
+	n := copy(p, c.buf[c.offset:])
+	c.offset += n
+	offset := c.offset
+	c.mu.Unlock()
+	if n == 0 {
 		if c.closed {
-			return 0, io.EOF
+			return n, io.EOF
 		}
-		c.waiting()
-		return c.buf.Read(p)
+		c.wait(offset)
+		// after notify
+		if c.closed {
+			return n, io.EOF
+		}
+		n = copy(p, c.buf[c.offset:])
+		c.offset += n
+		return n, nil
 	}
-	return n, err
+	if c.closed {
+		return n, io.EOF
+	}
+	return n, nil
 }
 
 // Clean resets the buffer
 func (c *FakeConn) Clean() {
-	c.wait = make(chan struct{})
-	c.buf.Reset()
+	c.waitOn = make(chan struct{})
+	c.buf = nil
+	c.offset = 0
 }
 
 // Bytes returns written data
 func (c *FakeConn) Bytes() []byte {
-	return c.buf.Bytes()
+	return c.buf
 }
 
 func (c *FakeConn) Close() error {

@@ -21,7 +21,7 @@ const (
 type Connection struct {
 	conn net.Conn
 
-	// waiting until finish sending data, used for graceful shutdown
+	// wait until finish sending data, used for graceful shutdown
 	sendingData wait.Wait
 
 	// lock while server sending response

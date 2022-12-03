@@ -156,6 +156,9 @@ func parseBulkString(header []byte, reader *bufio.Reader, ch chan<- *Payload) er
 func parseRDBBulkString(reader *bufio.Reader, ch chan<- *Payload) error {
 	header, err := reader.ReadBytes('\n')
 	header = bytes.TrimSuffix(header, []byte{'\r', '\n'})
+	if len(header) == 0 {
+		return errors.New("empty header")
+	}
 	strLen, err := strconv.ParseInt(string(header[1:]), 10, 64)
 	if err != nil || strLen <= 0 {
 		return errors.New("illegal bulk header: " + string(header))

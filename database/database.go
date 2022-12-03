@@ -319,7 +319,7 @@ func SaveRDB(db *MultiDB, args [][]byte) redis.Reply {
 	if rdbFilename == "" {
 		rdbFilename = "dump.rdb"
 	}
-	err := db.aofHandler.Rewrite2RDB(rdbFilename, nil)
+	err := db.aofHandler.Rewrite2RDB(rdbFilename)
 	if err != nil {
 		return protocol.MakeErrReply(err.Error())
 	}
@@ -341,7 +341,7 @@ func BGSaveRDB(db *MultiDB, args [][]byte) redis.Reply {
 		if rdbFilename == "" {
 			rdbFilename = "dump.rdb"
 		}
-		err := db.aofHandler.Rewrite2RDB(rdbFilename, nil)
+		err := db.aofHandler.Rewrite2RDB(rdbFilename)
 		if err != nil {
 			logger.Error(err)
 		}

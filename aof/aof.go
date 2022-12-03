@@ -26,9 +26,12 @@ type payload struct {
 	dbIndex int
 }
 
-// Listener is a channel receive a replication of all aof payloads
+// Listener will be called-back after receiving a aof payload
 // with a listener we can forward the updates to slave nodes etc.
-type Listener chan<- CmdLine
+type Listener interface {
+	// Callback will be called-back after receiving a aof payload
+	Callback([]CmdLine)
+}
 
 // Handler receive msgs from channel and write to AOF file
 type Handler struct {
@@ -112,9 +115,7 @@ func (handler *Handler) handleAof() {
 		}
 		handler.pausingAof.RUnlock()
 		for listener := range handler.listeners {
-			for _, line := range cmdLines {
-				listener <- line
-			}
+			listener.Callback(cmdLines)
 		}
 	}
 	handler.aofFinished <- struct{}{}
