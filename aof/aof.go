@@ -1,7 +1,6 @@
 package aof
 
 import (
-	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/utils"
@@ -49,12 +48,14 @@ type Handler struct {
 }
 
 // NewAOFHandler creates a new aof.Handler
-func NewAOFHandler(db database.EmbedDB, tmpDBMaker func() database.EmbedDB) (*Handler, error) {
+func NewAOFHandler(db database.EmbedDB, filename string, load bool, tmpDBMaker func() database.EmbedDB) (*Handler, error) {
 	handler := &Handler{}
-	handler.aofFilename = config.Properties.AppendFilename
+	handler.aofFilename = filename
 	handler.db = db
 	handler.tmpDBMaker = tmpDBMaker
-	handler.LoadAof(0)
+	if load {
+		handler.LoadAof(0)
+	}
 	aofFile, err := os.OpenFile(handler.aofFilename, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, err
@@ -78,7 +79,7 @@ func (handler *Handler) RemoveListener(listener Listener) {
 
 // AddAof send command to aof goroutine through channel
 func (handler *Handler) AddAof(dbIndex int, cmdLine CmdLine) {
-	if config.Properties.AppendOnly && handler.aofChan != nil {
+	if handler.aofChan != nil {
 		handler.aofChan <- &payload{
 			cmdLine: cmdLine,
 			dbIndex: dbIndex,
@@ -121,9 +122,10 @@ func (handler *Handler) handleAof() {
 	handler.aofFinished <- struct{}{}
 }
 
-// LoadAof read aof file
+// LoadAof read aof file, can only be used before Handler.handleAof started
 func (handler *Handler) LoadAof(maxBytes int) {
-	// delete aofChan to prevent write again
+	// handler.db.Exec may call handler.addAof
+	// delete aofChan to prevent loaded commands back into aofChan
 	aofChan := handler.aofChan
 	handler.aofChan = nil
 	defer func(aofChan chan *payload) {

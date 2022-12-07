@@ -1,6 +1,7 @@
 package database
 
 import (
+	"github.com/hdt3213/godis/aof"
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/datastruct/dict"
 	List "github.com/hdt3213/godis/datastruct/list"
@@ -32,42 +33,47 @@ func loadRdbFile(mdb *MultiDB) {
 func importRDB(dec *core.Decoder, mdb *MultiDB) error {
 	return dec.Parse(func(o rdb.RedisObject) bool {
 		db := mdb.mustSelectDB(o.GetDBIndex())
+		var entity *database.DataEntity
 		switch o.GetType() {
 		case rdb.StringType:
 			str := o.(*rdb.StringObject)
-			db.PutEntity(o.GetKey(), &database.DataEntity{
+			entity = &database.DataEntity{
 				Data: str.Value,
-			})
+			}
 		case rdb.ListType:
 			listObj := o.(*rdb.ListObject)
 			list := List.NewQuickList()
 			for _, v := range listObj.Values {
 				list.Add(v)
 			}
-			db.PutEntity(o.GetKey(), &database.DataEntity{
+			entity = &database.DataEntity{
 				Data: list,
-			})
+			}
 		case rdb.HashType:
 			hashObj := o.(*rdb.HashObject)
 			hash := dict.MakeSimple()
 			for k, v := range hashObj.Hash {
 				hash.Put(k, v)
 			}
-			db.PutEntity(o.GetKey(), &database.DataEntity{
+			entity = &database.DataEntity{
 				Data: hash,
-			})
+			}
 		case rdb.ZSetType:
 			zsetObj := o.(*rdb.ZSetObject)
 			zSet := SortedSet.Make()
 			for _, e := range zsetObj.Entries {
 				zSet.Add(e.Member, e.Score)
 			}
-			db.PutEntity(o.GetKey(), &database.DataEntity{
+			entity = &database.DataEntity{
 				Data: zSet,
-			})
+			}
 		}
-		if o.GetExpiration() != nil {
-			db.Expire(o.GetKey(), *o.GetExpiration())
+		if entity != nil {
+			db.PutEntity(o.GetKey(), entity)
+			if o.GetExpiration() != nil {
+				db.Expire(o.GetKey(), *o.GetExpiration())
+			}
+			db.addAof(aof.EntityToCmd(o.GetKey(), entity).Args)
 		}
 		return true
 	})

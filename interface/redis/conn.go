@@ -31,4 +31,6 @@ type Connection interface {
 
 	SetMaster()
 	IsMaster() bool
+
+	Name() string
 }

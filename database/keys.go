@@ -371,7 +371,7 @@ func execCopy(mdb *MultiDB, conn redis.Connection, args [][]byte) redis.Reply {
 		expire := raw.(time.Time)
 		destDB.Expire(destKey, expire)
 	}
-	mdb.aofHandler.AddAof(conn.GetDBIndex(), utils.ToCmdLine3("copy", args...))
+	mdb.AddAof(conn.GetDBIndex(), utils.ToCmdLine3("copy", args...))
 	return protocol.MakeIntReply(1)
 }
 

@@ -13,7 +13,9 @@ import (
 	"github.com/hdt3213/godis/redis/parser"
 	"github.com/hdt3213/godis/redis/protocol"
 	rdb "github.com/hdt3213/rdb/parser"
+	"io/ioutil"
 	"net"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -83,6 +85,7 @@ func (mdb *MultiDB) slaveOfNone() {
 	mdb.slaveStatus.replId = ""
 	mdb.slaveStatus.replOffset = -1
 	mdb.slaveStatus.stopSlaveWithMutex()
+	mdb.role = masterRole
 }
 
 // stopSlaveWithMutex stops in-progress connectWithMaster/fullSync/receiveAOF
@@ -302,6 +305,25 @@ func (mdb *MultiDB) psyncHandshake() (bool, error) {
 	return isFullReSync, nil
 }
 
+func makeRdbLoader(upgradeAof bool) (*MultiDB, string, error) {
+	rdbLoader := MakeBasicMultiDB()
+	if !upgradeAof {
+		return rdbLoader, "", nil
+	}
+	// make aof handler to generate new aof file during loading rdb
+	newAofFile, err := ioutil.TempFile("", "*.aof")
+	if err != nil {
+		return nil, "", fmt.Errorf("create temp rdb failed: %v", err)
+	}
+	newAofFilename := newAofFile.Name()
+	aofHandler, err := NewAofHandler(rdbLoader, newAofFilename, false)
+	if err != nil {
+		return nil, "", err
+	}
+	rdbLoader.bindAofHandler(aofHandler)
+	return rdbLoader, newAofFilename, nil
+}
+
 // loadMasterRDB downloads rdb after handshake has been done
 func (mdb *MultiDB) loadMasterRDB(configVersion int32) error {
 	rdbPayload := <-mdb.slaveStatus.masterChan
@@ -315,8 +337,12 @@ func (mdb *MultiDB) loadMasterRDB(configVersion int32) error {
 
 	logger.Info(fmt.Sprintf("receive %d bytes of rdb from master", len(rdbReply.Arg)))
 	rdbDec := rdb.NewDecoder(bytes.NewReader(rdbReply.Arg))
-	rdbHolder := MakeBasicMultiDB()
-	err := importRDB(rdbDec, rdbHolder)
+
+	rdbLoader, newAofFilename, err := makeRdbLoader(config.Properties.AppendOnly)
+	if err != nil {
+		return err
+	}
+	err = importRDB(rdbDec, rdbLoader)
 	if err != nil {
 		return errors.New("dump rdb failed: " + err.Error())
 	}
@@ -327,12 +353,25 @@ func (mdb *MultiDB) loadMasterRDB(configVersion int32) error {
 		// slaveStatus conf changed during connecting and waiting mutex
 		return configChangedErr
 	}
-	for i, h := range rdbHolder.dbSet {
+	for i, h := range rdbLoader.dbSet {
 		newDB := h.Load().(*DB)
 		mdb.loadDB(i, newDB)
 	}
 
-	// fixme: update aof file
+	if config.Properties.AppendOnly {
+		// use new aof file
+		mdb.aofHandler.Close()
+		err = os.Rename(newAofFilename, config.Properties.AppendFilename)
+		if err != nil {
+			return err
+		}
+		aofHandler, err := NewAofHandler(mdb, config.Properties.AppendFilename, false)
+		if err != nil {
+			return err
+		}
+		mdb.bindAofHandler(aofHandler)
+	}
+
 	return nil
 }
 

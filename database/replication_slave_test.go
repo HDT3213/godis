@@ -8,29 +8,54 @@ import (
 	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/protocol"
 	"github.com/hdt3213/godis/redis/protocol/asserts"
+	"io/ioutil"
+	"os"
+	"path"
 	"testing"
 	"time"
 )
 
 func TestReplicationSlaveSide(t *testing.T) {
-	mdb := mockServer()
+	tmpDir, err := ioutil.TempDir("", "godis")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	aofFilename := path.Join(tmpDir, "a.aof")
+	defer func() {
+		_ = os.Remove(aofFilename)
+	}()
+	config.Properties = &config.ServerProperties{
+		Databases:      16,
+		AppendOnly:     true,
+		AppendFilename: aofFilename,
+	}
+	conn := connection.NewFakeConn()
+	server := mockServer()
 	masterCli, err := client.MakeClient("127.0.0.1:6379")
 	if err != nil {
 		t.Error(err)
+		return
 	}
+	aofHandler, err := NewAofHandler(server, config.Properties.AppendFilename, true)
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	server.bindAofHandler(aofHandler)
+	server.Exec(conn, utils.ToCmdLine("set", "zz", "zz"))
 	masterCli.Start()
 
 	// sync with master
 	ret := masterCli.Send(utils.ToCmdLine("set", "1", "1"))
 	asserts.AssertStatusReply(t, ret, "OK")
-	conn := connection.NewFakeConn()
-	ret = mdb.Exec(conn, utils.ToCmdLine("SLAVEOF", "127.0.0.1", "6379"))
+	ret = server.Exec(conn, utils.ToCmdLine("SLAVEOF", "127.0.0.1", "6379"))
 	asserts.AssertStatusReply(t, ret, "OK")
 	success := false
 	for i := 0; i < 30; i++ {
 		// wait for sync
 		time.Sleep(time.Second)
-		ret = mdb.Exec(conn, utils.ToCmdLine("GET", "1"))
+		ret = server.Exec(conn, utils.ToCmdLine("GET", "1"))
 		bulkRet, ok := ret.(*protocol.BulkReply)
 		if ok {
 			if bytes.Equal(bulkRet.Arg, []byte("1")) {
@@ -51,7 +76,7 @@ func TestReplicationSlaveSide(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		// wait for sync
 		time.Sleep(time.Second)
-		ret = mdb.Exec(conn, utils.ToCmdLine("GET", "1"))
+		ret = server.Exec(conn, utils.ToCmdLine("GET", "1"))
 		bulkRet, ok := ret.(*protocol.BulkReply)
 		if ok {
 			if bytes.Equal(bulkRet.Arg, []byte("2")) {
@@ -64,7 +89,7 @@ func TestReplicationSlaveSide(t *testing.T) {
 		t.Error("sync failed")
 		return
 	}
-	err = mdb.slaveStatus.sendAck2Master()
+	err = server.slaveStatus.sendAck2Master()
 	if err != nil {
 		t.Error(err)
 		return
@@ -73,9 +98,9 @@ func TestReplicationSlaveSide(t *testing.T) {
 
 	// test reconnect
 	config.Properties.ReplTimeout = 1
-	_ = mdb.slaveStatus.masterConn.Close()
-	mdb.slaveStatus.lastRecvTime = time.Now().Add(-time.Hour) // mock timeout
-	mdb.slaveCron()
+	_ = server.slaveStatus.masterConn.Close()
+	server.slaveStatus.lastRecvTime = time.Now().Add(-time.Hour) // mock timeout
+	server.slaveCron()
 	time.Sleep(3 * time.Second)
 	ret = masterCli.Send(utils.ToCmdLine("set", "1", "3"))
 	asserts.AssertStatusReply(t, ret, "OK")
@@ -83,7 +108,7 @@ func TestReplicationSlaveSide(t *testing.T) {
 	for i := 0; i < 10; i++ {
 		// wait for sync
 		time.Sleep(time.Second)
-		ret = mdb.Exec(conn, utils.ToCmdLine("GET", "1"))
+		ret = server.Exec(conn, utils.ToCmdLine("GET", "1"))
 		bulkRet, ok := ret.(*protocol.BulkReply)
 		if ok {
 			if bytes.Equal(bulkRet.Arg, []byte("3")) {
@@ -98,19 +123,19 @@ func TestReplicationSlaveSide(t *testing.T) {
 	}
 
 	// test slave of no one
-	ret = mdb.Exec(conn, utils.ToCmdLine("SLAVEOF", "NO", "ONE"))
+	ret = server.Exec(conn, utils.ToCmdLine("SLAVEOF", "NO", "ONE"))
 	asserts.AssertStatusReply(t, ret, "OK")
 	ret = masterCli.Send(utils.ToCmdLine("set", "1", "4"))
 	asserts.AssertStatusReply(t, ret, "OK")
-	ret = mdb.Exec(conn, utils.ToCmdLine("GET", "1"))
+	ret = server.Exec(conn, utils.ToCmdLine("GET", "1"))
 	asserts.AssertBulkReply(t, ret, "3")
-	ret = mdb.Exec(conn, utils.ToCmdLine("SLAVEOF", "127.0.0.1", "6379"))
+	ret = server.Exec(conn, utils.ToCmdLine("SLAVEOF", "127.0.0.1", "6379"))
 	asserts.AssertStatusReply(t, ret, "OK")
 	success = false
 	for i := 0; i < 30; i++ {
 		// wait for sync
 		time.Sleep(time.Second)
-		ret = mdb.Exec(conn, utils.ToCmdLine("GET", "1"))
+		ret = server.Exec(conn, utils.ToCmdLine("GET", "1"))
 		bulkRet, ok := ret.(*protocol.BulkReply)
 		if ok {
 			if bytes.Equal(bulkRet.Arg, []byte("4")) {
@@ -124,7 +149,16 @@ func TestReplicationSlaveSide(t *testing.T) {
 		return
 	}
 
-	err = mdb.slaveStatus.close()
+	// check slave aof file
+	aofLoader := MakeBasicMultiDB()
+	aofHandler2, err := NewAofHandler(aofLoader, config.Properties.AppendFilename, true)
+	aofLoader.bindAofHandler(aofHandler2)
+	ret = aofLoader.Exec(conn, utils.ToCmdLine("get", "zz"))
+	asserts.AssertNullBulk(t, ret)
+	ret = aofLoader.Exec(conn, utils.ToCmdLine("get", "1"))
+	asserts.AssertBulkReply(t, ret, "4")
+
+	err = server.slaveStatus.close()
 	if err != nil {
 		t.Error("cannot close")
 	}

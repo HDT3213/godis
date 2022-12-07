@@ -49,7 +49,11 @@ func NewStandaloneServer() *MultiDB {
 	mdb.hub = pubsub.MakeHub()
 	validAof := false
 	if config.Properties.AppendOnly {
-		mdb.initAof()
+		aofHandler, err := NewAofHandler(mdb, config.Properties.AppendFilename, true)
+		if err != nil {
+			panic(err)
+		}
+		mdb.bindAofHandler(aofHandler)
 		validAof = true
 	}
 	if config.Properties.RDBFilename != "" && !validAof {
@@ -57,24 +61,33 @@ func NewStandaloneServer() *MultiDB {
 		loadRdbFile(mdb)
 	}
 	mdb.slaveStatus = initReplSlaveStatus()
-	mdb.startAsMaster()
+	mdb.initMaster()
 	mdb.startReplCron()
 	mdb.role = masterRole // The initialization process does not require atomicity
 	return mdb
 }
 
-func (mdb *MultiDB) initAof() {
-	aofHandler, err := aof.NewAOFHandler(mdb, func() database.EmbedDB {
+func NewAofHandler(db database.EmbedDB, filename string, load bool) (*aof.Handler, error) {
+	return aof.NewAOFHandler(db, filename, load, func() database.EmbedDB {
 		return MakeBasicMultiDB()
 	})
-	if err != nil {
-		panic(err)
+}
+
+func (mdb *MultiDB) AddAof(dbIndex int, cmdLine CmdLine) {
+	if mdb.aofHandler != nil {
+		mdb.aofHandler.AddAof(dbIndex, cmdLine)
 	}
+}
+
+func (mdb *MultiDB) bindAofHandler(aofHandler *aof.Handler) {
 	mdb.aofHandler = aofHandler
+	// bind AddAof
 	for _, db := range mdb.dbSet {
 		singleDB := db.Load().(*DB)
 		singleDB.addAof = func(line CmdLine) {
-			mdb.aofHandler.AddAof(singleDB.index, line)
+			if config.Properties.AppendOnly { // config may be changed during runtime
+				mdb.aofHandler.AddAof(singleDB.index, line)
+			}
 		}
 	}
 }
@@ -198,6 +211,7 @@ func (mdb *MultiDB) Close() {
 	if mdb.aofHandler != nil {
 		mdb.aofHandler.Close()
 	}
+	mdb.stopMaster()
 }
 
 func execSelect(c redis.Connection, mdb *MultiDB, args [][]byte) redis.Reply {
@@ -356,16 +370,11 @@ func (mdb *MultiDB) GetDBSize(dbIndex int) (int, int) {
 }
 
 func (mdb *MultiDB) startReplCron() {
-	go func() {
-		defer func() {
-			if err := recover(); err != nil {
-				logger.Error("panic", err)
-			}
-		}()
+	go func(mdb *MultiDB) {
 		ticker := time.Tick(time.Second * 10)
 		for range ticker {
 			mdb.slaveCron()
 			mdb.masterCron()
 		}
-	}()
+	}(mdb)
 }

@@ -168,6 +168,8 @@ func (mdb *MultiDB) rewriteRDB() error {
 	mdb.masterStatus.mu.Lock()
 	mdb.masterStatus.rdbFilename = rdbFilename
 	mdb.masterStatus.backlog = newBacklog
+	mdb.aofHandler.RemoveListener(mdb.masterStatus.aofListener)
+	mdb.masterStatus.aofListener = aofListener
 	mdb.masterStatus.mu.Unlock()
 	// It is ok to know that new backlog is ready later, so we change readyToSend without sync
 	// But setting readyToSend=true must after new backlog is really ready (that means master.mu.Unlock)
@@ -353,6 +355,7 @@ func (mdb *MultiDB) removeSlave(slave *slaveClient) {
 	delete(mdb.masterStatus.slaveMap, slave.conn)
 	delete(mdb.masterStatus.waitSlaves, slave)
 	delete(mdb.masterStatus.onlineSlaves, slave)
+	logger.Info("disconnect with slave " + slave.conn.Name())
 }
 
 func (mdb *MultiDB) setSlaveOnline(slave *slaveClient, currentOffset int64) {
@@ -414,7 +417,7 @@ func (listener *replAofListener) Callback(cmdLines []CmdLine) {
 	}
 }
 
-func (mdb *MultiDB) startAsMaster() {
+func (mdb *MultiDB) initMaster() {
 	mdb.masterStatus = &masterStatus{
 		mu:           sync.RWMutex{},
 		replId:       utils.RandHexString(40),
@@ -425,4 +428,28 @@ func (mdb *MultiDB) startAsMaster() {
 		bgSaveState:  bgSaveIdle,
 		rdbFilename:  "",
 	}
+}
+
+func (mdb *MultiDB) stopMaster() {
+	mdb.masterStatus.mu.Lock()
+	defer mdb.masterStatus.mu.Unlock()
+
+	// disconnect with slave
+	for _, slave := range mdb.masterStatus.slaveMap {
+		_ = slave.conn.Close()
+		delete(mdb.masterStatus.slaveMap, slave.conn)
+		delete(mdb.masterStatus.waitSlaves, slave)
+		delete(mdb.masterStatus.onlineSlaves, slave)
+	}
+
+	// clean master status
+	mdb.aofHandler.RemoveListener(mdb.masterStatus.aofListener)
+	_ = os.Remove(mdb.masterStatus.rdbFilename)
+	mdb.masterStatus.rdbFilename = ""
+	mdb.masterStatus.replId = ""
+	mdb.masterStatus.backlog = nil
+	mdb.masterStatus.slaveMap = make(map[redis.Connection]*slaveClient)
+	mdb.masterStatus.waitSlaves = make(map[*slaveClient]struct{})
+	mdb.masterStatus.onlineSlaves = make(map[*slaveClient]struct{})
+	mdb.masterStatus.bgSaveState = bgSaveIdle
 }

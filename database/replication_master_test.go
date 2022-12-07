@@ -30,6 +30,7 @@ func mockServer() *MultiDB {
 		server.dbSet[i] = holder
 	}
 	server.slaveStatus = initReplSlaveStatus()
+	server.initMaster()
 	return server
 }
 
@@ -49,8 +50,11 @@ func TestReplicationMasterSide(t *testing.T) {
 		AppendFilename: aofFilename,
 	}
 	master := mockServer()
-	master.initAof()
-	master.startAsMaster()
+	aofHandler, err := NewAofHandler(master, config.Properties.AppendFilename, true)
+	if err != nil {
+		panic(err)
+	}
+	master.bindAofHandler(aofHandler)
 	slave := mockServer()
 	replConn := connection.NewFakeConn()
 
@@ -209,8 +213,11 @@ func TestReplicationMasterRewriteRDB(t *testing.T) {
 		AppendFilename: aofFilename,
 	}
 	master := mockServer()
-	master.initAof()
-	master.startAsMaster()
+	aofHandler, err := NewAofHandler(master, config.Properties.AppendFilename, true)
+	if err != nil {
+		panic(err)
+	}
+	master.bindAofHandler(aofHandler)
 
 	masterConn := connection.NewFakeConn()
 	resp := master.Exec(masterConn, utils.ToCmdLine("SET", "a", "a"))

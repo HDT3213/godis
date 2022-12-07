@@ -94,6 +94,13 @@ func (c *Connection) Write(b []byte) (int, error) {
 	return c.conn.Write(b)
 }
 
+func (c *Connection) Name() string {
+	if c.conn != nil {
+		return c.conn.RemoteAddr().String()
+	}
+	return ""
+}
+
 // Subscribe add current connection into subscribers of the given channel
 func (c *Connection) Subscribe(channel string) {
 	c.mu.Lock()

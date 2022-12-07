@@ -20,4 +20,5 @@ logs
 # jetbrains
 .idea
 *.iml
+redis2.conf
 
