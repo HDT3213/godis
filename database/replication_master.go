@@ -371,10 +371,10 @@ var pingBytes = protocol.MakeMultiBulkReply(utils.ToCmdLine("ping")).ToBytes()
 const maxBacklogSize = 10 * 1024 * 1024 // 10MB
 
 func (mdb *MultiDB) masterCron() {
-	if mdb.role != masterRole {
+	mdb.masterStatus.mu.Lock()
+	if len(mdb.masterStatus.slaveMap) == 0 { // no slaves, do nothing
 		return
 	}
-	mdb.masterStatus.mu.Lock()
 	if mdb.masterStatus.bgSaveState == bgSaveFinish {
 		mdb.masterStatus.backlog.appendBytes(pingBytes)
 	}
@@ -443,11 +443,13 @@ func (mdb *MultiDB) stopMaster() {
 	}
 
 	// clean master status
-	mdb.aofHandler.RemoveListener(mdb.masterStatus.aofListener)
+	if mdb.aofHandler != nil {
+		mdb.aofHandler.RemoveListener(mdb.masterStatus.aofListener)
+	}
 	_ = os.Remove(mdb.masterStatus.rdbFilename)
 	mdb.masterStatus.rdbFilename = ""
 	mdb.masterStatus.replId = ""
-	mdb.masterStatus.backlog = nil
+	mdb.masterStatus.backlog = &replBacklog{}
 	mdb.masterStatus.slaveMap = make(map[redis.Connection]*slaveClient)
 	mdb.masterStatus.waitSlaves = make(map[*slaveClient]struct{})
 	mdb.masterStatus.onlineSlaves = make(map[*slaveClient]struct{})
