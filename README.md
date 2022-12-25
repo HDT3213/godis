@@ -24,6 +24,7 @@ Key Features:
 - RDB read and write
 - MULTI Commands Transaction is Atomic and Isolated. If any errors are encountered during execution, godis will rollback
   the executed commands
+- Replication (experimental)
 - Server-side Cluster which is transparent to client. You can connect to any node in the cluster to
   access all data in the cluster.
   - `MSET`, `MSETNX`, `DEL`, `Rename`, `RenameNX` command is supported and atomically executed in cluster mode, allow over multi node
@@ -143,8 +144,8 @@ I suggest focusing on the following directories:
     - set: a hash set based on map
     - sortedset: a sorted set implements based on skiplist
 - database: the core of storage engine
-    - database.go: a standalone redis server, with multiple database 
-    - single_db.go: data structure and base functions of single database
+    - server.go: a standalone redis server, with multiple database
+    - database.go: data structure and base functions of single database
     - exec.go: the gateway of database
     - router.go: the command table
     - keys.go: handlers for keys commands
