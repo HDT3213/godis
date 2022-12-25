@@ -70,7 +70,6 @@ func (server *Server) execSlaveOf(c redis.Connection, args [][]byte) redis.Reply
 	atomic.StoreInt32(&server.role, slaveRole)
 	server.slaveStatus.masterHost = host
 	server.slaveStatus.masterPort = port
-	// use buffered channel in case receiver goroutine exited before controller send stop signal
 	atomic.AddInt32(&server.slaveStatus.configVersion, 1)
 	server.slaveStatus.mutex.Unlock()
 	go server.setupMaster()

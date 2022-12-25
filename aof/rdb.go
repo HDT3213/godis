@@ -19,12 +19,12 @@ import (
 // todo: forbid concurrent rewrite
 
 // Rewrite2RDB rewrite aof data into rdb
-func (handler *Persister) Rewrite2RDB(rdbFilename string) error {
-	ctx, err := handler.startRewrite2RDB(nil, nil)
+func (persister *Persister) Rewrite2RDB(rdbFilename string) error {
+	ctx, err := persister.startRewrite2RDB(nil, nil)
 	if err != nil {
 		return err
 	}
-	err = handler.rewrite2RDB(ctx)
+	err = persister.rewrite2RDB(ctx)
 	if err != nil {
 		return err
 	}
@@ -42,12 +42,12 @@ func (handler *Persister) Rewrite2RDB(rdbFilename string) error {
 // Rewrite2RDBForReplication asynchronously rewrite aof data into rdb and returns a channel to receive following data
 // parameter listener would receive following updates of rdb
 // parameter hook allows you to do something during aof pausing
-func (handler *Persister) Rewrite2RDBForReplication(rdbFilename string, listener Listener, hook func()) error {
-	ctx, err := handler.startRewrite2RDB(listener, hook)
+func (persister *Persister) Rewrite2RDBForReplication(rdbFilename string, listener Listener, hook func()) error {
+	ctx, err := persister.startRewrite2RDB(listener, hook)
 	if err != nil {
 		return err
 	}
-	err = handler.rewrite2RDB(ctx)
+	err = persister.rewrite2RDB(ctx)
 	if err != nil {
 		return err
 	}
@@ -62,18 +62,18 @@ func (handler *Persister) Rewrite2RDBForReplication(rdbFilename string, listener
 	return nil
 }
 
-func (handler *Persister) startRewrite2RDB(newListener Listener, hook func()) (*RewriteCtx, error) {
-	handler.pausingAof.Lock() // pausing aof
-	defer handler.pausingAof.Unlock()
+func (persister *Persister) startRewrite2RDB(newListener Listener, hook func()) (*RewriteCtx, error) {
+	persister.pausingAof.Lock() // pausing aof
+	defer persister.pausingAof.Unlock()
 
-	err := handler.aofFile.Sync()
+	err := persister.aofFile.Sync()
 	if err != nil {
 		logger.Warn("fsync failed")
 		return nil, err
 	}
 
 	// get current aof file size
-	fileInfo, _ := os.Stat(handler.aofFilename)
+	fileInfo, _ := os.Stat(persister.aofFilename)
 	filesize := fileInfo.Size()
 	// create tmp file
 	file, err := ioutil.TempFile("", "*.aof")
@@ -82,7 +82,7 @@ func (handler *Persister) startRewrite2RDB(newListener Listener, hook func()) (*
 		return nil, err
 	}
 	if newListener != nil {
-		handler.listeners[newListener] = struct{}{}
+		persister.listeners[newListener] = struct{}{}
 	}
 	if hook != nil {
 		hook()
@@ -93,9 +93,9 @@ func (handler *Persister) startRewrite2RDB(newListener Listener, hook func()) (*
 	}, nil
 }
 
-func (handler *Persister) rewrite2RDB(ctx *RewriteCtx) error {
+func (persister *Persister) rewrite2RDB(ctx *RewriteCtx) error {
 	// load aof tmpFile
-	tmpHandler := handler.newRewriteHandler()
+	tmpHandler := persister.newRewriteHandler()
 	tmpHandler.LoadAof(int(ctx.fileSize))
 	encoder := rdb.NewEncoder(ctx.tmpFile).EnableCompress()
 	err := encoder.WriteHeader()

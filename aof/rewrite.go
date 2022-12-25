@@ -13,10 +13,10 @@ import (
 	"time"
 )
 
-func (handler *Persister) newRewriteHandler() *Persister {
+func (persister *Persister) newRewriteHandler() *Persister {
 	h := &Persister{}
-	h.aofFilename = handler.aofFilename
-	h.db = handler.tmpDBMaker()
+	h.aofFilename = persister.aofFilename
+	h.db = persister.tmpDBMaker()
 	return h
 }
 
@@ -28,27 +28,27 @@ type RewriteCtx struct {
 }
 
 // Rewrite carries out AOF rewrite
-func (handler *Persister) Rewrite() error {
-	ctx, err := handler.StartRewrite()
+func (persister *Persister) Rewrite() error {
+	ctx, err := persister.StartRewrite()
 	if err != nil {
 		return err
 	}
-	err = handler.DoRewrite(ctx)
+	err = persister.DoRewrite(ctx)
 	if err != nil {
 		return err
 	}
 
-	handler.FinishRewrite(ctx)
+	persister.FinishRewrite(ctx)
 	return nil
 }
 
 // DoRewrite actually rewrite aof file
 // makes DoRewrite public for testing only, please use Rewrite instead
-func (handler *Persister) DoRewrite(ctx *RewriteCtx) error {
+func (persister *Persister) DoRewrite(ctx *RewriteCtx) error {
 	tmpFile := ctx.tmpFile
 
 	// load aof tmpFile
-	tmpAof := handler.newRewriteHandler()
+	tmpAof := persister.newRewriteHandler()
 	tmpAof.LoadAof(int(ctx.fileSize))
 
 	// rewrite aof tmpFile
@@ -78,18 +78,18 @@ func (handler *Persister) DoRewrite(ctx *RewriteCtx) error {
 }
 
 // StartRewrite prepares rewrite procedure
-func (handler *Persister) StartRewrite() (*RewriteCtx, error) {
-	handler.pausingAof.Lock() // pausing aof
-	defer handler.pausingAof.Unlock()
+func (persister *Persister) StartRewrite() (*RewriteCtx, error) {
+	persister.pausingAof.Lock() // pausing aof
+	defer persister.pausingAof.Unlock()
 
-	err := handler.aofFile.Sync()
+	err := persister.aofFile.Sync()
 	if err != nil {
 		logger.Warn("fsync failed")
 		return nil, err
 	}
 
 	// get current aof file size
-	fileInfo, _ := os.Stat(handler.aofFilename)
+	fileInfo, _ := os.Stat(persister.aofFilename)
 	filesize := fileInfo.Size()
 
 	// create tmp file
@@ -101,18 +101,18 @@ func (handler *Persister) StartRewrite() (*RewriteCtx, error) {
 	return &RewriteCtx{
 		tmpFile:  file,
 		fileSize: filesize,
-		dbIdx:    handler.currentDB,
+		dbIdx:    persister.currentDB,
 	}, nil
 }
 
 // FinishRewrite finish rewrite procedure
-func (handler *Persister) FinishRewrite(ctx *RewriteCtx) {
-	handler.pausingAof.Lock() // pausing aof
-	defer handler.pausingAof.Unlock()
+func (persister *Persister) FinishRewrite(ctx *RewriteCtx) {
+	persister.pausingAof.Lock() // pausing aof
+	defer persister.pausingAof.Unlock()
 
 	tmpFile := ctx.tmpFile
 	// write commands executed during rewriting to tmp file
-	src, err := os.Open(handler.aofFilename)
+	src, err := os.Open(persister.aofFilename)
 	if err != nil {
 		logger.Error("open aofFilename failed: " + err.Error())
 		return
@@ -141,19 +141,19 @@ func (handler *Persister) FinishRewrite(ctx *RewriteCtx) {
 	}
 
 	// replace current aof file by tmp file
-	_ = handler.aofFile.Close()
-	_ = os.Rename(tmpFile.Name(), handler.aofFilename)
+	_ = persister.aofFile.Close()
+	_ = os.Rename(tmpFile.Name(), persister.aofFilename)
 
 	// reopen aof file for further write
-	aofFile, err := os.OpenFile(handler.aofFilename, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0600)
+	aofFile, err := os.OpenFile(persister.aofFilename, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		panic(err)
 	}
-	handler.aofFile = aofFile
+	persister.aofFile = aofFile
 
-	// write select command again to ensure aof file has the same db index with  handler.currentDB
-	data = protocol.MakeMultiBulkReply(utils.ToCmdLine("SELECT", strconv.Itoa(handler.currentDB))).ToBytes()
-	_, err = handler.aofFile.Write(data)
+	// write select command again to ensure aof file has the same db index with  persister.currentDB
+	data = protocol.MakeMultiBulkReply(utils.ToCmdLine("SELECT", strconv.Itoa(persister.currentDB))).ToBytes()
+	_, err = persister.aofFile.Write(data)
 	if err != nil {
 		panic(err)
 	}

@@ -49,38 +49,38 @@ type Persister struct {
 
 // NewPersister creates a new aof.Persister
 func NewPersister(db database.DBEngine, filename string, load bool, tmpDBMaker func() database.DBEngine) (*Persister, error) {
-	handler := &Persister{}
-	handler.aofFilename = filename
-	handler.db = db
-	handler.tmpDBMaker = tmpDBMaker
+	persister := &Persister{}
+	persister.aofFilename = filename
+	persister.db = db
+	persister.tmpDBMaker = tmpDBMaker
 	if load {
-		handler.LoadAof(0)
+		persister.LoadAof(0)
 	}
-	aofFile, err := os.OpenFile(handler.aofFilename, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0600)
+	aofFile, err := os.OpenFile(persister.aofFilename, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {
 		return nil, err
 	}
-	handler.aofFile = aofFile
-	handler.aofChan = make(chan *payload, aofQueueSize)
-	handler.aofFinished = make(chan struct{})
-	handler.listeners = make(map[Listener]struct{})
+	persister.aofFile = aofFile
+	persister.aofChan = make(chan *payload, aofQueueSize)
+	persister.aofFinished = make(chan struct{})
+	persister.listeners = make(map[Listener]struct{})
 	go func() {
-		handler.handleAof()
+		persister.handleAof()
 	}()
-	return handler, nil
+	return persister, nil
 }
 
 // RemoveListener removes a listener from aof handler, so we can close the listener
-func (handler *Persister) RemoveListener(listener Listener) {
-	handler.pausingAof.Lock()
-	defer handler.pausingAof.Unlock()
-	delete(handler.listeners, listener)
+func (persister *Persister) RemoveListener(listener Listener) {
+	persister.pausingAof.Lock()
+	defer persister.pausingAof.Unlock()
+	delete(persister.listeners, listener)
 }
 
 // AddAof send command to aof goroutine through channel
-func (handler *Persister) AddAof(dbIndex int, cmdLine CmdLine) {
-	if handler.aofChan != nil {
-		handler.aofChan <- &payload{
+func (persister *Persister) AddAof(dbIndex int, cmdLine CmdLine) {
+	if persister.aofChan != nil {
+		persister.aofChan <- &payload{
 			cmdLine: cmdLine,
 			dbIndex: dbIndex,
 		}
@@ -88,51 +88,51 @@ func (handler *Persister) AddAof(dbIndex int, cmdLine CmdLine) {
 }
 
 // handleAof listen aof channel and write into file
-func (handler *Persister) handleAof() {
+func (persister *Persister) handleAof() {
 	// serialized execution
 	var cmdLines []CmdLine
-	handler.currentDB = 0
-	for p := range handler.aofChan {
-		cmdLines = cmdLines[:0]    // reuse underlying array
-		handler.pausingAof.RLock() // prevent other goroutines from pausing aof
-		if p.dbIndex != handler.currentDB {
+	persister.currentDB = 0
+	for p := range persister.aofChan {
+		cmdLines = cmdLines[:0]      // reuse underlying array
+		persister.pausingAof.RLock() // prevent other goroutines from pausing aof
+		if p.dbIndex != persister.currentDB {
 			// select db
 			selectCmd := utils.ToCmdLine("SELECT", strconv.Itoa(p.dbIndex))
 			cmdLines = append(cmdLines, selectCmd)
 			data := protocol.MakeMultiBulkReply(selectCmd).ToBytes()
-			_, err := handler.aofFile.Write(data)
+			_, err := persister.aofFile.Write(data)
 			if err != nil {
 				logger.Warn(err)
-				handler.pausingAof.RUnlock()
+				persister.pausingAof.RUnlock()
 				continue // skip this command
 			}
-			handler.currentDB = p.dbIndex
+			persister.currentDB = p.dbIndex
 		}
 		data := protocol.MakeMultiBulkReply(p.cmdLine).ToBytes()
 		cmdLines = append(cmdLines, p.cmdLine)
-		_, err := handler.aofFile.Write(data)
+		_, err := persister.aofFile.Write(data)
 		if err != nil {
 			logger.Warn(err)
 		}
-		handler.pausingAof.RUnlock()
-		for listener := range handler.listeners {
+		persister.pausingAof.RUnlock()
+		for listener := range persister.listeners {
 			listener.Callback(cmdLines)
 		}
 	}
-	handler.aofFinished <- struct{}{}
+	persister.aofFinished <- struct{}{}
 }
 
 // LoadAof read aof file, can only be used before Persister.handleAof started
-func (handler *Persister) LoadAof(maxBytes int) {
-	// handler.db.Exec may call handler.addAof
+func (persister *Persister) LoadAof(maxBytes int) {
+	// persister.db.Exec may call persister.addAof
 	// delete aofChan to prevent loaded commands back into aofChan
-	aofChan := handler.aofChan
-	handler.aofChan = nil
+	aofChan := persister.aofChan
+	persister.aofChan = nil
 	defer func(aofChan chan *payload) {
-		handler.aofChan = aofChan
+		persister.aofChan = aofChan
 	}(aofChan)
 
-	file, err := os.Open(handler.aofFilename)
+	file, err := os.Open(persister.aofFilename)
 	if err != nil {
 		if _, ok := err.(*os.PathError); ok {
 			return
@@ -167,7 +167,7 @@ func (handler *Persister) LoadAof(maxBytes int) {
 			logger.Error("require multi bulk protocol")
 			continue
 		}
-		ret := handler.db.Exec(fakeConn, r.Args)
+		ret := persister.db.Exec(fakeConn, r.Args)
 		if protocol.IsErrorReply(ret) {
 			logger.Error("exec err", string(ret.ToBytes()))
 		}
@@ -175,11 +175,11 @@ func (handler *Persister) LoadAof(maxBytes int) {
 }
 
 // Close gracefully stops aof persistence procedure
-func (handler *Persister) Close() {
-	if handler.aofFile != nil {
-		close(handler.aofChan)
-		<-handler.aofFinished // wait for aof finished
-		err := handler.aofFile.Close()
+func (persister *Persister) Close() {
+	if persister.aofFile != nil {
+		close(persister.aofChan)
+		<-persister.aofFinished // wait for aof finished
+		err := persister.aofFile.Close()
 		if err != nil {
 			logger.Warn(err)
 		}
