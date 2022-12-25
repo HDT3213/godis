@@ -13,8 +13,8 @@ import (
 	"time"
 )
 
-func (handler *Handler) newRewriteHandler() *Handler {
-	h := &Handler{}
+func (handler *Persister) newRewriteHandler() *Persister {
+	h := &Persister{}
 	h.aofFilename = handler.aofFilename
 	h.db = handler.tmpDBMaker()
 	return h
@@ -28,7 +28,7 @@ type RewriteCtx struct {
 }
 
 // Rewrite carries out AOF rewrite
-func (handler *Handler) Rewrite() error {
+func (handler *Persister) Rewrite() error {
 	ctx, err := handler.StartRewrite()
 	if err != nil {
 		return err
@@ -44,7 +44,7 @@ func (handler *Handler) Rewrite() error {
 
 // DoRewrite actually rewrite aof file
 // makes DoRewrite public for testing only, please use Rewrite instead
-func (handler *Handler) DoRewrite(ctx *RewriteCtx) error {
+func (handler *Persister) DoRewrite(ctx *RewriteCtx) error {
 	tmpFile := ctx.tmpFile
 
 	// load aof tmpFile
@@ -78,7 +78,7 @@ func (handler *Handler) DoRewrite(ctx *RewriteCtx) error {
 }
 
 // StartRewrite prepares rewrite procedure
-func (handler *Handler) StartRewrite() (*RewriteCtx, error) {
+func (handler *Persister) StartRewrite() (*RewriteCtx, error) {
 	handler.pausingAof.Lock() // pausing aof
 	defer handler.pausingAof.Unlock()
 
@@ -106,7 +106,7 @@ func (handler *Handler) StartRewrite() (*RewriteCtx, error) {
 }
 
 // FinishRewrite finish rewrite procedure
-func (handler *Handler) FinishRewrite(ctx *RewriteCtx) {
+func (handler *Persister) FinishRewrite(ctx *RewriteCtx) {
 	handler.pausingAof.Lock() // pausing aof
 	defer handler.pausingAof.Unlock()
 

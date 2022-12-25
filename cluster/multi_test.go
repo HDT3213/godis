@@ -31,12 +31,12 @@ func TestEmptyMulti(t *testing.T) {
 	testNodeA.db.Exec(conn, utils.ToCmdLine("FLUSHALL"))
 	result := testNodeA.Exec(conn, toArgs("MULTI"))
 	asserts.AssertNotError(t, result)
-	result = testNodeA.Exec(conn, utils.ToCmdLine("PING"))
+	result = testNodeA.Exec(conn, utils.ToCmdLine("GET", "a"))
 	asserts.AssertNotError(t, result)
 	result = testNodeA.Exec(conn, utils.ToCmdLine("EXEC"))
 	asserts.AssertNotError(t, result)
 	mbr := result.(*protocol.MultiRawReply)
-	asserts.AssertStatusReply(t, mbr.Replies[0], "PONG")
+	asserts.AssertNullBulk(t, mbr.Replies[0])
 }
 
 func TestMultiExecOnOthers(t *testing.T) {

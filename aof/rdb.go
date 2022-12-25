@@ -19,7 +19,7 @@ import (
 // todo: forbid concurrent rewrite
 
 // Rewrite2RDB rewrite aof data into rdb
-func (handler *Handler) Rewrite2RDB(rdbFilename string) error {
+func (handler *Persister) Rewrite2RDB(rdbFilename string) error {
 	ctx, err := handler.startRewrite2RDB(nil, nil)
 	if err != nil {
 		return err
@@ -42,7 +42,7 @@ func (handler *Handler) Rewrite2RDB(rdbFilename string) error {
 // Rewrite2RDBForReplication asynchronously rewrite aof data into rdb and returns a channel to receive following data
 // parameter listener would receive following updates of rdb
 // parameter hook allows you to do something during aof pausing
-func (handler *Handler) Rewrite2RDBForReplication(rdbFilename string, listener Listener, hook func()) error {
+func (handler *Persister) Rewrite2RDBForReplication(rdbFilename string, listener Listener, hook func()) error {
 	ctx, err := handler.startRewrite2RDB(listener, hook)
 	if err != nil {
 		return err
@@ -62,7 +62,7 @@ func (handler *Handler) Rewrite2RDBForReplication(rdbFilename string, listener L
 	return nil
 }
 
-func (handler *Handler) startRewrite2RDB(newListener Listener, hook func()) (*RewriteCtx, error) {
+func (handler *Persister) startRewrite2RDB(newListener Listener, hook func()) (*RewriteCtx, error) {
 	handler.pausingAof.Lock() // pausing aof
 	defer handler.pausingAof.Unlock()
 
@@ -93,7 +93,7 @@ func (handler *Handler) startRewrite2RDB(newListener Listener, hook func()) (*Re
 	}, nil
 }
 
-func (handler *Handler) rewrite2RDB(ctx *RewriteCtx) error {
+func (handler *Persister) rewrite2RDB(ctx *RewriteCtx) error {
 	// load aof tmpFile
 	tmpHandler := handler.newRewriteHandler()
 	tmpHandler.LoadAof(int(ctx.fileSize))

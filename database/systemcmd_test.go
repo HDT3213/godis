@@ -9,12 +9,13 @@ import (
 )
 
 func TestPing(t *testing.T) {
-	actual := Ping(testDB, utils.ToCmdLine())
+	c := connection.NewFakeConn()
+	actual := Ping(c, utils.ToCmdLine())
 	asserts.AssertStatusReply(t, actual, "PONG")
 	val := utils.RandString(5)
-	actual = Ping(testDB, utils.ToCmdLine(val))
+	actual = Ping(c, utils.ToCmdLine(val))
 	asserts.AssertStatusReply(t, actual, val)
-	actual = Ping(testDB, utils.ToCmdLine(val, val))
+	actual = Ping(c, utils.ToCmdLine(val, val))
 	asserts.AssertErrReply(t, actual, "ERR wrong number of arguments for 'ping' command")
 }
 
@@ -32,7 +33,7 @@ func TestAuth(t *testing.T) {
 	}()
 	ret = testServer.Exec(c, utils.ToCmdLine("AUTH", passwd+"wrong"))
 	asserts.AssertErrReply(t, ret, "ERR invalid password")
-	ret = testServer.Exec(c, utils.ToCmdLine("PING"))
+	ret = testServer.Exec(c, utils.ToCmdLine("GET", "A"))
 	asserts.AssertErrReply(t, ret, "NOAUTH Authentication required")
 	ret = testServer.Exec(c, utils.ToCmdLine("AUTH", passwd))
 	asserts.AssertStatusReply(t, ret, "OK")

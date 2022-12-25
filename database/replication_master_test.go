@@ -19,8 +19,8 @@ import (
 	"time"
 )
 
-func mockServer() *MultiDB {
-	server := &MultiDB{}
+func mockServer() *Server {
+	server := &Server{}
 	server.dbSet = make([]*atomic.Value, 16)
 	for i := range server.dbSet {
 		singleDB := makeDB()
@@ -50,11 +50,11 @@ func TestReplicationMasterSide(t *testing.T) {
 		AppendFilename: aofFilename,
 	}
 	master := mockServer()
-	aofHandler, err := NewAofHandler(master, config.Properties.AppendFilename, true)
+	aofHandler, err := NewPersister(master, config.Properties.AppendFilename, true)
 	if err != nil {
 		panic(err)
 	}
-	master.bindAofHandler(aofHandler)
+	master.bindPersister(aofHandler)
 	slave := mockServer()
 	replConn := connection.NewFakeConn()
 
@@ -103,7 +103,7 @@ func TestReplicationMasterSide(t *testing.T) {
 	}
 
 	rdbDec := rdb.NewDecoder(bytes.NewReader(rdbReply.Arg))
-	err = importRDB(rdbDec, slave)
+	err = slave.loadRDB(rdbDec)
 	if err != nil {
 		t.Error("import rdb failed: " + err.Error())
 		return
@@ -213,11 +213,11 @@ func TestReplicationMasterRewriteRDB(t *testing.T) {
 		AppendFilename: aofFilename,
 	}
 	master := mockServer()
-	aofHandler, err := NewAofHandler(master, config.Properties.AppendFilename, true)
+	aofHandler, err := NewPersister(master, config.Properties.AppendFilename, true)
 	if err != nil {
 		panic(err)
 	}
-	master.bindAofHandler(aofHandler)
+	master.bindPersister(aofHandler)
 
 	masterConn := connection.NewFakeConn()
 	resp := master.Exec(masterConn, utils.ToCmdLine("SET", "a", "a"))
@@ -276,7 +276,7 @@ func TestReplicationMasterRewriteRDB(t *testing.T) {
 	}
 
 	rdbDec := rdb.NewDecoder(bytes.NewReader(rdbReply.Arg))
-	err = importRDB(rdbDec, slave)
+	err = slave.loadRDB(rdbDec)
 	if err != nil {
 		t.Error("import rdb failed: " + err.Error())
 		return

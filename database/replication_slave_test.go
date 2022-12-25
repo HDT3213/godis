@@ -37,12 +37,12 @@ func TestReplicationSlaveSide(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	aofHandler, err := NewAofHandler(server, config.Properties.AppendFilename, true)
+	aofHandler, err := NewPersister(server, config.Properties.AppendFilename, true)
 	if err != nil {
 		t.Error(err)
 		return
 	}
-	server.bindAofHandler(aofHandler)
+	server.bindPersister(aofHandler)
 	server.Exec(conn, utils.ToCmdLine("set", "zz", "zz"))
 	masterCli.Start()
 
@@ -150,9 +150,9 @@ func TestReplicationSlaveSide(t *testing.T) {
 	}
 
 	// check slave aof file
-	aofLoader := MakeBasicMultiDB()
-	aofHandler2, err := NewAofHandler(aofLoader, config.Properties.AppendFilename, true)
-	aofLoader.bindAofHandler(aofHandler2)
+	aofLoader := MakeAuxiliaryServer()
+	aofHandler2, err := NewPersister(aofLoader, config.Properties.AppendFilename, true)
+	aofLoader.bindPersister(aofHandler2)
 	ret = aofLoader.Exec(conn, utils.ToCmdLine("get", "zz"))
 	asserts.AssertNullBulk(t, ret)
 	ret = aofLoader.Exec(conn, utils.ToCmdLine("get", "1"))

@@ -7,7 +7,7 @@ import (
 )
 
 // Ping the server
-func Ping(db *DB, args [][]byte) redis.Reply {
+func Ping(c redis.Connection, args [][]byte) redis.Reply {
 	if len(args) == 0 {
 		return &protocol.PongReply{}
 	} else if len(args) == 1 {
@@ -38,8 +38,4 @@ func isAuthenticated(c redis.Connection) bool {
 		return true
 	}
 	return c.GetPassword() == config.Properties.RequirePass
-}
-
-func init() {
-	RegisterCommand("ping", Ping, noPrepare, nil, -1, flagReadOnly)
 }

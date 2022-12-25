@@ -1,38 +1,38 @@
 package database
 
 import (
+	"fmt"
 	"github.com/hdt3213/godis/aof"
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/datastruct/dict"
 	List "github.com/hdt3213/godis/datastruct/list"
 	SortedSet "github.com/hdt3213/godis/datastruct/sortedset"
 	"github.com/hdt3213/godis/interface/database"
-	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/rdb/core"
 	rdb "github.com/hdt3213/rdb/parser"
 	"os"
+	"sync/atomic"
 )
 
-func loadRdbFile(mdb *MultiDB) {
+func (server *Server) loadRdbFile() error {
 	rdbFile, err := os.Open(config.Properties.RDBFilename)
 	if err != nil {
-		logger.Error("open rdb file failed " + err.Error())
-		return
+		return fmt.Errorf("open rdb file failed " + err.Error())
 	}
 	defer func() {
 		_ = rdbFile.Close()
 	}()
 	decoder := rdb.NewDecoder(rdbFile)
-	err = importRDB(decoder, mdb)
+	err = server.loadRDB(decoder)
 	if err != nil {
-		logger.Error("dump rdb file failed " + err.Error())
-		return
+		return fmt.Errorf("dump rdb file failed " + err.Error())
 	}
+	return nil
 }
 
-func importRDB(dec *core.Decoder, mdb *MultiDB) error {
+func (server *Server) loadRDB(dec *core.Decoder) error {
 	return dec.Parse(func(o rdb.RedisObject) bool {
-		db := mdb.mustSelectDB(o.GetDBIndex())
+		db := server.mustSelectDB(o.GetDBIndex())
 		var entity *database.DataEntity
 		switch o.GetType() {
 		case rdb.StringType:
@@ -77,4 +77,41 @@ func importRDB(dec *core.Decoder, mdb *MultiDB) error {
 		}
 		return true
 	})
+}
+
+func NewPersister(db database.DBEngine, filename string, load bool) (*aof.Persister, error) {
+	return aof.NewPersister(db, filename, load, func() database.DBEngine {
+		return MakeAuxiliaryServer()
+	})
+}
+
+func (server *Server) AddAof(dbIndex int, cmdLine CmdLine) {
+	if server.persister != nil {
+		server.persister.AddAof(dbIndex, cmdLine)
+	}
+}
+
+func (server *Server) bindPersister(aofHandler *aof.Persister) {
+	server.persister = aofHandler
+	// bind AddAof
+	for _, db := range server.dbSet {
+		singleDB := db.Load().(*DB)
+		singleDB.addAof = func(line CmdLine) {
+			if config.Properties.AppendOnly { // config may be changed during runtime
+				server.persister.AddAof(singleDB.index, line)
+			}
+		}
+	}
+}
+
+// MakeAuxiliaryServer create a Server only with basic capabilities for aof rewrite and other usages
+func MakeAuxiliaryServer() *Server {
+	mdb := &Server{}
+	mdb.dbSet = make([]*atomic.Value, config.Properties.Databases)
+	for i := range mdb.dbSet {
+		holder := &atomic.Value{}
+		holder.Store(makeBasicDB())
+		mdb.dbSet[i] = holder
+	}
+	return mdb
 }

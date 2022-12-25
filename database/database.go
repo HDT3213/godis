@@ -1,380 +1,302 @@
+// Package database is a memory database with redis compatible interface
 package database
 
 import (
-	"fmt"
-	"github.com/hdt3213/godis/aof"
-	"github.com/hdt3213/godis/config"
+	"github.com/hdt3213/godis/datastruct/dict"
+	"github.com/hdt3213/godis/datastruct/lock"
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
-	"github.com/hdt3213/godis/lib/utils"
-	"github.com/hdt3213/godis/pubsub"
+	"github.com/hdt3213/godis/lib/timewheel"
 	"github.com/hdt3213/godis/redis/protocol"
-	"runtime/debug"
-	"strconv"
 	"strings"
-	"sync/atomic"
 	"time"
 )
 
-// MultiDB is a set of multiple database set
-type MultiDB struct {
-	dbSet []*atomic.Value // *DB
+const (
+	dataDictSize = 1 << 16
+	ttlDictSize  = 1 << 10
+	lockerSize   = 1024
+)
 
-	// handle publish/subscribe
-	hub *pubsub.Hub
-	// handle aof persistence
-	aofHandler *aof.Handler
+// DB stores data and execute user's commands
+type DB struct {
+	index int
+	// key -> DataEntity
+	data dict.Dict
+	// key -> expireTime (time.Time)
+	ttlMap dict.Dict
+	// key -> version(uint32)
+	versionMap dict.Dict
 
-	// for replication
-	role         int32
-	slaveStatus  *slaveStatus
-	masterStatus *masterStatus
+	// dict.Dict will ensure concurrent-safety of its method
+	// use this mutex for complicated command only, eg. rpush, incr ...
+	locker *lock.Locks
+	addAof func(CmdLine)
 }
 
-// NewStandaloneServer creates a standalone redis server, with multi database and all other funtions
-func NewStandaloneServer() *MultiDB {
-	mdb := &MultiDB{}
-	if config.Properties.Databases == 0 {
-		config.Properties.Databases = 16
+// ExecFunc is interface for command executor
+// args don't include cmd line
+type ExecFunc func(db *DB, args [][]byte) redis.Reply
+
+// PreFunc analyses command line when queued command to `multi`
+// returns related write keys and read keys
+type PreFunc func(args [][]byte) ([]string, []string)
+
+// CmdLine is alias for [][]byte, represents a command line
+type CmdLine = [][]byte
+
+// UndoFunc returns undo logs for the given command line
+// execute from head to tail when undo
+type UndoFunc func(db *DB, args [][]byte) []CmdLine
+
+// makeDB create DB instance
+func makeDB() *DB {
+	db := &DB{
+		data:       dict.MakeConcurrent(dataDictSize),
+		ttlMap:     dict.MakeConcurrent(ttlDictSize),
+		versionMap: dict.MakeConcurrent(dataDictSize),
+		locker:     lock.Make(lockerSize),
+		addAof:     func(line CmdLine) {},
 	}
-	mdb.dbSet = make([]*atomic.Value, config.Properties.Databases)
-	for i := range mdb.dbSet {
-		singleDB := makeDB()
-		singleDB.index = i
-		holder := &atomic.Value{}
-		holder.Store(singleDB)
-		mdb.dbSet[i] = holder
-	}
-	mdb.hub = pubsub.MakeHub()
-	validAof := false
-	if config.Properties.AppendOnly {
-		aofHandler, err := NewAofHandler(mdb, config.Properties.AppendFilename, true)
-		if err != nil {
-			panic(err)
-		}
-		mdb.bindAofHandler(aofHandler)
-		validAof = true
-	}
-	if config.Properties.RDBFilename != "" && !validAof {
-		// load rdb
-		loadRdbFile(mdb)
-	}
-	mdb.slaveStatus = initReplSlaveStatus()
-	mdb.initMaster()
-	mdb.startReplCron()
-	mdb.role = masterRole // The initialization process does not require atomicity
-	return mdb
+	return db
 }
 
-func NewAofHandler(db database.EmbedDB, filename string, load bool) (*aof.Handler, error) {
-	return aof.NewAOFHandler(db, filename, load, func() database.EmbedDB {
-		return MakeBasicMultiDB()
-	})
-}
-
-func (mdb *MultiDB) AddAof(dbIndex int, cmdLine CmdLine) {
-	if mdb.aofHandler != nil {
-		mdb.aofHandler.AddAof(dbIndex, cmdLine)
+// makeBasicDB create DB instance only with basic abilities.
+// It is not concurrent safe
+func makeBasicDB() *DB {
+	db := &DB{
+		data:       dict.MakeSimple(),
+		ttlMap:     dict.MakeSimple(),
+		versionMap: dict.MakeSimple(),
+		locker:     lock.Make(1),
+		addAof:     func(line CmdLine) {},
 	}
+	return db
 }
 
-func (mdb *MultiDB) bindAofHandler(aofHandler *aof.Handler) {
-	mdb.aofHandler = aofHandler
-	// bind AddAof
-	for _, db := range mdb.dbSet {
-		singleDB := db.Load().(*DB)
-		singleDB.addAof = func(line CmdLine) {
-			if config.Properties.AppendOnly { // config may be changed during runtime
-				mdb.aofHandler.AddAof(singleDB.index, line)
-			}
-		}
-	}
-}
-
-// MakeBasicMultiDB create a MultiDB only with basic abilities for aof rewrite and other usages
-func MakeBasicMultiDB() *MultiDB {
-	mdb := &MultiDB{}
-	mdb.dbSet = make([]*atomic.Value, config.Properties.Databases)
-	for i := range mdb.dbSet {
-		holder := &atomic.Value{}
-		holder.Store(makeBasicDB())
-		mdb.dbSet[i] = holder
-	}
-	return mdb
-}
-
-// Exec executes command
-// parameter `cmdLine` contains command and its arguments, for example: "set key value"
-func (mdb *MultiDB) Exec(c redis.Connection, cmdLine [][]byte) (result redis.Reply) {
-	defer func() {
-		if err := recover(); err != nil {
-			logger.Warn(fmt.Sprintf("error occurs: %v\n%s", err, string(debug.Stack())))
-			result = &protocol.UnknownErrReply{}
-		}
-	}()
-
+// Exec executes command within one database
+func (db *DB) Exec(c redis.Connection, cmdLine [][]byte) redis.Reply {
+	// transaction control commands and other commands which cannot execute within transaction
 	cmdName := strings.ToLower(string(cmdLine[0]))
-	// authenticate
-	if cmdName == "auth" {
-		return Auth(c, cmdLine[1:])
-	}
-	if !isAuthenticated(c) {
-		return protocol.MakeErrReply("NOAUTH Authentication required")
-	}
-	if cmdName == "slaveof" {
-		if c != nil && c.InMultiState() {
-			return protocol.MakeErrReply("cannot use slave of database within multi")
-		}
-		if len(cmdLine) != 3 {
-			return protocol.MakeArgNumErrReply("SLAVEOF")
-		}
-		return mdb.execSlaveOf(c, cmdLine[1:])
-	}
-
-	// read only slave
-	role := atomic.LoadInt32(&mdb.role)
-	if role == slaveRole && !c.IsMaster() {
-		// only allow read only command, forbid all special commands except `auth` and `slaveof`
-		if !isReadOnlyCommand(cmdName) {
-			return protocol.MakeErrReply("READONLY You can't write against a read only slave.")
-		}
-	}
-
-	// special commands which cannot execute within transaction
-	if cmdName == "subscribe" {
-		if len(cmdLine) < 2 {
-			return protocol.MakeArgNumErrReply("subscribe")
-		}
-		return pubsub.Subscribe(mdb.hub, c, cmdLine[1:])
-	} else if cmdName == "publish" {
-		return pubsub.Publish(mdb.hub, cmdLine[1:])
-	} else if cmdName == "unsubscribe" {
-		return pubsub.UnSubscribe(mdb.hub, c, cmdLine[1:])
-	} else if cmdName == "bgrewriteaof" {
-		// aof.go imports router.go, router.go cannot import BGRewriteAOF from aof.go
-		return BGRewriteAOF(mdb, cmdLine[1:])
-	} else if cmdName == "rewriteaof" {
-		return RewriteAOF(mdb, cmdLine[1:])
-	} else if cmdName == "flushall" {
-		return mdb.flushAll()
-	} else if cmdName == "flushdb" {
-		if !validateArity(1, cmdLine) {
+	if cmdName == "multi" {
+		if len(cmdLine) != 1 {
 			return protocol.MakeArgNumErrReply(cmdName)
 		}
-		if c.InMultiState() {
-			return protocol.MakeErrReply("ERR command 'FlushDB' cannot be used in MULTI")
+		return StartMulti(c)
+	} else if cmdName == "discard" {
+		if len(cmdLine) != 1 {
+			return protocol.MakeArgNumErrReply(cmdName)
 		}
-		return mdb.flushDB(c.GetDBIndex())
-	} else if cmdName == "save" {
-		return SaveRDB(mdb, cmdLine[1:])
-	} else if cmdName == "bgsave" {
-		return BGSaveRDB(mdb, cmdLine[1:])
-	} else if cmdName == "select" {
-		if c != nil && c.InMultiState() {
-			return protocol.MakeErrReply("cannot select database within multi")
+		return DiscardMulti(c)
+	} else if cmdName == "exec" {
+		if len(cmdLine) != 1 {
+			return protocol.MakeArgNumErrReply(cmdName)
 		}
-		if len(cmdLine) != 2 {
-			return protocol.MakeArgNumErrReply("select")
+		return execMulti(db, c)
+	} else if cmdName == "watch" {
+		if !validateArity(-2, cmdLine) {
+			return protocol.MakeArgNumErrReply(cmdName)
 		}
-		return execSelect(c, mdb, cmdLine[1:])
-	} else if cmdName == "copy" {
-		if len(cmdLine) < 3 {
-			return protocol.MakeArgNumErrReply("copy")
+		return Watch(db, c, cmdLine[1:])
+	}
+	if c != nil && c.InMultiState() {
+		return EnqueueCmd(c, cmdLine)
+	}
+
+	return db.execNormalCommand(cmdLine)
+}
+
+func (db *DB) execNormalCommand(cmdLine [][]byte) redis.Reply {
+	cmdName := strings.ToLower(string(cmdLine[0]))
+	cmd, ok := cmdTable[cmdName]
+	if !ok {
+		return protocol.MakeErrReply("ERR unknown command '" + cmdName + "'")
+	}
+	if !validateArity(cmd.arity, cmdLine) {
+		return protocol.MakeArgNumErrReply(cmdName)
+	}
+
+	prepare := cmd.prepare
+	write, read := prepare(cmdLine[1:])
+	db.addVersion(write...)
+	db.RWLocks(write, read)
+	defer db.RWUnLocks(write, read)
+	fun := cmd.executor
+	return fun(db, cmdLine[1:])
+}
+
+// execWithLock executes normal commands, invoker should provide locks
+func (db *DB) execWithLock(cmdLine [][]byte) redis.Reply {
+	cmdName := strings.ToLower(string(cmdLine[0]))
+	cmd, ok := cmdTable[cmdName]
+	if !ok {
+		return protocol.MakeErrReply("ERR unknown command '" + cmdName + "'")
+	}
+	if !validateArity(cmd.arity, cmdLine) {
+		return protocol.MakeArgNumErrReply(cmdName)
+	}
+	fun := cmd.executor
+	return fun(db, cmdLine[1:])
+}
+
+func validateArity(arity int, cmdArgs [][]byte) bool {
+	argNum := len(cmdArgs)
+	if arity >= 0 {
+		return argNum == arity
+	}
+	return argNum >= -arity
+}
+
+/* ---- Data Access ----- */
+
+// GetEntity returns DataEntity bind to given key
+func (db *DB) GetEntity(key string) (*database.DataEntity, bool) {
+	raw, ok := db.data.Get(key)
+	if !ok {
+		return nil, false
+	}
+	if db.IsExpired(key) {
+		return nil, false
+	}
+	entity, _ := raw.(*database.DataEntity)
+	return entity, true
+}
+
+// PutEntity a DataEntity into DB
+func (db *DB) PutEntity(key string, entity *database.DataEntity) int {
+	return db.data.Put(key, entity)
+}
+
+// PutIfExists edit an existing DataEntity
+func (db *DB) PutIfExists(key string, entity *database.DataEntity) int {
+	return db.data.PutIfExists(key, entity)
+}
+
+// PutIfAbsent insert an DataEntity only if the key not exists
+func (db *DB) PutIfAbsent(key string, entity *database.DataEntity) int {
+	return db.data.PutIfAbsent(key, entity)
+}
+
+// Remove the given key from db
+func (db *DB) Remove(key string) {
+	db.data.Remove(key)
+	db.ttlMap.Remove(key)
+	taskKey := genExpireTask(key)
+	timewheel.Cancel(taskKey)
+}
+
+// Removes the given keys from db
+func (db *DB) Removes(keys ...string) (deleted int) {
+	deleted = 0
+	for _, key := range keys {
+		_, exists := db.data.Get(key)
+		if exists {
+			db.Remove(key)
+			deleted++
 		}
-		return execCopy(mdb, c, cmdLine[1:])
-	} else if cmdName == "replconf" {
-		return mdb.execReplConf(c, cmdLine[1:])
-	} else if cmdName == "psync" {
-		return mdb.execPSync(c, cmdLine[1:])
 	}
-	// todo: support multi database transaction
-
-	// normal commands
-	dbIndex := c.GetDBIndex()
-	selectedDB, errReply := mdb.selectDB(dbIndex)
-	if errReply != nil {
-		return errReply
-	}
-	return selectedDB.Exec(c, cmdLine)
+	return deleted
 }
 
-// AfterClientClose does some clean after client close connection
-func (mdb *MultiDB) AfterClientClose(c redis.Connection) {
-	pubsub.UnsubscribeAll(mdb.hub, c)
+// Flush clean database
+// deprecated
+// for test only
+func (db *DB) Flush() {
+	db.data.Clear()
+	db.ttlMap.Clear()
+	db.locker = lock.Make(lockerSize)
 }
 
-// Close graceful shutdown database
-func (mdb *MultiDB) Close() {
-	// stop slaveStatus first
-	mdb.slaveStatus.close()
-	if mdb.aofHandler != nil {
-		mdb.aofHandler.Close()
-	}
-	mdb.stopMaster()
-}
-
-func execSelect(c redis.Connection, mdb *MultiDB, args [][]byte) redis.Reply {
-	dbIndex, err := strconv.Atoi(string(args[0]))
-	if err != nil {
-		return protocol.MakeErrReply("ERR invalid DB index")
-	}
-	if dbIndex >= len(mdb.dbSet) || dbIndex < 0 {
-		return protocol.MakeErrReply("ERR DB index is out of range")
-	}
-	c.SelectDB(dbIndex)
-	return protocol.MakeOkReply()
-}
-
-func (mdb *MultiDB) flushDB(dbIndex int) redis.Reply {
-	if dbIndex >= len(mdb.dbSet) || dbIndex < 0 {
-		return protocol.MakeErrReply("ERR DB index is out of range")
-	}
-	newDB := makeDB()
-	mdb.loadDB(dbIndex, newDB)
-	return &protocol.OkReply{}
-}
-
-func (mdb *MultiDB) loadDB(dbIndex int, newDB *DB) redis.Reply {
-	if dbIndex >= len(mdb.dbSet) || dbIndex < 0 {
-		return protocol.MakeErrReply("ERR DB index is out of range")
-	}
-	oldDB := mdb.mustSelectDB(dbIndex)
-	newDB.index = dbIndex
-	newDB.addAof = oldDB.addAof // inherit oldDB
-	mdb.dbSet[dbIndex].Store(newDB)
-	return &protocol.OkReply{}
-}
-
-func (mdb *MultiDB) flushAll() redis.Reply {
-	for i := range mdb.dbSet {
-		mdb.flushDB(i)
-	}
-	if mdb.aofHandler != nil {
-		mdb.aofHandler.AddAof(0, utils.ToCmdLine("FlushAll"))
-	}
-	return &protocol.OkReply{}
-}
-
-func (mdb *MultiDB) selectDB(dbIndex int) (*DB, *protocol.StandardErrReply) {
-	if dbIndex >= len(mdb.dbSet) || dbIndex < 0 {
-		return nil, protocol.MakeErrReply("ERR DB index is out of range")
-	}
-	return mdb.dbSet[dbIndex].Load().(*DB), nil
-}
-
-func (mdb *MultiDB) mustSelectDB(dbIndex int) *DB {
-	selectedDB, err := mdb.selectDB(dbIndex)
-	if err != nil {
-		panic(err)
-	}
-	return selectedDB
-}
-
-// ForEach traverses all the keys in the given database
-func (mdb *MultiDB) ForEach(dbIndex int, cb func(key string, data *database.DataEntity, expiration *time.Time) bool) {
-	mdb.mustSelectDB(dbIndex).ForEach(cb)
-}
-
-// ExecMulti executes multi commands transaction Atomically and Isolated
-func (mdb *MultiDB) ExecMulti(conn redis.Connection, watching map[string]uint32, cmdLines []CmdLine) redis.Reply {
-	selectedDB, errReply := mdb.selectDB(conn.GetDBIndex())
-	if errReply != nil {
-		return errReply
-	}
-	return selectedDB.ExecMulti(conn, watching, cmdLines)
-}
+/* ---- Lock Function ----- */
 
 // RWLocks lock keys for writing and reading
-func (mdb *MultiDB) RWLocks(dbIndex int, writeKeys []string, readKeys []string) {
-	mdb.mustSelectDB(dbIndex).RWLocks(writeKeys, readKeys)
+func (db *DB) RWLocks(writeKeys []string, readKeys []string) {
+	db.locker.RWLocks(writeKeys, readKeys)
 }
 
 // RWUnLocks unlock keys for writing and reading
-func (mdb *MultiDB) RWUnLocks(dbIndex int, writeKeys []string, readKeys []string) {
-	mdb.mustSelectDB(dbIndex).RWUnLocks(writeKeys, readKeys)
+func (db *DB) RWUnLocks(writeKeys []string, readKeys []string) {
+	db.locker.RWUnLocks(writeKeys, readKeys)
 }
 
-// GetUndoLogs return rollback commands
-func (mdb *MultiDB) GetUndoLogs(dbIndex int, cmdLine [][]byte) []CmdLine {
-	return mdb.mustSelectDB(dbIndex).GetUndoLogs(cmdLine)
+/* ---- TTL Functions ---- */
+
+func genExpireTask(key string) string {
+	return "expire:" + key
 }
 
-// ExecWithLock executes normal commands, invoker should provide locks
-func (mdb *MultiDB) ExecWithLock(conn redis.Connection, cmdLine [][]byte) redis.Reply {
-	db, errReply := mdb.selectDB(conn.GetDBIndex())
-	if errReply != nil {
-		return errReply
-	}
-	return db.execWithLock(cmdLine)
-}
-
-// BGRewriteAOF asynchronously rewrites Append-Only-File
-func BGRewriteAOF(db *MultiDB, args [][]byte) redis.Reply {
-	go db.aofHandler.Rewrite()
-	return protocol.MakeStatusReply("Background append only file rewriting started")
-}
-
-// RewriteAOF start Append-Only-File rewriting and blocked until it finished
-func RewriteAOF(db *MultiDB, args [][]byte) redis.Reply {
-	err := db.aofHandler.Rewrite()
-	if err != nil {
-		return protocol.MakeErrReply(err.Error())
-	}
-	return protocol.MakeOkReply()
-}
-
-// SaveRDB start RDB writing and blocked until it finished
-func SaveRDB(db *MultiDB, args [][]byte) redis.Reply {
-	if db.aofHandler == nil {
-		return protocol.MakeErrReply("please enable aof before using save")
-	}
-	rdbFilename := config.Properties.RDBFilename
-	if rdbFilename == "" {
-		rdbFilename = "dump.rdb"
-	}
-	err := db.aofHandler.Rewrite2RDB(rdbFilename)
-	if err != nil {
-		return protocol.MakeErrReply(err.Error())
-	}
-	return protocol.MakeOkReply()
-}
-
-// BGSaveRDB asynchronously save RDB
-func BGSaveRDB(db *MultiDB, args [][]byte) redis.Reply {
-	if db.aofHandler == nil {
-		return protocol.MakeErrReply("please enable aof before using save")
-	}
-	go func() {
-		defer func() {
-			if err := recover(); err != nil {
-				logger.Error(err)
-			}
-		}()
-		rdbFilename := config.Properties.RDBFilename
-		if rdbFilename == "" {
-			rdbFilename = "dump.rdb"
+// Expire sets ttlCmd of key
+func (db *DB) Expire(key string, expireTime time.Time) {
+	db.ttlMap.Put(key, expireTime)
+	taskKey := genExpireTask(key)
+	timewheel.At(expireTime, taskKey, func() {
+		keys := []string{key}
+		db.RWLocks(keys, nil)
+		defer db.RWUnLocks(keys, nil)
+		// check-lock-check, ttl may be updated during waiting lock
+		logger.Info("expire " + key)
+		rawExpireTime, ok := db.ttlMap.Get(key)
+		if !ok {
+			return
 		}
-		err := db.aofHandler.Rewrite2RDB(rdbFilename)
-		if err != nil {
-			logger.Error(err)
+		expireTime, _ := rawExpireTime.(time.Time)
+		expired := time.Now().After(expireTime)
+		if expired {
+			db.Remove(key)
 		}
-	}()
-	return protocol.MakeStatusReply("Background saving started")
+	})
 }
 
-// GetDBSize returns keys count and ttl key count
-func (mdb *MultiDB) GetDBSize(dbIndex int) (int, int) {
-	db := mdb.mustSelectDB(dbIndex)
-	return db.data.Len(), db.ttlMap.Len()
+// Persist cancel ttlCmd of key
+func (db *DB) Persist(key string) {
+	db.ttlMap.Remove(key)
+	taskKey := genExpireTask(key)
+	timewheel.Cancel(taskKey)
 }
 
-func (mdb *MultiDB) startReplCron() {
-	go func(mdb *MultiDB) {
-		ticker := time.Tick(time.Second * 10)
-		for range ticker {
-			mdb.slaveCron()
-			mdb.masterCron()
+// IsExpired check whether a key is expired
+func (db *DB) IsExpired(key string) bool {
+	rawExpireTime, ok := db.ttlMap.Get(key)
+	if !ok {
+		return false
+	}
+	expireTime, _ := rawExpireTime.(time.Time)
+	expired := time.Now().After(expireTime)
+	if expired {
+		db.Remove(key)
+	}
+	return expired
+}
+
+/* --- add version --- */
+
+func (db *DB) addVersion(keys ...string) {
+	for _, key := range keys {
+		versionCode := db.GetVersion(key)
+		db.versionMap.Put(key, versionCode+1)
+	}
+}
+
+// GetVersion returns version code for given key
+func (db *DB) GetVersion(key string) uint32 {
+	entity, ok := db.versionMap.Get(key)
+	if !ok {
+		return 0
+	}
+	return entity.(uint32)
+}
+
+// ForEach traverses all the keys in the database
+func (db *DB) ForEach(cb func(key string, data *database.DataEntity, expiration *time.Time) bool) {
+	db.data.ForEach(func(key string, raw interface{}) bool {
+		entity, _ := raw.(*database.DataEntity)
+		var expiration *time.Time
+		rawExpireTime, ok := db.ttlMap.Get(key)
+		if ok {
+			expireTime, _ := rawExpireTime.(time.Time)
+			expiration = &expireTime
 		}
-	}(mdb)
+		return cb(key, entity, expiration)
+	})
 }

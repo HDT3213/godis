@@ -33,7 +33,7 @@ type Cluster struct {
 	peerPicker      PeerPicker
 	nodeConnections map[string]*pool.Pool
 
-	db           database.EmbedDB
+	db           database.DBEngine
 	transactions *dict.SimpleDict // id -> Transaction
 
 	idGenerator *idgenerator.IDGenerator

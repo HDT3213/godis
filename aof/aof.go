@@ -32,10 +32,10 @@ type Listener interface {
 	Callback([]CmdLine)
 }
 
-// Handler receive msgs from channel and write to AOF file
-type Handler struct {
-	db          database.EmbedDB
-	tmpDBMaker  func() database.EmbedDB
+// Persister receive msgs from channel and write to AOF file
+type Persister struct {
+	db          database.DBEngine
+	tmpDBMaker  func() database.DBEngine
 	aofChan     chan *payload
 	aofFile     *os.File
 	aofFilename string
@@ -47,9 +47,9 @@ type Handler struct {
 	listeners  map[Listener]struct{}
 }
 
-// NewAOFHandler creates a new aof.Handler
-func NewAOFHandler(db database.EmbedDB, filename string, load bool, tmpDBMaker func() database.EmbedDB) (*Handler, error) {
-	handler := &Handler{}
+// NewPersister creates a new aof.Persister
+func NewPersister(db database.DBEngine, filename string, load bool, tmpDBMaker func() database.DBEngine) (*Persister, error) {
+	handler := &Persister{}
 	handler.aofFilename = filename
 	handler.db = db
 	handler.tmpDBMaker = tmpDBMaker
@@ -71,14 +71,14 @@ func NewAOFHandler(db database.EmbedDB, filename string, load bool, tmpDBMaker f
 }
 
 // RemoveListener removes a listener from aof handler, so we can close the listener
-func (handler *Handler) RemoveListener(listener Listener) {
+func (handler *Persister) RemoveListener(listener Listener) {
 	handler.pausingAof.Lock()
 	defer handler.pausingAof.Unlock()
 	delete(handler.listeners, listener)
 }
 
 // AddAof send command to aof goroutine through channel
-func (handler *Handler) AddAof(dbIndex int, cmdLine CmdLine) {
+func (handler *Persister) AddAof(dbIndex int, cmdLine CmdLine) {
 	if handler.aofChan != nil {
 		handler.aofChan <- &payload{
 			cmdLine: cmdLine,
@@ -88,7 +88,7 @@ func (handler *Handler) AddAof(dbIndex int, cmdLine CmdLine) {
 }
 
 // handleAof listen aof channel and write into file
-func (handler *Handler) handleAof() {
+func (handler *Persister) handleAof() {
 	// serialized execution
 	var cmdLines []CmdLine
 	handler.currentDB = 0
@@ -122,8 +122,8 @@ func (handler *Handler) handleAof() {
 	handler.aofFinished <- struct{}{}
 }
 
-// LoadAof read aof file, can only be used before Handler.handleAof started
-func (handler *Handler) LoadAof(maxBytes int) {
+// LoadAof read aof file, can only be used before Persister.handleAof started
+func (handler *Persister) LoadAof(maxBytes int) {
 	// handler.db.Exec may call handler.addAof
 	// delete aofChan to prevent loaded commands back into aofChan
 	aofChan := handler.aofChan
@@ -175,7 +175,7 @@ func (handler *Handler) LoadAof(maxBytes int) {
 }
 
 // Close gracefully stops aof persistence procedure
-func (handler *Handler) Close() {
+func (handler *Persister) Close() {
 	if handler.aofFile != nil {
 		close(handler.aofChan)
 		<-handler.aofFinished // wait for aof finished

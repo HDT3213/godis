@@ -223,7 +223,7 @@ func TestRewriteAOF2(t *testing.T) {
 		aofWriteDB.Exec(conn, utils.ToCmdLine("SET", key, key))
 	}
 
-	ctx, err := aofWriteDB.aofHandler.StartRewrite()
+	ctx, err := aofWriteDB.persister.StartRewrite()
 	if err != nil {
 		t.Error(err)
 		return
@@ -234,8 +234,8 @@ func TestRewriteAOF2(t *testing.T) {
 		key := "a" + strconv.Itoa(i)
 		aofWriteDB.Exec(conn, utils.ToCmdLine("SET", key, key))
 	}
-	aofWriteDB.aofHandler.DoRewrite(ctx)
-	aofWriteDB.aofHandler.FinishRewrite(ctx)
+	aofWriteDB.persister.DoRewrite(ctx)
+	aofWriteDB.persister.FinishRewrite(ctx)
 
 	aofWriteDB.Close()                 // wait for aof finished
 	aofReadDB := NewStandaloneServer() // start new db and read aof file

@@ -15,8 +15,8 @@ type DB interface {
 	Close()
 }
 
-// EmbedDB is the embedding storage engine exposing more methods for complex application
-type EmbedDB interface {
+// DBEngine is the embedding storage engine exposing more methods for complex application
+type DBEngine interface {
 	DB
 	ExecWithLock(conn redis.Connection, cmdLine [][]byte) redis.Reply
 	ExecMulti(conn redis.Connection, watching map[string]uint32, cmdLines []CmdLine) redis.Reply
