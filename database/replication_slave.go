@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/hdt3213/godis/aof"
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
@@ -315,7 +316,7 @@ func makeRdbLoader(upgradeAof bool) (*Server, string, error) {
 		return nil, "", fmt.Errorf("create temp rdb failed: %v", err)
 	}
 	newAofFilename := newAofFile.Name()
-	aofHandler, err := NewPersister(rdbLoader, newAofFilename, false)
+	aofHandler, err := NewPersister(rdbLoader, newAofFilename, false, aof.FsyncNo)
 	if err != nil {
 		return nil, "", err
 	}
@@ -364,11 +365,11 @@ func (server *Server) loadMasterRDB(configVersion int32) error {
 		if err != nil {
 			return err
 		}
-		aofHandler, err := NewPersister(server, config.Properties.AppendFilename, false)
+		persister, err := NewPersister(server, config.Properties.AppendFilename, false, config.Properties.AppendFsync)
 		if err != nil {
 			return err
 		}
-		server.bindPersister(aofHandler)
+		server.bindPersister(persister)
 	}
 
 	return nil

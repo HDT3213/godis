@@ -1,6 +1,7 @@
 package aof
 
 import (
+	"context"
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/utils"
@@ -10,7 +11,9 @@ import (
 	"io"
 	"os"
 	"strconv"
+	"strings"
 	"sync"
+	"time"
 )
 
 // CmdLine is alias for [][]byte, represents a command line
@@ -20,9 +23,19 @@ const (
 	aofQueueSize = 1 << 16
 )
 
+const (
+	// FsyncAlways do fsync for every command
+	FsyncAlways = "always"
+	// FsyncEverySec do fsync every second
+	FsyncEverySec = "everysec"
+	// FsyncNo lets operating system decides when to do fsync
+	FsyncNo = "no"
+)
+
 type payload struct {
 	cmdLine CmdLine
 	dbIndex int
+	wg      *sync.WaitGroup
 }
 
 // Listener will be called-back after receiving a aof payload
@@ -34,23 +47,27 @@ type Listener interface {
 
 // Persister receive msgs from channel and write to AOF file
 type Persister struct {
+	ctx         context.Context
+	cancel      context.CancelFunc
 	db          database.DBEngine
 	tmpDBMaker  func() database.DBEngine
 	aofChan     chan *payload
 	aofFile     *os.File
 	aofFilename string
-	// aof goroutine will send msg to main goroutine through this channel when aof tasks finished and ready to shutdown
+	aofFsync    string
+	// aof goroutine will send msg to main goroutine through this channel when aof tasks finished and ready to shut down
 	aofFinished chan struct{}
 	// pause aof for start/finish aof rewrite progress
-	pausingAof sync.RWMutex
+	pausingAof sync.Mutex
 	currentDB  int
 	listeners  map[Listener]struct{}
 }
 
 // NewPersister creates a new aof.Persister
-func NewPersister(db database.DBEngine, filename string, load bool, tmpDBMaker func() database.DBEngine) (*Persister, error) {
+func NewPersister(db database.DBEngine, filename string, load bool, fsync string, tmpDBMaker func() database.DBEngine) (*Persister, error) {
 	persister := &Persister{}
 	persister.aofFilename = filename
+	persister.aofFsync = strings.ToLower(fsync)
 	persister.db = db
 	persister.tmpDBMaker = tmpDBMaker
 	if load {
@@ -65,8 +82,14 @@ func NewPersister(db database.DBEngine, filename string, load bool, tmpDBMaker f
 	persister.aofFinished = make(chan struct{})
 	persister.listeners = make(map[Listener]struct{})
 	go func() {
-		persister.handleAof()
+		persister.listenCmd()
 	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	persister.ctx = ctx
+	persister.cancel = cancel
+	if persister.aofFsync == FsyncEverySec {
+		persister.fsyncEverySecond()
+	}
 	return persister, nil
 }
 
@@ -77,24 +100,53 @@ func (persister *Persister) RemoveListener(listener Listener) {
 	delete(persister.listeners, listener)
 }
 
-// AddAof send command to aof goroutine through channel
-func (persister *Persister) AddAof(dbIndex int, cmdLine CmdLine) {
-	if persister.aofChan != nil {
+var wgPool = sync.Pool{
+	New: func() interface{} {
+		return &sync.WaitGroup{}
+	},
+}
+
+func getWg() *sync.WaitGroup {
+	return wgPool.Get().(*sync.WaitGroup)
+}
+
+func returnWg(wg *sync.WaitGroup) {
+	wgPool.Put(wg)
+}
+
+// SaveCmdLine send command to aof goroutine through channel
+func (persister *Persister) SaveCmdLine(dbIndex int, cmdLine CmdLine) {
+	// aofChan will be set as nil temporarily during load aof see Persister.LoadAof
+	if persister.aofChan == nil {
+		return
+	}
+	if persister.aofFsync == FsyncAlways {
+		// use WaitGroup to wait for saving finished
+		wg := getWg()
+		defer returnWg(wg)
+		wg.Add(1)
 		persister.aofChan <- &payload{
 			cmdLine: cmdLine,
 			dbIndex: dbIndex,
+			wg:      wg,
 		}
+		wg.Wait()
+	}
+	persister.aofChan <- &payload{
+		cmdLine: cmdLine,
+		dbIndex: dbIndex,
 	}
 }
 
-// handleAof listen aof channel and write into file
-func (persister *Persister) handleAof() {
+// listenCmd listen aof channel and write into file
+func (persister *Persister) listenCmd() {
 	// serialized execution
 	var cmdLines []CmdLine
 	persister.currentDB = 0
 	for p := range persister.aofChan {
-		cmdLines = cmdLines[:0]      // reuse underlying array
-		persister.pausingAof.RLock() // prevent other goroutines from pausing aof
+		cmdLines = cmdLines[:0]     // reuse underlying array
+		persister.pausingAof.Lock() // prevent other goroutines from pausing aof
+		// ensure aof is in the right database
 		if p.dbIndex != persister.currentDB {
 			// select db
 			selectCmd := utils.ToCmdLine("SELECT", strconv.Itoa(p.dbIndex))
@@ -103,26 +155,34 @@ func (persister *Persister) handleAof() {
 			_, err := persister.aofFile.Write(data)
 			if err != nil {
 				logger.Warn(err)
-				persister.pausingAof.RUnlock()
+				persister.pausingAof.Unlock()
 				continue // skip this command
 			}
 			persister.currentDB = p.dbIndex
 		}
+		// save command
 		data := protocol.MakeMultiBulkReply(p.cmdLine).ToBytes()
 		cmdLines = append(cmdLines, p.cmdLine)
 		_, err := persister.aofFile.Write(data)
 		if err != nil {
 			logger.Warn(err)
 		}
-		persister.pausingAof.RUnlock()
 		for listener := range persister.listeners {
 			listener.Callback(cmdLines)
 		}
+		if persister.aofFsync == FsyncAlways {
+			_ = persister.aofFile.Sync()
+		}
+		if p.wg != nil {
+			p.wg.Done()
+		}
+		persister.pausingAof.Unlock()
+
 	}
 	persister.aofFinished <- struct{}{}
 }
 
-// LoadAof read aof file, can only be used before Persister.handleAof started
+// LoadAof read aof file, can only be used before Persister.listenCmd started
 func (persister *Persister) LoadAof(maxBytes int) {
 	// persister.db.Exec may call persister.addAof
 	// delete aofChan to prevent loaded commands back into aofChan
@@ -184,4 +244,23 @@ func (persister *Persister) Close() {
 			logger.Warn(err)
 		}
 	}
+	persister.cancel()
+}
+
+func (persister *Persister) fsyncEverySecond() {
+	ticker := time.NewTicker(time.Second)
+	go func() {
+		for {
+			select {
+			case <-ticker.C:
+				persister.pausingAof.Lock()
+				if err := persister.aofFile.Sync(); err != nil {
+					logger.Errorf("fsync failed: %v", err)
+				}
+				persister.pausingAof.Unlock()
+			case <-persister.ctx.Done():
+				return
+			}
+		}
+	}()
 }

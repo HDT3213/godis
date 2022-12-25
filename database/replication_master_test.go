@@ -50,7 +50,7 @@ func TestReplicationMasterSide(t *testing.T) {
 		AppendFilename: aofFilename,
 	}
 	master := mockServer()
-	aofHandler, err := NewPersister(master, config.Properties.AppendFilename, true)
+	aofHandler, err := NewPersister(master, config.Properties.AppendFilename, true, config.Properties.AppendFsync)
 	if err != nil {
 		panic(err)
 	}
@@ -213,7 +213,7 @@ func TestReplicationMasterRewriteRDB(t *testing.T) {
 		AppendFilename: aofFilename,
 	}
 	master := mockServer()
-	aofHandler, err := NewPersister(master, config.Properties.AppendFilename, true)
+	aofHandler, err := NewPersister(master, config.Properties.AppendFilename, true, config.Properties.AppendFsync)
 	if err != nil {
 		panic(err)
 	}

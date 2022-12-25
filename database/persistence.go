@@ -79,26 +79,26 @@ func (server *Server) loadRDB(dec *core.Decoder) error {
 	})
 }
 
-func NewPersister(db database.DBEngine, filename string, load bool) (*aof.Persister, error) {
-	return aof.NewPersister(db, filename, load, func() database.DBEngine {
+func NewPersister(db database.DBEngine, filename string, load bool, fsync string) (*aof.Persister, error) {
+	return aof.NewPersister(db, filename, load, fsync, func() database.DBEngine {
 		return MakeAuxiliaryServer()
 	})
 }
 
 func (server *Server) AddAof(dbIndex int, cmdLine CmdLine) {
 	if server.persister != nil {
-		server.persister.AddAof(dbIndex, cmdLine)
+		server.persister.SaveCmdLine(dbIndex, cmdLine)
 	}
 }
 
 func (server *Server) bindPersister(aofHandler *aof.Persister) {
 	server.persister = aofHandler
-	// bind AddAof
+	// bind SaveCmdLine
 	for _, db := range server.dbSet {
 		singleDB := db.Load().(*DB)
 		singleDB.addAof = func(line CmdLine) {
 			if config.Properties.AppendOnly { // config may be changed during runtime
-				server.persister.AddAof(singleDB.index, line)
+				server.persister.SaveCmdLine(singleDB.index, line)
 			}
 		}
 	}

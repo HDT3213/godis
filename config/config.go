@@ -17,6 +17,7 @@ type ServerProperties struct {
 	Port              int    `cfg:"port"`
 	AppendOnly        bool   `cfg:"appendonly"`
 	AppendFilename    string `cfg:"appendfilename"`
+	AppendFsync       string `cfg:"appendfsync"`
 	MaxClients        int    `cfg:"maxclients"`
 	RequirePass       string `cfg:"requirepass"`
 	Databases         int    `cfg:"databases"`

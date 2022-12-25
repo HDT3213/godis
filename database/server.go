@@ -49,7 +49,8 @@ func NewStandaloneServer() *Server {
 	server.hub = pubsub.MakeHub()
 	validAof := false
 	if config.Properties.AppendOnly {
-		aofHandler, err := NewPersister(server, config.Properties.AppendFilename, true)
+		aofHandler, err := NewPersister(server,
+			config.Properties.AppendFilename, true, config.Properties.AppendFsync)
 		if err != nil {
 			panic(err)
 		}
@@ -221,7 +222,7 @@ func (server *Server) flushAll() redis.Reply {
 		server.flushDB(i)
 	}
 	if server.persister != nil {
-		server.persister.AddAof(0, utils.ToCmdLine("FlushAll"))
+		server.persister.SaveCmdLine(0, utils.ToCmdLine("FlushAll"))
 	}
 	return &protocol.OkReply{}
 }

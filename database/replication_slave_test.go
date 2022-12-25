@@ -2,6 +2,7 @@ package database
 
 import (
 	"bytes"
+	"github.com/hdt3213/godis/aof"
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/client"
@@ -37,7 +38,7 @@ func TestReplicationSlaveSide(t *testing.T) {
 		t.Error(err)
 		return
 	}
-	aofHandler, err := NewPersister(server, config.Properties.AppendFilename, true)
+	aofHandler, err := NewPersister(server, config.Properties.AppendFilename, true, aof.FsyncNo)
 	if err != nil {
 		t.Error(err)
 		return
@@ -151,7 +152,7 @@ func TestReplicationSlaveSide(t *testing.T) {
 
 	// check slave aof file
 	aofLoader := MakeAuxiliaryServer()
-	aofHandler2, err := NewPersister(aofLoader, config.Properties.AppendFilename, true)
+	aofHandler2, err := NewPersister(aofLoader, config.Properties.AppendFilename, true, aof.FsyncNo)
 	aofLoader.bindPersister(aofHandler2)
 	ret = aofLoader.Exec(conn, utils.ToCmdLine("get", "zz"))
 	asserts.AssertNullBulk(t, ret)
