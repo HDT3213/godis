@@ -53,7 +53,8 @@ func TestServerFsyncAlways(t *testing.T) {
 	config.Properties.AppendFsync = aof.FsyncAlways
 	server := NewStandaloneServer()
 	conn := connection.NewFakeConn()
-	ret := server.Exec(conn, utils.ToCmdLine("set", "1", "1"))
+	server.Exec(conn, utils.ToCmdLine("del", "1"))
+	ret := server.Exec(conn, utils.ToCmdLine("incr", "1"))
 	asserts.AssertNotError(t, ret)
 	reader := NewStandaloneServer()
 	ret = reader.Exec(conn, utils.ToCmdLine("get", "1"))
@@ -71,7 +72,8 @@ func TestServerFsyncEverySec(t *testing.T) {
 	config.Properties.AppendFsync = aof.FsyncEverySec
 	server := NewStandaloneServer()
 	conn := connection.NewFakeConn()
-	ret := server.Exec(conn, utils.ToCmdLine("set", "1", "1"))
+	server.Exec(conn, utils.ToCmdLine("del", "1"))
+	ret := server.Exec(conn, utils.ToCmdLine("incr", "1"))
 	asserts.AssertNotError(t, ret)
 	time.Sleep(1500 * time.Millisecond)
 	reader := NewStandaloneServer()
