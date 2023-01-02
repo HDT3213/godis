@@ -9,6 +9,7 @@ import (
 func TestDel(t *testing.T) {
 	conn := connection.NewFakeConn()
 	allowFastTransaction = false
+	testNodeA := testCluster[0]
 	testNodeA.Exec(conn, toArgs("SET", "a", "a"))
 	ret := Del(testNodeA, conn, toArgs("DEL", "a", "b", "c"))
 	asserts.AssertNotError(t, ret)

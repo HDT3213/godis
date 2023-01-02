@@ -15,6 +15,10 @@ type DB interface {
 	Close()
 }
 
+// KeyEventCallback will be called back on key event, such as key inserted or deleted
+// may be called concurrently
+type KeyEventCallback func(dbIndex int, key string, entity *DataEntity)
+
 // DBEngine is the embedding storage engine exposing more methods for complex application
 type DBEngine interface {
 	DB
@@ -25,6 +29,10 @@ type DBEngine interface {
 	RWLocks(dbIndex int, writeKeys []string, readKeys []string)
 	RWUnLocks(dbIndex int, writeKeys []string, readKeys []string)
 	GetDBSize(dbIndex int) (int, int)
+	GetEntity(dbIndex int, key string) (*DataEntity, bool)
+	GetExpiration(dbIndex int, key string) *time.Time
+	SetKeyInsertedCallback(cb KeyEventCallback)
+	SetKeyDeletedCallback(cb KeyEventCallback)
 }
 
 // DataEntity stores data bound to a key, including a string, list, hash, set and so on

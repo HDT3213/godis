@@ -57,7 +57,7 @@ func Setup(settings *Settings) {
 
 	logFile, err = mustOpen(fileName, dir)
 	if err != nil {
-		log.Fatalf("logging.Setup err: %s", err)
+		log.Fatalf("logging.Join err: %s", err)
 	}
 
 	mw := io.MultiWriter(os.Stdout, logFile)
@@ -83,12 +83,27 @@ func Debug(v ...interface{}) {
 	logger.Println(v...)
 }
 
+func Debugf(format string, v ...interface{}) {
+	mu.Lock()
+	defer mu.Unlock()
+	setPrefix(DEBUG)
+	logger.Println(fmt.Sprintf(format, v...))
+}
+
 // Info prints normal log
 func Info(v ...interface{}) {
 	mu.Lock()
 	defer mu.Unlock()
 	setPrefix(INFO)
 	logger.Println(v...)
+}
+
+// Infof prints normal log
+func Infof(format string, v ...interface{}) {
+	mu.Lock()
+	defer mu.Unlock()
+	setPrefix(INFO)
+	logger.Println(fmt.Sprintf(format, v...))
 }
 
 // Warn prints warning log

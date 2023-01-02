@@ -159,7 +159,7 @@ func (dict *ConcurrentDict) PutIfExists(key string, val interface{}) (result int
 }
 
 // Remove removes the key and return the number of deleted key-value
-func (dict *ConcurrentDict) Remove(key string) (result int) {
+func (dict *ConcurrentDict) Remove(key string) (val interface{}, result int) {
 	if dict == nil {
 		panic("dict is nil")
 	}
@@ -169,12 +169,12 @@ func (dict *ConcurrentDict) Remove(key string) (result int) {
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
 
-	if _, ok := s.m[key]; ok {
+	if val, ok := s.m[key]; ok {
 		delete(s.m, key)
 		dict.decreaseCount()
-		return 1
+		return val, 1
 	}
-	return 0
+	return nil, 0
 }
 
 func (dict *ConcurrentDict) addCount() int32 {

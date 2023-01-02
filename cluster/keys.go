@@ -6,8 +6,8 @@ import (
 )
 
 // FlushDB removes all data in current database
-func FlushDB(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
-	replies := cluster.broadcast(c, args)
+func FlushDB(cluster *Cluster, c redis.Connection, cmdLine [][]byte) redis.Reply {
+	replies := cluster.broadcast(c, modifyCmd(cmdLine, "FlushDB_"))
 	var errReply protocol.ErrorReply
 	for _, v := range replies {
 		if protocol.IsErrorReply(v) {

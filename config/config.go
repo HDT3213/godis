@@ -15,6 +15,8 @@ import (
 type ServerProperties struct {
 	Bind              string `cfg:"bind"`
 	Port              int    `cfg:"port"`
+	Dir               string `cfg:"dir"`
+	AnnounceHost      string `cfg:"announce-host"`
 	AppendOnly        bool   `cfg:"appendonly"`
 	AppendFilename    string `cfg:"appendfilename"`
 	AppendFsync       string `cfg:"appendfsync"`
@@ -26,9 +28,17 @@ type ServerProperties struct {
 	SlaveAnnouncePort int    `cfg:"slave-announce-port"`
 	SlaveAnnounceIP   string `cfg:"slave-announce-ip"`
 	ReplTimeout       int    `cfg:"repl-timeout"`
+	ClusterEnable     bool   `cfg:"cluster-enable"`
+	ClusterAsSeed     bool   `cfg:"cluster-as-seed"`
+	ClusterSeed       string `cfg:"cluster-seed"`
+	ClusterConfigFile string `cfg:"cluster-config-file"`
 
 	Peers []string `cfg:"peers"`
 	Self  string   `cfg:"self"`
+}
+
+func (p *ServerProperties) AnnounceAddress() string {
+	return p.AnnounceHost + ":" + strconv.Itoa(p.Port)
 }
 
 // Properties holds global config properties

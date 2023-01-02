@@ -104,3 +104,7 @@ func (c *FakeConn) Close() error {
 	c.notify()
 	return nil
 }
+
+func (c *FakeConn) RemoteAddr() string {
+	return ""
+}

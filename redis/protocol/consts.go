@@ -1,5 +1,10 @@
 package protocol
 
+import (
+	"bytes"
+	"github.com/hdt3213/godis/interface/redis"
+)
+
 // PongReply is +PONG
 type PongReply struct{}
 
@@ -55,6 +60,10 @@ func (r *EmptyMultiBulkReply) ToBytes() []byte {
 // MakeEmptyMultiBulkReply creates EmptyMultiBulkReply
 func MakeEmptyMultiBulkReply() *EmptyMultiBulkReply {
 	return &EmptyMultiBulkReply{}
+}
+
+func IsEmptyMultiBulkReply(reply redis.Reply) bool {
+	return bytes.Equal(reply.ToBytes(), emptyMultiBulkBytes)
 }
 
 // NoReply respond nothing, for commands like subscribe

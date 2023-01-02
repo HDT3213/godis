@@ -22,15 +22,15 @@ func MGet(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 
 	resultMap := make(map[string][]byte)
 	groupMap := cluster.groupBy(keys)
-	for peer, group := range groupMap {
-		resp := cluster.relay(peer, c, makeArgs("MGET", group...))
+	for peer, groupKeys := range groupMap {
+		resp := cluster.relay(peer, c, makeArgs("MGet_", groupKeys...))
 		if protocol.IsErrorReply(resp) {
 			errReply := resp.(protocol.ErrorReply)
-			return protocol.MakeErrReply(fmt.Sprintf("ERR during get %s occurs: %v", group[0], errReply.Error()))
+			return protocol.MakeErrReply(fmt.Sprintf("ERR during get %s occurs: %v", groupKeys[0], errReply.Error()))
 		}
 		arrReply, _ := resp.(*protocol.MultiBulkReply)
 		for i, v := range arrReply.Args {
-			key := group[i]
+			key := groupKeys[i]
 			resultMap[key] = v
 		}
 	}
@@ -59,7 +59,7 @@ func MSet(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 	groupMap := cluster.groupBy(keys)
 	if len(groupMap) == 1 && allowFastTransaction { // do fast
 		for peer := range groupMap {
-			return cluster.relay(peer, c, cmdLine)
+			return cluster.relay(peer, c, modifyCmd(cmdLine, "MSet_"))
 		}
 	}
 
@@ -73,12 +73,7 @@ func MSet(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 		for _, k := range group {
 			peerArgs = append(peerArgs, k, valueMap[k])
 		}
-		var resp redis.Reply
-		if peer == cluster.self {
-			resp = execPrepare(cluster, c, makeArgs("Prepare", peerArgs...))
-		} else {
-			resp = cluster.relay(peer, c, makeArgs("Prepare", peerArgs...))
-		}
+		resp := cluster.relay(peer, c, makeArgs("Prepare", peerArgs...))
 		if protocol.IsErrorReply(resp) {
 			errReply = resp
 			rollback = true
@@ -117,7 +112,7 @@ func MSetNX(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 	groupMap := cluster.groupBy(keys)
 	if len(groupMap) == 1 && allowFastTransaction { // do fast
 		for peer := range groupMap {
-			return cluster.relay(peer, c, cmdLine)
+			return cluster.relay(peer, c, modifyCmd(cmdLine, "MSetNX_"))
 		}
 	}
 
@@ -133,7 +128,7 @@ func MSetNX(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 		for _, k := range group {
 			nodeArgs = append(nodeArgs, k, valueMap[k])
 		}
-		resp := cluster.relayPrepare(node, c, makeArgs("Prepare", nodeArgs...))
+		resp := cluster.relay(node, c, makeArgs("Prepare", nodeArgs...))
 		if protocol.IsErrorReply(resp) {
 			re := resp.(protocol.ErrorReply)
 			if re.Error() == keyExistsErr {

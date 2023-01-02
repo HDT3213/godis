@@ -1,10 +1,7 @@
 package cluster
 
 import (
-	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/interface/redis"
-	"github.com/hdt3213/godis/redis/protocol"
-	"strconv"
 )
 
 func ping(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
@@ -26,7 +23,7 @@ func makeArgs(cmd string, args ...string) [][]byte {
 func (cluster *Cluster) groupBy(keys []string) map[string][]string {
 	result := make(map[string][]string)
 	for _, key := range keys {
-		peer := cluster.peerPicker.PickNode(key)
+		peer := cluster.pickNodeAddrByKey(key)
 		group, ok := result[peer]
 		if !ok {
 			group = make([]string, 0)
@@ -37,14 +34,34 @@ func (cluster *Cluster) groupBy(keys []string) map[string][]string {
 	return result
 }
 
-func execSelect(c redis.Connection, args [][]byte) redis.Reply {
-	dbIndex, err := strconv.Atoi(string(args[1]))
-	if err != nil {
-		return protocol.MakeErrReply("ERR invalid DB index")
+// pickNode returns the node id hosting the given slot.
+// If the slot is migrating, return the node which is importing the slot
+func (cluster *Cluster) pickNode(slotID uint32) *Node {
+	// check cluster.slot to avoid errors caused by inconsistent status on follower nodes during raft commits
+	// see cluster.reBalance()
+	hSlot := cluster.getHostSlot(slotID)
+	if hSlot != nil {
+		switch hSlot.state {
+		case slotStateMovingOut:
+			return cluster.topology.GetNode(hSlot.newNodeID)
+		case slotStateImporting, slotStateHost:
+			return cluster.topology.GetNode(cluster.self)
+		}
 	}
-	if dbIndex >= config.Properties.Databases || dbIndex < 0 {
-		return protocol.MakeErrReply("ERR DB index is out of range")
-	}
-	c.SelectDB(dbIndex)
-	return protocol.MakeOkReply()
+
+	slot := cluster.topology.GetSlots()[int(slotID)]
+	node := cluster.topology.GetNode(slot.NodeID)
+	return node
+}
+
+func (cluster *Cluster) pickNodeAddrByKey(key string) string {
+	slotId := getSlot(key)
+	return cluster.pickNode(slotId).Addr
+}
+
+func modifyCmd(cmdLine CmdLine, newCmd string) CmdLine {
+	var cmdLine2 CmdLine
+	cmdLine2 = append(cmdLine2, cmdLine...)
+	cmdLine2[0] = []byte(newCmd)
+	return cmdLine2
 }
