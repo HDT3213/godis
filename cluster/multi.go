@@ -50,6 +50,7 @@ func execMulti(cluster *Cluster, conn redis.Connection, cmdLine CmdLine) redis.R
 
 	// out parser not support protocol.MultiRawReply, so we have to encode it
 	if peer == cluster.self {
+		// todo: cluster.ensureKey
 		return cluster.db.ExecMulti(conn, watching, cmdLines)
 	}
 	return execMultiOnOtherNode(cluster, conn, peer, watching, cmdLines)
@@ -146,8 +147,11 @@ func execWatch(cluster *Cluster, conn redis.Connection, args [][]byte) redis.Rep
 	watching := conn.GetWatching()
 	for _, bkey := range args {
 		key := string(bkey)
-		peer := cluster.peerPicker.PickNode(key)
-		result := cluster.relay(peer, conn, utils.ToCmdLine("GetVer", key))
+		err := cluster.ensureKey(key)
+		if err != nil {
+			return err
+		}
+		result := cluster.relay2(key, conn, utils.ToCmdLine("GetVer", key))
 		if protocol.IsErrorReply(result) {
 			return result
 		}

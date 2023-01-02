@@ -14,8 +14,8 @@ func Rename(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	}
 	srcKey := string(args[1])
 	destKey := string(args[2])
-	srcNode := cluster.peerPicker.PickNode(srcKey)
-	destNode := cluster.peerPicker.PickNode(destKey)
+	srcNode := cluster.pickNodeAddrByKey(srcKey)
+	destNode := cluster.pickNodeAddrByKey(destKey)
 	if srcNode == destNode { // do fast
 		return cluster.relay(srcNode, c, args)
 	}
@@ -98,8 +98,8 @@ func RenameNx(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	}
 	srcKey := string(args[1])
 	destKey := string(args[2])
-	srcNode := cluster.peerPicker.PickNode(srcKey)
-	destNode := cluster.peerPicker.PickNode(destKey)
+	srcNode := cluster.pickNodeAddrByKey(srcKey)
+	destNode := cluster.pickNodeAddrByKey(destKey)
 	if srcNode == destNode {
 		return cluster.relay(srcNode, c, args)
 	}

@@ -33,6 +33,10 @@ type DB struct {
 	// use this mutex for complicated command only, eg. rpush, incr ...
 	locker *lock.Locks
 	addAof func(CmdLine)
+
+	// callbacks
+	insertCallback database.KeyEventCallback
+	deleteCallback database.KeyEventCallback
 }
 
 // ExecFunc is interface for command executor
@@ -165,7 +169,13 @@ func (db *DB) GetEntity(key string) (*database.DataEntity, bool) {
 
 // PutEntity a DataEntity into DB
 func (db *DB) PutEntity(key string, entity *database.DataEntity) int {
-	return db.data.Put(key, entity)
+	ret := db.data.Put(key, entity)
+	// db.insertCallback may be set as nil, during `if` and actually callback
+	// so introduce a local variable `cb`
+	if cb := db.insertCallback; ret > 0 && cb != nil {
+		cb(db.index, key, entity)
+	}
+	return ret
 }
 
 // PutIfExists edit an existing DataEntity
@@ -175,15 +185,28 @@ func (db *DB) PutIfExists(key string, entity *database.DataEntity) int {
 
 // PutIfAbsent insert an DataEntity only if the key not exists
 func (db *DB) PutIfAbsent(key string, entity *database.DataEntity) int {
-	return db.data.PutIfAbsent(key, entity)
+	ret := db.data.PutIfAbsent(key, entity)
+	// db.insertCallback may be set as nil, during `if` and actually callback
+	// so introduce a local variable `cb`
+	if cb := db.insertCallback; ret > 0 && cb != nil {
+		cb(db.index, key, entity)
+	}
+	return ret
 }
 
 // Remove the given key from db
 func (db *DB) Remove(key string) {
-	db.data.Remove(key)
+	raw, deleted := db.data.Remove(key)
 	db.ttlMap.Remove(key)
 	taskKey := genExpireTask(key)
 	timewheel.Cancel(taskKey)
+	if cb := db.deleteCallback; cb != nil {
+		var entity *database.DataEntity
+		if deleted > 0 {
+			entity = raw.(*database.DataEntity)
+		}
+		cb(db.index, key, entity)
+	}
 }
 
 // Removes the given keys from db

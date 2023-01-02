@@ -25,7 +25,8 @@ func (set *Set) Add(val string) int {
 
 // Remove removes member from set
 func (set *Set) Remove(val string) int {
-	return set.dict.Remove(val)
+	_, ret := set.dict.Remove(val)
+	return ret
 }
 
 // Has returns true if the val exists in the set

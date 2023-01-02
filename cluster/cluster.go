@@ -6,35 +6,29 @@ import (
 	"github.com/hdt3213/godis/config"
 	database2 "github.com/hdt3213/godis/database"
 	"github.com/hdt3213/godis/datastruct/dict"
+	"github.com/hdt3213/godis/datastruct/set"
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/interface/redis"
-	"github.com/hdt3213/godis/lib/consistenthash"
 	"github.com/hdt3213/godis/lib/idgenerator"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/pool"
-	"github.com/hdt3213/godis/lib/utils"
-	"github.com/hdt3213/godis/redis/client"
 	"github.com/hdt3213/godis/redis/protocol"
 	"runtime/debug"
 	"strings"
+	"sync"
 )
-
-type PeerPicker interface {
-	AddNode(keys ...string)
-	PickNode(key string) string
-}
 
 // Cluster represents a node of godis cluster
 // it holds part of data and coordinates other nodes to finish transactions
 type Cluster struct {
 	self string
 
-	nodes           []string
-	peerPicker      PeerPicker
 	nodeConnections map[string]*pool.Pool
 
 	db           database.DBEngine
 	transactions *dict.SimpleDict // id -> Transaction
+	topology     Topology
+	slots        map[uint32]*hostSlot
 
 	idGenerator *idgenerator.IDGenerator
 	// use a variable to allow injecting stub for testing
@@ -42,8 +36,27 @@ type Cluster struct {
 }
 
 const (
-	replicas = 4
+	slotStateHost = iota
+	slotStateImporting
+	slotStateMovingOut
 )
+
+// hostSlot stores status of host which hosted by current node
+type hostSlot struct {
+	state uint32
+	mu    sync.RWMutex
+	/* importedKeys stores imported keys during migrating progress
+	 * While this slot is migrating, if importedKeys does not have the given key, then current node will import key before execute commands
+	 *
+	 * In a migrating slot, the slot on the old node is immutable, we only delete a key in the new node.
+	 * Therefore, we must distinguish between non-migrated key and deleted key.
+	 * Even if a key has been deleted, it still exists in importedKeys, so we can distinguish between non-migrated and deleted.
+	 */
+	importedKeys *set.Set
+	// keys stores all keys in this slot
+	// Cluster.makeInsertCallback and Cluster.makeDeleteCallback will keep keys up to time
+	keys *set.Set
+}
 
 // if only one node involved in a transaction, just execute the command don't apply tcc procedure
 var allowFastTransaction = true
@@ -55,51 +68,27 @@ func MakeCluster() *Cluster {
 
 		db:              database2.NewStandaloneServer(),
 		transactions:    dict.MakeSimple(),
-		peerPicker:      consistenthash.New(replicas, nil),
 		nodeConnections: make(map[string]*pool.Pool),
 
 		idGenerator: idgenerator.MakeGenerator(config.Properties.Self),
 		relayImpl:   defaultRelayImpl,
 	}
-	contains := make(map[string]struct{})
-	nodes := make([]string, 0, len(config.Properties.Peers)+1)
-	for _, peer := range config.Properties.Peers {
-		if _, ok := contains[peer]; ok {
-			continue
-		}
-		contains[peer] = struct{}{}
-		nodes = append(nodes, peer)
+	cluster.topology = &Gossip{
+		Cluster: cluster,
 	}
-	nodes = append(nodes, config.Properties.Self)
-	cluster.peerPicker.AddNode(nodes...)
-	connectionPoolConfig := pool.Config{
-		MaxIdle:   1,
-		MaxActive: 16,
+	cluster.db.SetKeyInsertedCallback(cluster.makeInsertCallback())
+	cluster.db.SetKeyDeletedCallback(cluster.makeDeleteCallback())
+	cluster.slots = make(map[uint32]*hostSlot)
+	// connect with other peers
+	var err error
+	if config.Properties.ClusterAsSeed {
+		err = cluster.startUpAsSeed()
+	} else {
+		err = cluster.Join(config.Properties.ClusterSeed)
 	}
-	for _, p := range config.Properties.Peers {
-		peer := p
-		factory := func() (interface{}, error) {
-			c, err := client.MakeClient(peer)
-			if err != nil {
-				return nil, err
-			}
-			c.Start()
-			// all peers of cluster should use the same password
-			if config.Properties.RequirePass != "" {
-				c.Send(utils.ToCmdLine("AUTH", config.Properties.RequirePass))
-			}
-			return c, nil
-		}
-		finalizer := func(x interface{}) {
-			cli, ok := x.(client.Client)
-			if !ok {
-				return
-			}
-			cli.Close()
-		}
-		cluster.nodeConnections[peer] = pool.New(factory, finalizer, connectionPoolConfig)
+	if err != nil {
+		panic(err)
 	}
-	cluster.nodes = nodes
 	return cluster
 }
 
@@ -113,8 +102,6 @@ func (cluster *Cluster) Close() {
 		pool.Close()
 	}
 }
-
-var router = makeRouter()
 
 func isAuthenticated(c redis.Connection) bool {
 	if config.Properties.RequirePass == "" {
@@ -155,10 +142,7 @@ func (cluster *Cluster) Exec(c redis.Connection, cmdLine [][]byte) (result redis
 		}
 		return execMulti(cluster, c, nil)
 	} else if cmdName == "select" {
-		if len(cmdLine) != 2 {
-			return protocol.MakeArgNumErrReply(cmdName)
-		}
-		return execSelect(c, cmdLine)
+		return protocol.MakeErrReply("select not supported in cluster")
 	}
 	if c != nil && c.InMultiState() {
 		return database2.EnqueueCmd(c, cmdLine)
@@ -174,4 +158,30 @@ func (cluster *Cluster) Exec(c redis.Connection, cmdLine [][]byte) (result redis
 // AfterClientClose does some clean after client close connection
 func (cluster *Cluster) AfterClientClose(c redis.Connection) {
 	cluster.db.AfterClientClose(c)
+}
+
+func (cluster *Cluster) makeInsertCallback() database.KeyEventCallback {
+	return func(dbIndex int, key string, entity *database.DataEntity) {
+		slotId := getSlot(key)
+		slot, ok := cluster.slots[slotId]
+		// As long as the command is executed, we should update slot.keys regardless of slot.state
+		if ok {
+			slot.mu.Lock()
+			defer slot.mu.Unlock()
+			slot.keys.Add(key)
+		}
+	}
+}
+
+func (cluster *Cluster) makeDeleteCallback() database.KeyEventCallback {
+	return func(dbIndex int, key string, entity *database.DataEntity) {
+		slotId := getSlot(key)
+		slot, ok := cluster.slots[slotId]
+		// As long as the command is executed, we should update slot.keys regardless of slot.state
+		if ok {
+			slot.mu.Lock()
+			defer slot.mu.Unlock()
+			slot.keys.Remove(key)
+		}
+	}
 }

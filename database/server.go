@@ -30,6 +30,10 @@ type Server struct {
 	role         int32
 	slaveStatus  *slaveStatus
 	masterStatus *masterStatus
+
+	// hooks
+	insertCallback database.KeyEventCallback
+	deleteCallback database.KeyEventCallback
 }
 
 // NewStandaloneServer creates a standalone redis server, with multi database and all other funtions
@@ -247,6 +251,20 @@ func (server *Server) ForEach(dbIndex int, cb func(key string, data *database.Da
 	server.mustSelectDB(dbIndex).ForEach(cb)
 }
 
+// GetEntity returns the data entity to the given key
+func (server *Server) GetEntity(dbIndex int, key string) (*database.DataEntity, bool) {
+	return server.mustSelectDB(dbIndex).GetEntity(key)
+}
+
+func (server *Server) GetExpiration(dbIndex int, key string) *time.Time {
+	raw, ok := server.mustSelectDB(dbIndex).ttlMap.Get(key)
+	if !ok {
+		return nil
+	}
+	expireTime, _ := raw.(time.Time)
+	return &expireTime
+}
+
 // ExecMulti executes multi commands transaction Atomically and Isolated
 func (server *Server) ExecMulti(conn redis.Connection, watching map[string]uint32, cmdLines []CmdLine) redis.Reply {
 	selectedDB, errReply := server.selectDB(conn.GetDBIndex())
@@ -348,4 +366,21 @@ func (server *Server) startReplCron() {
 			mdb.masterCron()
 		}
 	}(server)
+}
+
+func (server *Server) SetKeyInsertedCallback(cb database.KeyEventCallback) {
+	server.insertCallback = cb
+	for i := range server.dbSet {
+		db := server.mustSelectDB(i)
+		db.insertCallback = cb
+	}
+
+}
+
+func (server *Server) SetKeyDeletedCallback(cb database.KeyEventCallback) {
+	server.deleteCallback = cb
+	for i := range server.dbSet {
+		db := server.mustSelectDB(i)
+		db.deleteCallback = cb
+	}
 }

@@ -90,6 +90,18 @@ func (tx *Transaction) prepare() error {
 	// lock writeKeys
 	tx.lockKeys()
 
+	for _, key := range tx.writeKeys {
+		err := tx.cluster.ensureKey(key)
+		if err != nil {
+			return err
+		}
+	}
+	for _, key := range tx.readKeys {
+		err := tx.cluster.ensureKey(key)
+		if err != nil {
+			return err
+		}
+	}
 	// build undoLog
 	tx.undoLog = tx.cluster.db.GetUndoLogs(tx.dbIndex, tx.cmdLine)
 	tx.status = preparedStatus

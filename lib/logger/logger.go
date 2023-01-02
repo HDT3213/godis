@@ -57,7 +57,7 @@ func Setup(settings *Settings) {
 
 	logFile, err = mustOpen(fileName, dir)
 	if err != nil {
-		log.Fatalf("logging.Setup err: %s", err)
+		log.Fatalf("logging.Join err: %s", err)
 	}
 
 	mw := io.MultiWriter(os.Stdout, logFile)
