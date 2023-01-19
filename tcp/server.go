@@ -7,14 +7,15 @@ package tcp
 import (
 	"context"
 	"fmt"
-	"github.com/hdt3213/godis/interface/tcp"
-	"github.com/hdt3213/godis/lib/logger"
 	"net"
 	"os"
 	"os/signal"
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/hdt3213/godis/interface/tcp"
+	"github.com/hdt3213/godis/lib/logger"
 )
 
 // Config stores tcp server properties
@@ -47,26 +48,29 @@ func ListenAndServeWithSignal(cfg *Config, handler tcp.Handler) error {
 }
 
 // ListenAndServe binds port and handle requests, blocking until close
+// ListenAndServe binds port and handle requests, blocking until close
 func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan struct{}) {
 	// listen signal
+	errCh := make(chan error)
+	defer close(errCh)
 	go func() {
-		<-closeChan
+		select {
+		case <-closeChan:
+			logger.Info("get exit signal")
+		case er := <-errCh:
+			logger.Info(fmt.Sprintf("accept error: %s", er.Error()))
+		}
 		logger.Info("shutting down...")
 		_ = listener.Close() // listener.Accept() will return err immediately
 		_ = handler.Close()  // close connections
 	}()
 
-	// listen port
-	defer func() {
-		// close during unexpected error
-		_ = listener.Close()
-		_ = handler.Close()
-	}()
 	ctx := context.Background()
 	var waitDone sync.WaitGroup
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
+			errCh <- err
 			break
 		}
 		// handle
