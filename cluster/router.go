@@ -26,7 +26,14 @@ func defaultFunc(cluster *Cluster, c redis.Connection, args [][]byte) redis.Repl
 	if err != nil {
 		return err
 	}
-	return cluster.relay2(key, c, args)
+	slotId := getSlot(key)
+	peer := cluster.topology.PickNode(slotId)
+	if peer.ID == cluster.self {
+		// to self db
+		//return cluster.db.Exec(c, cmdLine)
+		return cluster.db.Exec(c, args)
+	}
+	return cluster.relayImpl(cluster, peer.ID, c, args)
 }
 
 func init() {

@@ -17,7 +17,8 @@ var connectionPoolConfig = pool.Config{
 }
 
 func (cluster *Cluster) getPeerClient(peer string) (*client.Client, error) {
-	connectionPool, ok := cluster.nodeConnections[peer]
+	var connectionPool *pool.Pool
+	raw, ok := cluster.nodeConnections.Get(peer)
 	if !ok {
 		factory := func() (interface{}, error) {
 			c, err := client.MakeClient(peer)
@@ -39,7 +40,9 @@ func (cluster *Cluster) getPeerClient(peer string) (*client.Client, error) {
 			cli.Close()
 		}
 		connectionPool = pool.New(factory, finalizer, connectionPoolConfig)
-		cluster.nodeConnections[peer] = connectionPool
+		cluster.nodeConnections.Put(peer, connectionPool)
+	} else {
+		connectionPool = raw.(*pool.Pool)
 	}
 	raw, err := connectionPool.Get()
 	if err != nil {
@@ -53,19 +56,15 @@ func (cluster *Cluster) getPeerClient(peer string) (*client.Client, error) {
 }
 
 func (cluster *Cluster) returnPeerClient(peer string, peerClient *client.Client) error {
-	pool, ok := cluster.nodeConnections[peer]
+	raw, ok := cluster.nodeConnections.Get(peer)
 	if !ok {
 		return errors.New("connection pool not found")
 	}
-	pool.Put(peerClient)
+	raw.(*pool.Pool).Put(peerClient)
 	return nil
 }
 
 var defaultRelayImpl = func(cluster *Cluster, node string, c redis.Connection, cmdLine CmdLine) redis.Reply {
-	if node == cluster.self {
-		// to self db
-		return cluster.db.Exec(c, cmdLine)
-	}
 	peerClient, err := cluster.getPeerClient(node)
 	if err != nil {
 		return protocol.MakeErrReply(err.Error())
@@ -79,7 +78,12 @@ var defaultRelayImpl = func(cluster *Cluster, node string, c redis.Connection, c
 // relay function relays command to peer
 // cannot execute command implemented in `cluster` package, such as prepare
 func (cluster *Cluster) relay(peer string, c redis.Connection, args [][]byte) redis.Reply {
-	// use a variable to allow injecting stub for testing
+	// use a variable to allow injecting stub for testing, see defaultRelayImpl
+	if peer == cluster.self {
+		// to self db
+		//return cluster.db.Exec(c, cmdLine)
+		return cluster.Exec(c, args)
+	}
 	return cluster.relayImpl(cluster, peer, c, args)
 }
 

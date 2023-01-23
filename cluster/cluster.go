@@ -23,11 +23,11 @@ import (
 type Cluster struct {
 	self string
 
-	nodeConnections map[string]*pool.Pool
+	nodeConnections *dict.SimpleDict // map[string]*pool.Pool
 
 	db           database.DBEngine
 	transactions *dict.SimpleDict // id -> Transaction
-	topology     Topology
+	topology     *Raft
 	slots        map[uint32]*hostSlot
 
 	idGenerator *idgenerator.IDGenerator
@@ -68,13 +68,13 @@ func MakeCluster() *Cluster {
 
 		db:              database2.NewStandaloneServer(),
 		transactions:    dict.MakeSimple(),
-		nodeConnections: make(map[string]*pool.Pool),
+		nodeConnections: dict.MakeSimple(),
 
 		idGenerator: idgenerator.MakeGenerator(config.Properties.Self),
 		relayImpl:   defaultRelayImpl,
 	}
-	cluster.topology = &Gossip{
-		Cluster: cluster,
+	cluster.topology = &Raft{
+		cluster: cluster,
 	}
 	cluster.db.SetKeyInsertedCallback(cluster.makeInsertCallback())
 	cluster.db.SetKeyDeletedCallback(cluster.makeDeleteCallback())
@@ -82,7 +82,7 @@ func MakeCluster() *Cluster {
 	// connect with other peers
 	var err error
 	if config.Properties.ClusterAsSeed {
-		err = cluster.startUpAsSeed()
+		err = cluster.startAsSeed()
 	} else {
 		err = cluster.Join(config.Properties.ClusterSeed)
 	}
@@ -98,9 +98,10 @@ type CmdFunc func(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.R
 // Close stops current node of cluster
 func (cluster *Cluster) Close() {
 	cluster.db.Close()
-	for _, pool := range cluster.nodeConnections {
-		pool.Close()
-	}
+	cluster.nodeConnections.ForEach(func(key string, val interface{}) bool {
+		val.(*pool.Pool).Close()
+		return true
+	})
 }
 
 func isAuthenticated(c redis.Connection) bool {

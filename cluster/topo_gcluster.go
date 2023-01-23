@@ -50,10 +50,19 @@ func execGClusterJoin(cluster *Cluster, c redis.Connection, args [][]byte) redis
 		return protocol.MakeArgNumErrReply("gcluster join")
 	}
 	addr := string(args[0])
-	newNode := cluster.topology.NewNode(addr)
-	topology := marshalTopology(cluster.topology.GetTopology())
+	newNode, err := cluster.topology.NewNode(addr)
+	if err != nil {
+		return protocol.MakeErrReply(err.Error())
+	}
+
+	topology := marshalTopology(cluster.topology.nodes)
 	resp := make([][]byte, 0, len(topology)+1)
-	resp = append(resp, []byte(newNode.ID))
+	resp = append(resp,
+		[]byte(newNode.ID),
+		[]byte(cluster.topology.leaderId),
+		[]byte(strconv.Itoa(cluster.topology.term)),
+		[]byte(strconv.Itoa(cluster.topology.commitIndex)),
+	)
 	resp = append(resp, topology...)
 	return protocol.MakeMultiBulkReply(resp)
 }
@@ -74,7 +83,11 @@ func execGClusterSetSlot(cluster *Cluster, c redis.Connection, args [][]byte) re
 	if !ok {
 		return protocol.MakeErrReply("ERR node not found")
 	}
-	cluster.topology.SetSlotMigrating(slotId, targetNodeID)
+	cluster.topology.setLocalSlotMigrating(slotId, targetNodeID)
+	err = cluster.topology.SetSlot(slotId, targetNodeID)
+	if err != nil {
+		return protocol.MakeErrReply(err.Error())
+	}
 	logger.Info(fmt.Sprintf("set slot %d to node %s", slotId, targetNodeID))
 	return protocol.MakeOkReply()
 }
@@ -130,6 +143,6 @@ func execGClusterMigrateDone(cluster *Cluster, c redis.Connection, args [][]byte
 		return protocol.MakeErrReply("ERR slot is not migrating")
 	}
 	delete(cluster.slots, slotId)
-	cluster.topology.FinishSlotMigrate(slotId)
+	cluster.FinishSlotMigrate(slotId)
 	return protocol.MakeOkReply()
 }

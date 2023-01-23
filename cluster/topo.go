@@ -15,36 +15,56 @@ import (
 	"net"
 	"sort"
 	"strconv"
+	"time"
 )
-
-type Topology interface {
-	// StartAsSeed starts cluster as seed
-	StartAsSeed(addr string) (string, error)
-	// LoadTopology loads topology, used in join cluster
-	LoadTopology(selfNodeId string, nodes map[string]*Node)
-	// NewNode creates a new Node and put it into the topology when a node request self node for joining cluster
-	NewNode(addr string) *Node
-	// GetSelfNodeID returns node id of current node
-	GetSelfNodeID() string
-	// GetTopology returns cluster topology (in current node's view)
-	GetTopology() map[string]*Node
-	// PickNode returns the node id hosting the given slot.
-	// If the slot is migrating, return the node which is importing the slot
-	PickNode(slotID uint32) *Node
-	// SetSlotMigrating set a hosting slot as migrating to targetNode state
-	SetSlotMigrating(slotID uint32, targetNodeID string)
-	// FinishSlotMigrate marks a slot has migrated to current node or moved out from current node
-	FinishSlotMigrate(slotID uint32)
-	// GetSlots returns information of given slot
-	GetSlots() []*Slot
-}
 
 // Node represents a node and its slots, used in cluster internal messages
 type Node struct {
-	ID    string
-	Addr  string
-	Slots []*Slot // ascending order by slot id
-	Flags uint32
+	ID        string
+	Addr      string
+	Slots     []*Slot // ascending order by slot id
+	Flags     uint32
+	lastHeard time.Time
+}
+
+const (
+	nodeFlagLeader uint32 = 1 << iota
+	nodeFlagCandidate
+	nodeFlagLearner
+)
+
+const (
+	follower raftState = iota
+	leader
+	candidate
+	learner
+)
+
+func (node *Node) setState(state raftState) {
+	node.Flags &= ^uint32(0x7) // clean
+	switch state {
+	case follower:
+		break
+	case leader:
+		node.Flags |= nodeFlagLeader
+	case candidate:
+		node.Flags |= nodeFlagCandidate
+	case learner:
+		node.Flags |= nodeFlagLearner
+	}
+}
+
+func (node *Node) getState() raftState {
+	if node.Flags&nodeFlagLeader > 0 {
+		return leader
+	}
+	if node.Flags&nodeFlagCandidate > 0 {
+		return candidate
+	}
+	if node.Flags&nodeFlagLearner > 0 {
+		return learner
+	}
+	return follower
 }
 
 const (
@@ -73,7 +93,7 @@ func getSlot(key string) uint32 {
 	return crc32.ChecksumIEEE([]byte(key)) % uint32(slotCount)
 }
 
-func (cluster *Cluster) startUpAsSeed() error {
+func (cluster *Cluster) startAsSeed() error {
 	selfNodeId, err := cluster.topology.StartAsSeed(config.Properties.AnnounceAddress())
 	if err != nil {
 		return err
@@ -121,54 +141,71 @@ func (cluster *Cluster) findSlotsForNewNode() []*Slot {
 
 // Join send `gcluster join` to node in cluster to join
 func (cluster *Cluster) Join(seed string) protocol.ErrorReply {
-	cli, err := client.MakeClient(seed)
+	seedCli, err := client.MakeClient(seed)
 	if err != nil {
 		return protocol.MakeErrReply("connect with seed failed: " + err.Error())
 	}
-	cli.Start()
-	ret := cli.Send(utils.ToCmdLine("gcluster", "join", config.Properties.AnnounceAddress()))
+	seedCli.Start()
+	// todo: auth
+	ret := seedCli.Send(utils.ToCmdLine("raft", "get-leader"))
+	if protocol.IsErrorReply(ret) {
+		return ret.(protocol.ErrorReply)
+	}
+	leaderInfo, ok := ret.(*protocol.MultiBulkReply)
+	if !ok || len(leaderInfo.Args) != 2 {
+		return protocol.MakeErrReply("ERR get-leader returns wrong reply")
+	}
+	leaderAddr := string(leaderInfo.Args[1])
+	leaderCli, err := client.MakeClient(leaderAddr)
+	// todo: auth
+	if err != nil {
+		return protocol.MakeErrReply("connect with seed failed: " + err.Error())
+	}
+	leaderCli.Start()
+	ret = leaderCli.Send(utils.ToCmdLine("raft", "join", config.Properties.AnnounceAddress()))
+	// todo: handle NOT LEADER error
 	if protocol.IsErrorReply(ret) {
 		return ret.(protocol.ErrorReply)
 	}
 	topology, ok := ret.(*protocol.MultiBulkReply)
-	if !ok {
-		return protocol.MakeErrReply("ERR gcluster join returns wrong reply")
-	}
-	if len(topology.Args) == 0 {
+	if !ok || len(topology.Args) < 4 {
 		return protocol.MakeErrReply("ERR gcluster join returns wrong reply")
 	}
 	selfNodeId := string(topology.Args[0])
-	nodes, err := unmarshalTopology(topology.Args[1:])
+	leaderId := string(topology.Args[1])
+	term, _ := strconv.Atoi(string(topology.Args[2]))
+	commitIndex, _ := strconv.Atoi(string(topology.Args[3]))
+	nodes, err := unmarshalTopology(topology.Args[4:])
 	if err != nil {
 		return protocol.MakeErrReply(err.Error())
 	}
-	cluster.topology.LoadTopology(selfNodeId, nodes)
+	cluster.topology.Load(selfNodeId, leaderId, term, commitIndex, nodes)
 	cluster.self = selfNodeId
+	cluster.topology.start(follower)
 	// asynchronous migrating slots
 	go func() {
-		//defer func() {
-		//	if e := recover(); e != nil {
-		//		logger.Error(e)
-		//	}
-		//}()
-
-		slots := cluster.findSlotsForNewNode()
-		// serial migrations to avoid overloading the cluster
-		for _, slot := range slots {
-			if slot.IsMigrating() {
-				continue
-			}
-			logger.Info("start import slot ", slot.ID)
-			err = cluster.importSlot(slot)
-			if err != nil {
-				logger.Error("import slot %d error: %d", slot.ID, err)
-				// todo: delete all keys in slot
-				continue
-			}
-			logger.Info("finish import slot", slot.ID)
-		}
+		time.Sleep(time.Second) // let the cluster started
+		cluster.rebalance(err)
 	}()
 	return nil
+}
+
+func (cluster *Cluster) rebalance(err error) {
+	slots := cluster.findSlotsForNewNode()
+	// serial migrations to avoid overloading the cluster
+	for _, slot := range slots {
+		if slot.IsMigrating() {
+			continue
+		}
+		logger.Info("start import slot ", slot.ID)
+		err = cluster.importSlot(slot)
+		if err != nil {
+			logger.Error(fmt.Sprintf("import slot %d error: %d", slot.ID, err))
+			// todo: delete all keys in slot
+			continue
+		}
+		logger.Info("finish import slot", slot.ID)
+	}
 }
 
 func (cluster *Cluster) importSlot(slot *Slot) error {
@@ -191,17 +228,18 @@ func (cluster *Cluster) importSlot(slot *Slot) error {
 		}
 		return resp.Data
 	}
-	selfNodeID := cluster.topology.GetSelfNodeID()
 
 	cluster.setSlot(slot.ID, slotStateImporting) // prepare host slot before send `set slot`
-	cluster.topology.SetSlotMigrating(slot.ID, cluster.self)
+	cluster.topology.setLocalSlotMigrating(slot.ID, cluster.self)
 	ret := send2node(utils.ToCmdLine(
-		"gcluster", "setslot", strconv.Itoa(int(slot.ID)), selfNodeID))
+		"gcluster", "set-slot", strconv.Itoa(int(slot.ID)), cluster.self))
 	if !protocol.IsOKReply(ret) {
 		return fmt.Errorf("set slot %d error: %v", slot.ID, err)
 	}
+	logger.Info(fmt.Sprintf("set slot %d to current node, start migrate", slot.ID))
+
 	req := protocol.MakeMultiBulkReply(utils.ToCmdLine(
-		"gcluster", "migrate", strconv.Itoa(int(slot.ID)), selfNodeID))
+		"gcluster", "migrate", strconv.Itoa(int(slot.ID)), cluster.self))
 	_, err = conn.Write(req.ToBytes())
 	if err != nil {
 		return protocol.MakeErrReply(err.Error())
@@ -227,7 +265,27 @@ slotLoop:
 	}
 	cluster.slots[slot.ID].importedKeys = nil
 	cluster.slots[slot.ID].state = slotStateHost
-	cluster.topology.FinishSlotMigrate(slot.ID)
+	cluster.FinishSlotMigrate(slot.ID)
 	send2node(utils.ToCmdLine("gcluster", "migrate-done", strconv.Itoa(int(slot.ID))))
 	return nil
+}
+
+func (cluster *Cluster) FinishSlotMigrate(slotID uint32) {
+	// todo: raft 不再关注迁移状态信息, 只关心由谁负责 slot
+	raft := cluster.topology
+	slot := raft.slots[int(slotID)]
+	oldNode := raft.nodes[slot.OldNodeID]
+	// remove from old oldNode
+	for i, s := range oldNode.Slots {
+		if s.ID == slot.ID {
+			copy(oldNode.Slots[i:], oldNode.Slots[i+1:])
+			oldNode.Slots = oldNode.Slots[:len(oldNode.Slots)-1]
+			break
+		}
+	}
+	// add into new node
+	newNode := raft.nodes[slot.NodeID]
+	newNode.Slots = append(newNode.Slots, slot)
+	slot.Flags &= ^slotFlagMigrating
+	slot.OldNodeID = ""
 }
