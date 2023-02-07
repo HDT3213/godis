@@ -58,7 +58,7 @@ func makeSkiplist() *skiplist {
 func randomLevel() int16 {
 	total := uint64(1)<<uint64(maxLevel) - 1
 	k := rand.Uint64() % total
-	return maxLevel - int16(bits.Len64(k)) + 1
+	return maxLevel - int16(bits.Len64(k+1)) + 1
 }
 
 func (skiplist *skiplist) insert(member string, score float64) *node {
