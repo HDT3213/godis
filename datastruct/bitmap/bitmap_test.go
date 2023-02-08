@@ -67,7 +67,7 @@ func TestForEachBit(t *testing.T) {
 	}
 	expectOffset := int64(100)
 	count := 0
-	bm.ForEachBit(100, 200, func(offset int64, val byte) bool {
+	bm.ForEachBit(100, 201, func(offset int64, val byte) bool {
 		if offset != expectOffset {
 			t.Error("wrong offset")
 		}
@@ -78,7 +78,7 @@ func TestForEachBit(t *testing.T) {
 		count++
 		return true
 	})
-	if count != 100 {
+	if count != 101 {
 		t.Error("wrong count")
 	}
 	bm = New()

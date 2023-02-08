@@ -74,10 +74,13 @@ func (b *BitMap) ForEachBit(begin int64, end int64, cb Callback) {
 			}
 			bitOffset++
 			offset++
+			if offset >= end {
+				break
+			}
 		}
 		byteIndex++
 		bitOffset = 0
-		if end > 0 && offset == end {
+		if end > 0 && offset >= end {
 			break
 		}
 	}
