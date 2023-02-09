@@ -197,10 +197,7 @@ func (dict *ConcurrentDict) ForEach(consumer Consumer) {
 		func() {
 			defer s.mutex.RUnlock()
 			for key, value := range s.m {
-				continues := consumer(key, value)
-				if !continues {
-					return
-				}
+				_ = consumer(key, value)
 			}
 		}()
 	}
