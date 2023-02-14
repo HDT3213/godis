@@ -185,6 +185,23 @@ func execExpireAt(db *DB, args [][]byte) redis.Reply {
 	return protocol.MakeIntReply(1)
 }
 
+// execExpireTime returns the absolute Unix expiration timestamp in seconds at which the given key will expire.
+func execExpireTime(db *DB, args [][]byte) redis.Reply {
+	key := string(args[0])
+	_, exists := db.GetEntity(key)
+	if !exists {
+		return protocol.MakeIntReply(-2)
+	}
+
+	raw, exists := db.ttlMap.Get(key)
+	if !exists {
+		return protocol.MakeIntReply(-1)
+	}
+	rawExpireTime, _ := raw.(time.Time)
+	expireTime := rawExpireTime.Unix()
+	return protocol.MakeIntReply(expireTime)
+}
+
 // execPExpire sets a key's time to live in milliseconds
 func execPExpire(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
@@ -225,6 +242,23 @@ func execPExpireAt(db *DB, args [][]byte) redis.Reply {
 
 	db.addAof(aof.MakeExpireCmd(key, expireAt).Args)
 	return protocol.MakeIntReply(1)
+}
+
+// execPExpireTime returns the absolute Unix expiration timestamp in milliseconds at which the given key will expire.
+func execPExpireTime(db *DB, args [][]byte) redis.Reply {
+	key := string(args[0])
+	_, exists := db.GetEntity(key)
+	if !exists {
+		return protocol.MakeIntReply(-2)
+	}
+
+	raw, exists := db.ttlMap.Get(key)
+	if !exists {
+		return protocol.MakeIntReply(-1)
+	}
+	rawExpireTime, _ := raw.(time.Time)
+	expireTime := rawExpireTime.UnixMilli()
+	return protocol.MakeIntReply(expireTime)
 }
 
 // execTTL returns a key's time to live in seconds
@@ -379,8 +413,10 @@ func init() {
 	RegisterCommand("Del", execDel, writeAllKeys, undoDel, -2, flagWrite)
 	RegisterCommand("Expire", execExpire, writeFirstKey, undoExpire, 3, flagWrite)
 	RegisterCommand("ExpireAt", execExpireAt, writeFirstKey, undoExpire, 3, flagWrite)
+	RegisterCommand("ExpireTime", execExpireTime, readFirstKey, nil, 2, flagReadOnly)
 	RegisterCommand("PExpire", execPExpire, writeFirstKey, undoExpire, 3, flagWrite)
 	RegisterCommand("PExpireAt", execPExpireAt, writeFirstKey, undoExpire, 3, flagWrite)
+	RegisterCommand("PExpireTime", execPExpireTime, readFirstKey, nil, 2, flagReadOnly)
 	RegisterCommand("TTL", execTTL, readFirstKey, nil, 2, flagReadOnly)
 	RegisterCommand("PTTL", execPTTL, readFirstKey, nil, 2, flagReadOnly)
 	RegisterCommand("Persist", execPersist, writeFirstKey, undoExpire, 2, flagWrite)

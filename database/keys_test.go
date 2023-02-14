@@ -191,6 +191,60 @@ func TestExpireAt(t *testing.T) {
 	}
 }
 
+func TestExpiredTime(t *testing.T) {
+	//测试ExpireTime
+	testDB.Flush()
+	key := utils.RandString(10)
+	value := utils.RandString(10)
+	testDB.Exec(nil, utils.ToCmdLine("set", key, value))
+
+	result := testDB.Exec(nil, utils.ToCmdLine("ttl", key))
+	asserts.AssertIntReply(t, result, -1)
+	result = testDB.Exec(nil, utils.ToCmdLine("EXPIRETIME", key))
+	asserts.AssertIntReply(t, result, -1)
+	result = testDB.Exec(nil, utils.ToCmdLine("PEXPIRETIME", key))
+	asserts.AssertIntReply(t, result, -1)
+
+	testDB.Exec(nil, utils.ToCmdLine("EXPIRE", key, "2"))
+	//tt := time.Now()
+	result = testDB.Exec(nil, utils.ToCmdLine("ttl", key))
+	asserts.AssertIntReply(t, result, 2)
+	result = testDB.Exec(nil, utils.ToCmdLine("EXPIRETIME", key))
+	asserts.AssertIntReply(t, result, int(time.Now().Add(2*time.Second).Unix()))
+	intResult, ok := result.(*protocol.IntReply)
+	if !ok {
+		t.Error(fmt.Sprintf("expected int protocol, actually %s", result.ToBytes()))
+		return
+	}
+	if intResult.Code <= 0 {
+		t.Errorf("expected ttl more than 0, actual: %d", intResult.Code)
+		return
+	}
+
+	result = testDB.Exec(nil, utils.ToCmdLine("PEXPIRETIME", key))
+	asserts.AssertIntReply(t, result, int(time.Now().Add(2*time.Second).UnixMilli()))
+	intResult, ok = result.(*protocol.IntReply)
+	if !ok {
+		t.Error(fmt.Sprintf("expected int protocol, actually %s", result.ToBytes()))
+		return
+	}
+	if intResult.Code <= 0 {
+		t.Errorf("expected ttl more than 0, actual: %d", intResult.Code)
+		return
+	}
+
+	time.Sleep(3 * time.Second)
+	result = testDB.Exec(nil, utils.ToCmdLine("ttl", key))
+	asserts.AssertIntReply(t, result, -2)
+	result = testDB.Exec(nil, utils.ToCmdLine("EXPIRETIME", key))
+	asserts.AssertIntReply(t, result, -2)
+	intResult, ok = result.(*protocol.IntReply)
+	result = testDB.Exec(nil, utils.ToCmdLine("PEXPIRETIME", key))
+	asserts.AssertIntReply(t, result, -2)
+	intResult, ok = result.(*protocol.IntReply)
+
+}
+
 func TestKeys(t *testing.T) {
 	testDB.Flush()
 	key := utils.RandString(10)

@@ -16,8 +16,10 @@ func makeRouter() map[string]CmdFunc {
 
 	routerMap["expire"] = defaultFunc
 	routerMap["expireat"] = defaultFunc
+	routerMap["expiretime"] = defaultFunc
 	routerMap["pexpire"] = defaultFunc
 	routerMap["pexpireat"] = defaultFunc
+	routerMap["pexpiretime"] = defaultFunc
 	routerMap["ttl"] = defaultFunc
 	routerMap["pttl"] = defaultFunc
 	routerMap["persist"] = defaultFunc
