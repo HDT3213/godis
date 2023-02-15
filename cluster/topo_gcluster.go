@@ -83,7 +83,7 @@ func execGClusterSetSlot(cluster *Cluster, c redis.Connection, args [][]byte) re
 	if !ok {
 		return protocol.MakeErrReply("ERR node not found")
 	}
-	cluster.topology.setLocalSlotMigrating(slotId, targetNodeID)
+	cluster.setSlotMovingOut(slotId, targetNodeID)
 	err = cluster.topology.SetSlot(slotId, targetNodeID)
 	if err != nil {
 		return protocol.MakeErrReply(err.Error())
@@ -93,7 +93,7 @@ func execGClusterSetSlot(cluster *Cluster, c redis.Connection, args [][]byte) re
 }
 
 // execGClusterMigrate Command line: gcluster migrate slotId
-// Current node will  dump the given slot to the node sending this request
+// Current node will  dump data in the given slot to the node sending this request
 // The given slot must in migrating state
 func execGClusterMigrate(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	slotId0, err := strconv.Atoi(string(args[0]))
@@ -101,17 +101,13 @@ func execGClusterMigrate(cluster *Cluster, c redis.Connection, args [][]byte) re
 		return protocol.MakeErrReply("ERR value is not a valid slot id")
 	}
 	slotId := uint32(slotId0)
-	slot := cluster.topology.GetSlots()[int(slotId)]
-	if !slot.IsMigrating() {
+	slot := cluster.getHostSlot(slotId)
+	if slot == nil || slot.state != slotStateMovingOut {
 		return protocol.MakeErrReply("ERR only dump migrating slot")
-	}
-	hostingSlot := cluster.slots[slotId]
-	if hostingSlot == nil {
-		return protocol.MakeErrReply("ERR slot on other node")
 	}
 	// migrating slot is immutable
 	logger.Info("start dump slot", slotId)
-	hostingSlot.keys.ForEach(func(key string) bool {
+	slot.keys.ForEach(func(key string) bool {
 		entity, ok := cluster.db.GetEntity(0, key)
 		if ok {
 			ret := aof.EntityToCmd(key, entity)
@@ -138,11 +134,13 @@ func execGClusterMigrateDone(cluster *Cluster, c redis.Connection, args [][]byte
 		return protocol.MakeErrReply("ERR value is not a valid slot id")
 	}
 	slotId := uint32(slotId0)
-	slot := cluster.topology.GetSlots()[int(slotId)]
-	if !slot.IsMigrating() {
-		return protocol.MakeErrReply("ERR slot is not migrating")
+	slot := cluster.getHostSlot(slotId)
+	if slot == nil || slot.state != slotStateMovingOut {
+		return protocol.MakeErrReply("ERR slot is not moving out")
 	}
+	cluster.slotMu.Lock()
 	delete(cluster.slots, slotId)
-	cluster.FinishSlotMigrate(slotId)
+	cluster.slotMu.Unlock()
+	// todo: delete keys in slot
 	return protocol.MakeOkReply()
 }

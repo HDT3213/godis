@@ -81,18 +81,11 @@ func unmarshalSlotIds(args []string) ([]uint32, error) {
 	return result, nil
 }
 
-type migratingSlotPayload struct {
-	SlotId    uint32 `json:"slotId"`
-	NodeId    string `json:"nodeId"`
-	OldNodeId string `json:"oldNodeId"`
-}
-
 type nodePayload struct {
-	ID             string                 `json:"id"`
-	Addr           string                 `json:"addr"`
-	SlotDesc       []string               `json:"slotDesc"`
-	MigratingSlots []migratingSlotPayload `json:"migratingSlots"`
-	Flags          uint32                 `json:"flags"`
+	ID       string   `json:"id"`
+	Addr     string   `json:"addr"`
+	SlotDesc []string `json:"slotDesc"`
+	Flags    uint32   `json:"flags"`
 }
 
 func marshalTopology(nodes map[string]*Node) [][]byte {
@@ -104,15 +97,6 @@ func marshalTopology(nodes map[string]*Node) [][]byte {
 			Addr:     node.Addr,
 			SlotDesc: slotLines,
 			Flags:    node.Flags,
-		}
-		for _, slot := range node.Slots {
-			if slot.IsMigrating() {
-				payload.MigratingSlots = append(payload.MigratingSlots, migratingSlotPayload{
-					SlotId:    slot.ID,
-					NodeId:    slot.NodeID,
-					OldNodeId: slot.OldNodeID,
-				})
-			}
 		}
 		bin, _ := json.Marshal(payload)
 		args = append(args, bin)
@@ -132,33 +116,17 @@ func unmarshalTopology(args [][]byte) (map[string]*Node, error) {
 		if err != nil {
 			return nil, err
 		}
-		migratingSlots := make(map[uint32]*Slot)
-		for _, p := range payload.MigratingSlots {
-			slot := &Slot{
-				ID:        p.SlotId,
-				NodeID:    p.NodeId,
-				OldNodeID: p.OldNodeId,
-				Flags:     slotFlagMigrating,
-			}
-			migratingSlots[p.SlotId] = slot
-		}
 		node := &Node{
 			ID:    payload.ID,
 			Addr:  payload.Addr,
 			Flags: payload.Flags,
 		}
 		for _, slotId := range slotIds {
-			slot := migratingSlots[slotId]
-			if slot != nil {
-				node.Slots = append(node.Slots, slot)
-			} else {
-				slot = &Slot{
-					ID:     slotId,
-					NodeID: node.ID,
-					Flags:  0,
-				}
-			}
-			node.Slots = append(node.Slots, slot)
+			node.Slots = append(node.Slots, &Slot{
+				ID:     slotId,
+				NodeID: node.ID,
+				Flags:  0,
+			})
 		}
 		nodeMap[node.ID] = node
 	}

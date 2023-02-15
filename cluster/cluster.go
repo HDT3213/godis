@@ -28,6 +28,7 @@ type Cluster struct {
 	db           database.DBEngine
 	transactions *dict.SimpleDict // id -> Transaction
 	topology     *Raft
+	slotMu       sync.RWMutex
 	slots        map[uint32]*hostSlot
 
 	idGenerator *idgenerator.IDGenerator
@@ -45,6 +46,13 @@ const (
 type hostSlot struct {
 	state uint32
 	mu    sync.RWMutex
+	// OldNodeID is the node which is moving out this slot
+	// only valid during slot is importing
+	oldNodeID string
+	// OldNodeID is the node which is importing this slot
+	// only valid during slot is moving out
+	newNodeID string
+
 	/* importedKeys stores imported keys during migrating progress
 	 * While this slot is migrating, if importedKeys does not have the given key, then current node will import key before execute commands
 	 *
@@ -164,7 +172,9 @@ func (cluster *Cluster) AfterClientClose(c redis.Connection) {
 func (cluster *Cluster) makeInsertCallback() database.KeyEventCallback {
 	return func(dbIndex int, key string, entity *database.DataEntity) {
 		slotId := getSlot(key)
+		cluster.slotMu.RLock()
 		slot, ok := cluster.slots[slotId]
+		cluster.slotMu.RUnlock()
 		// As long as the command is executed, we should update slot.keys regardless of slot.state
 		if ok {
 			slot.mu.Lock()
@@ -177,7 +187,9 @@ func (cluster *Cluster) makeInsertCallback() database.KeyEventCallback {
 func (cluster *Cluster) makeDeleteCallback() database.KeyEventCallback {
 	return func(dbIndex int, key string, entity *database.DataEntity) {
 		slotId := getSlot(key)
+		cluster.slotMu.RLock()
 		slot, ok := cluster.slots[slotId]
+		cluster.slotMu.RUnlock()
 		// As long as the command is executed, we should update slot.keys regardless of slot.state
 		if ok {
 			slot.mu.Lock()

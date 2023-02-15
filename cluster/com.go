@@ -108,13 +108,16 @@ func (cluster *Cluster) broadcast(c redis.Connection, args [][]byte) map[string]
 // ensureKey will migrate key to current node if the key is in a slot migrating to current node
 func (cluster *Cluster) ensureKey(key string) protocol.ErrorReply {
 	slotId := getSlot(key)
+	cluster.slotMu.RLock()
 	slot := cluster.slots[slotId]
+	cluster.slotMu.RUnlock()
 	if slot == nil {
 		return nil
 	}
 	if slot.state != slotStateImporting || slot.importedKeys.Has(key) {
 		return nil
 	}
+	// todo: 查询老节点
 	resp := cluster.relay2(key, connection.NewFakeConn(), utils.ToCmdLine("DumpKey", key))
 	if protocol.IsErrorReply(resp) {
 		return resp.(protocol.ErrorReply)

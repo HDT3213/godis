@@ -141,16 +141,6 @@ func (raft *Raft) NewNode(addr string) (*Node, error) {
 	return node, nil
 }
 
-// setLocalSlotMigrating set a hosting slot as migrating state.
-// only two related nodes should invoke this function
-func (raft *Raft) setLocalSlotMigrating(slotID uint32, newNodeID string) {
-	slot := raft.slots[int(slotID)]
-	slot.Flags |= slotFlagMigrating
-	slot.OldNodeID = slot.NodeID
-	slot.NodeID = newNodeID
-	// raft.nodes.Slots is the same object with raft.slots, no need to update
-}
-
 // SetSlot propose
 func (raft *Raft) SetSlot(slotID uint32, newNodeID string) error {
 	proposal := &logEntry{

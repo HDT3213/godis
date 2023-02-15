@@ -10,6 +10,7 @@ import (
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/protocol"
+	"hash/crc32"
 	"math/rand"
 	"sort"
 	"strconv"
@@ -24,6 +25,21 @@ type raftState int
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
+}
+
+// Slot represents a hash slot,  used in cluster internal messages
+type Slot struct {
+	// ID is uint between 0 and 16383
+	ID uint32
+	// NodeID is id of the hosting node
+	// If the slot is migrating, NodeID is the id of the node importing this slot (target node)
+	NodeID string
+	// Flags stores more information of slot
+	Flags uint32
+}
+
+func getSlot(key string) uint32 {
+	return crc32.ChecksumIEEE([]byte(key)) % uint32(slotCount)
 }
 
 type Raft struct {
@@ -159,7 +175,7 @@ func (raft *Raft) start(state raftState) {
 	}()
 }
 
-const heartbeatTimeout = time.Second * 3600
+const heartbeatTimeout = time.Second
 
 func (raft *Raft) followerJob() {
 	select {
@@ -175,8 +191,10 @@ func (raft *Raft) followerJob() {
 		raft.mu.Unlock()
 	case <-time.After(heartbeatTimeout):
 		// change to candidate
+		logger.Info("raft leader timeout")
 		timeoutMs := rand.Intn(200) + int(float64(300)/float64(raft.proposalIndex/10+1))
 		time.Sleep(time.Duration(timeoutMs) * time.Millisecond)
+		logger.Info("change to candidate")
 		raft.mu.Lock()
 		raft.state = candidate
 		raft.mu.Unlock()

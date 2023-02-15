@@ -11,7 +11,6 @@ import (
 	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/parser"
 	"github.com/hdt3213/godis/redis/protocol"
-	"hash/crc32"
 	"net"
 	"sort"
 	"strconv"
@@ -67,39 +66,13 @@ func (node *Node) getState() raftState {
 	return follower
 }
 
-const (
-	slotFlagMigrating uint32 = 1 << iota
-)
-
-// Slot represents a hash slot,  used in cluster internal messages
-type Slot struct {
-	// ID is uint between 0 and 16383
-	ID uint32
-	// NodeID is id of the hosting node
-	// If the slot is migrating, NodeID is the id of the node importing this slot (target node)
-	NodeID string
-	// OldNodeID is the node which is moving out this slot
-	// only valid during slot is migrating
-	OldNodeID string
-	// Flags stores more information of slot
-	Flags uint32
-}
-
-func (slot *Slot) IsMigrating() bool {
-	return slot.Flags&slotFlagMigrating > 0
-}
-
-func getSlot(key string) uint32 {
-	return crc32.ChecksumIEEE([]byte(key)) % uint32(slotCount)
-}
-
 func (cluster *Cluster) startAsSeed() error {
 	selfNodeId, err := cluster.topology.StartAsSeed(config.Properties.AnnounceAddress())
 	if err != nil {
 		return err
 	}
 	for i := 0; i < slotCount; i++ {
-		cluster.setSlot(uint32(i), slotStateHost)
+		cluster.initSlot(uint32(i), slotStateHost)
 	}
 	cluster.self = selfNodeId
 	return nil
@@ -163,7 +136,6 @@ func (cluster *Cluster) Join(seed string) protocol.ErrorReply {
 	}
 	leaderCli.Start()
 	ret = leaderCli.Send(utils.ToCmdLine("raft", "join", config.Properties.AnnounceAddress()))
-	// todo: handle NOT LEADER error
 	if protocol.IsErrorReply(ret) {
 		return ret.(protocol.ErrorReply)
 	}
@@ -193,18 +165,24 @@ func (cluster *Cluster) Join(seed string) protocol.ErrorReply {
 func (cluster *Cluster) rebalance(err error) {
 	slots := cluster.findSlotsForNewNode()
 	// serial migrations to avoid overloading the cluster
+	slotChan := make(chan *Slot, len(slots))
 	for _, slot := range slots {
-		if slot.IsMigrating() {
-			continue
-		}
-		logger.Info("start import slot ", slot.ID)
-		err = cluster.importSlot(slot)
-		if err != nil {
-			logger.Error(fmt.Sprintf("import slot %d error: %d", slot.ID, err))
-			// todo: delete all keys in slot
-			continue
-		}
-		logger.Info("finish import slot", slot.ID)
+		slotChan <- slot
+	}
+	close(slotChan)
+	for i := 0; i < 32; i++ {
+		go func() {
+			for slot := range slotChan {
+				logger.Info("start import slot ", slot.ID)
+				err = cluster.importSlot(slot)
+				if err != nil {
+					logger.Error(fmt.Sprintf("import slot %d error: %v", slot.ID, err))
+					// todo: delete all imported keys in slot
+					return
+				}
+				logger.Info("finish import slot", slot.ID)
+			}
+		}()
 	}
 }
 
@@ -215,6 +193,7 @@ func (cluster *Cluster) importSlot(slot *Slot) error {
 	if err != nil {
 		return fmt.Errorf("connect with %s(%s) error: %v", node.ID, node.Addr, err)
 	}
+	defer conn.Close()
 	nodeChan := parser.ParseStream(conn)
 	send2node := func(cmdLine CmdLine) redis.Reply {
 		req := protocol.MakeMultiBulkReply(cmdLine)
@@ -229,12 +208,12 @@ func (cluster *Cluster) importSlot(slot *Slot) error {
 		return resp.Data
 	}
 
-	cluster.setSlot(slot.ID, slotStateImporting) // prepare host slot before send `set slot`
-	cluster.topology.setLocalSlotMigrating(slot.ID, cluster.self)
+	cluster.initSlot(slot.ID, slotStateImporting) // prepare host slot before send `set slot`
+	cluster.setLocalSlotImporting(slot.ID, cluster.self)
 	ret := send2node(utils.ToCmdLine(
 		"gcluster", "set-slot", strconv.Itoa(int(slot.ID)), cluster.self))
 	if !protocol.IsOKReply(ret) {
-		return fmt.Errorf("set slot %d error: %v", slot.ID, err)
+		return fmt.Errorf("set slot %d error: %v", slot.ID, ret)
 	}
 	logger.Info(fmt.Sprintf("set slot %d to current node, start migrate", slot.ID))
 
@@ -252,10 +231,13 @@ slotLoop:
 		switch reply := proto.Data.(type) {
 		case *protocol.MultiBulkReply:
 			// todo: handle exec error
-			_ = cluster.db.Exec(fakeConn, reply.Args)
 			keys, _ := database.GetRelatedKeys(reply.Args)
-			for _, key := range keys {
+			// assert len(keys) == 1
+			key := keys[0]
+			// key may be imported by Cluster.ensureKey or by former failed migrating try
+			if !cluster.isImportedKey(key) {
 				cluster.setImportedKey(key)
+				_ = cluster.db.Exec(fakeConn, reply.Args)
 			}
 		case *protocol.StatusReply:
 			if protocol.IsOKReply(reply) {
@@ -263,29 +245,7 @@ slotLoop:
 			}
 		}
 	}
-	cluster.slots[slot.ID].importedKeys = nil
-	cluster.slots[slot.ID].state = slotStateHost
-	cluster.FinishSlotMigrate(slot.ID)
+	cluster.finishSlotImport(slot.ID)
 	send2node(utils.ToCmdLine("gcluster", "migrate-done", strconv.Itoa(int(slot.ID))))
 	return nil
-}
-
-func (cluster *Cluster) FinishSlotMigrate(slotID uint32) {
-	// todo: raft 不再关注迁移状态信息, 只关心由谁负责 slot
-	raft := cluster.topology
-	slot := raft.slots[int(slotID)]
-	oldNode := raft.nodes[slot.OldNodeID]
-	// remove from old oldNode
-	for i, s := range oldNode.Slots {
-		if s.ID == slot.ID {
-			copy(oldNode.Slots[i:], oldNode.Slots[i+1:])
-			oldNode.Slots = oldNode.Slots[:len(oldNode.Slots)-1]
-			break
-		}
-	}
-	// add into new node
-	newNode := raft.nodes[slot.NodeID]
-	newNode.Slots = append(newNode.Slots, slot)
-	slot.Flags &= ^slotFlagMigrating
-	slot.OldNodeID = ""
 }
