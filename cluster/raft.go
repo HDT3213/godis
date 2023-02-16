@@ -222,7 +222,7 @@ func (raft *Raft) candidateJob() {
 		if nodeID == raft.selfNodeID {
 			continue
 		}
-		rawResp := raft.cluster.relay(nodeID, conn, args)
+		rawResp := raft.cluster.relay2(nodeID, conn, args)
 		if err, ok := rawResp.(protocol.ErrorReply); ok {
 			logger.Info(fmt.Sprintf("cannot get vote response from %s, %v", nodeID, err))
 			continue
@@ -306,10 +306,12 @@ func (raft *Raft) leaderJob() {
 				strconv.Itoa(raft.term),
 				strconv.Itoa(commitTo),
 			)
+			raft.mu.Lock()
 			if raft.nodeIndexMap[node.ID] == nil {
 				raft.nodeIndexMap[node.ID] = &nodeIndex{}
 			}
 			nodeStatus := raft.nodeIndexMap[node.ID]
+			raft.mu.Unlock()
 			prevLogIndex := nodeStatus.recvedIndex
 			if proposalIndex > prevLogIndex {
 				prevLogTerm := raft.log[prevLogIndex].Term
@@ -323,7 +325,7 @@ func (raft *Raft) leaderJob() {
 			}
 
 			conn := connection.NewFakeConn()
-			resp := raft.cluster.relay(node.ID, conn, cmdLine)
+			resp := raft.cluster.relay2(node.ID, conn, cmdLine)
 			if err, ok := resp.(protocol.ErrorReply); ok {
 				logger.Errorf("heartbeat to %s failed: %v", node.ID, err)
 				return

@@ -114,12 +114,18 @@ func (cluster *Cluster) findSlotsForNewNode() []*Slot {
 
 // Join send `gcluster join` to node in cluster to join
 func (cluster *Cluster) Join(seed string) protocol.ErrorReply {
+	/* STEP1: get leader from seed */
 	seedCli, err := client.MakeClient(seed)
 	if err != nil {
 		return protocol.MakeErrReply("connect with seed failed: " + err.Error())
 	}
 	seedCli.Start()
-	// todo: auth
+	authCmdline := utils.ToCmdLine("AUTH", config.Properties.RequirePass)
+	if config.Properties.RequirePass != "" {
+		if ret := seedCli.Send(authCmdline); protocol.IsErrorReply(ret) {
+			return ret.(protocol.ErrorReply)
+		}
+	}
 	ret := seedCli.Send(utils.ToCmdLine("raft", "get-leader"))
 	if protocol.IsErrorReply(ret) {
 		return ret.(protocol.ErrorReply)
@@ -129,12 +135,18 @@ func (cluster *Cluster) Join(seed string) protocol.ErrorReply {
 		return protocol.MakeErrReply("ERR get-leader returns wrong reply")
 	}
 	leaderAddr := string(leaderInfo.Args[1])
+
+	/* STEP2: join raft group */
 	leaderCli, err := client.MakeClient(leaderAddr)
-	// todo: auth
 	if err != nil {
 		return protocol.MakeErrReply("connect with seed failed: " + err.Error())
 	}
 	leaderCli.Start()
+	if config.Properties.RequirePass != "" {
+		if ret := leaderCli.Send(authCmdline); protocol.IsErrorReply(ret) {
+			return ret.(protocol.ErrorReply)
+		}
+	}
 	ret = leaderCli.Send(utils.ToCmdLine("raft", "join", config.Properties.AnnounceAddress()))
 	if protocol.IsErrorReply(ret) {
 		return ret.(protocol.ErrorReply)
@@ -154,15 +166,15 @@ func (cluster *Cluster) Join(seed string) protocol.ErrorReply {
 	cluster.topology.Load(selfNodeId, leaderId, term, commitIndex, nodes)
 	cluster.self = selfNodeId
 	cluster.topology.start(follower)
-	// asynchronous migrating slots
+	/* STEP3: asynchronous migrating slots */
 	go func() {
 		time.Sleep(time.Second) // let the cluster started
-		cluster.rebalance(err)
+		cluster.reBalance()
 	}()
 	return nil
 }
 
-func (cluster *Cluster) rebalance(err error) {
+func (cluster *Cluster) reBalance() {
 	slots := cluster.findSlotsForNewNode()
 	// serial migrations to avoid overloading the cluster
 	slotChan := make(chan *Slot, len(slots))
@@ -174,10 +186,11 @@ func (cluster *Cluster) rebalance(err error) {
 		go func() {
 			for slot := range slotChan {
 				logger.Info("start import slot ", slot.ID)
-				err = cluster.importSlot(slot)
+				err := cluster.importSlot(slot)
 				if err != nil {
 					logger.Error(fmt.Sprintf("import slot %d error: %v", slot.ID, err))
-					// todo: delete all imported keys in slot
+					// delete all imported keys in slot
+					cluster.cleanDroppedSlot(slot.ID)
 					return
 				}
 				logger.Info("finish import slot", slot.ID)
@@ -194,6 +207,7 @@ func (cluster *Cluster) importSlot(slot *Slot) error {
 		return fmt.Errorf("connect with %s(%s) error: %v", node.ID, node.Addr, err)
 	}
 	defer conn.Close()
+	// we need to receive continuous stream like replication slave, so redis.Client cannot be used here
 	nodeChan := parser.ParseStream(conn)
 	send2node := func(cmdLine CmdLine) redis.Reply {
 		req := protocol.MakeMultiBulkReply(cmdLine)

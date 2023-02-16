@@ -75,21 +75,35 @@ var defaultRelayImpl = func(cluster *Cluster, node string, c redis.Connection, c
 	return peerClient.Send(cmdLine)
 }
 
-// relay function relays command to peer
-// cannot execute command implemented in `cluster` package, such as prepare
+// relay function relays command to peer or calls cluster.db.Exec
+// If the invoker is a commander handler of cluster,
+// 	calling cluster.db.Exec instead of Cluster.Exec could avoid infinite recursion. such as cluster.Del
+// But it can not execute command implemented in `cluster` package, such as Transaction.prepare
 func (cluster *Cluster) relay(peer string, c redis.Connection, args [][]byte) redis.Reply {
 	// use a variable to allow injecting stub for testing, see defaultRelayImpl
 	if peer == cluster.self {
 		// to self db
-		//return cluster.db.Exec(c, cmdLine)
+		return cluster.db.Exec(c, args)
+	}
+	return cluster.relayImpl(cluster, peer, c, args)
+}
+
+// relay2 function relays command to peer or calls cluster.Exec
+// If relay2 invoked by a commander handler of cluster may cause infinite recursion
+// For example. if cluster.Del calls relay2("DEL") the actual stack is: cluster.Exec -> cluster.Del -> relay2 -> cluster.Exec
+// But it can not execute command implemented in `cluster` package, such as Transaction.prepare
+func (cluster *Cluster) relay2(peer string, c redis.Connection, args [][]byte) redis.Reply {
+	// use a variable to allow injecting stub for testing, see defaultRelayImpl
+	if peer == cluster.self {
+		// to self db
 		return cluster.Exec(c, args)
 	}
 	return cluster.relayImpl(cluster, peer, c, args)
 }
 
-// relay2 function relays command to peer
+// relayByKey function relays command to peer
 // use routeKey to determine peer node
-func (cluster *Cluster) relay2(routeKey string, c redis.Connection, args [][]byte) redis.Reply {
+func (cluster *Cluster) relayByKey(routeKey string, c redis.Connection, args [][]byte) redis.Reply {
 	slotId := getSlot(routeKey)
 	peer := cluster.topology.PickNode(slotId)
 	return cluster.relay(peer.Addr, c, args)
@@ -106,6 +120,7 @@ func (cluster *Cluster) broadcast(c redis.Connection, args [][]byte) map[string]
 }
 
 // ensureKey will migrate key to current node if the key is in a slot migrating to current node
+// invoker should provide with locks of key
 func (cluster *Cluster) ensureKey(key string) protocol.ErrorReply {
 	slotId := getSlot(key)
 	cluster.slotMu.RLock()
@@ -117,8 +132,7 @@ func (cluster *Cluster) ensureKey(key string) protocol.ErrorReply {
 	if slot.state != slotStateImporting || slot.importedKeys.Has(key) {
 		return nil
 	}
-	// todo: 查询老节点
-	resp := cluster.relay2(key, connection.NewFakeConn(), utils.ToCmdLine("DumpKey", key))
+	resp := cluster.relay(slot.oldNodeID, connection.NewFakeConn(), utils.ToCmdLine("DumpKey", key))
 	if protocol.IsErrorReply(resp) {
 		return resp.(protocol.ErrorReply)
 	}
@@ -126,8 +140,6 @@ func (cluster *Cluster) ensureKey(key string) protocol.ErrorReply {
 	if len(dumpResp.Args) != 2 {
 		return protocol.MakeErrReply("illegal dump key response")
 	}
-	cluster.db.RWLocks(0, []string{key}, nil)
-	defer cluster.db.RWUnLocks(0, []string{key}, nil)
 	// reuse copy to command ^_^
 	resp = cluster.db.Exec(connection.NewFakeConn(), [][]byte{
 		[]byte("CopyTo"), []byte(key), dumpResp.Args[0], dumpResp.Args[1],

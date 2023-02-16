@@ -138,9 +138,9 @@ func execGClusterMigrateDone(cluster *Cluster, c redis.Connection, args [][]byte
 	if slot == nil || slot.state != slotStateMovingOut {
 		return protocol.MakeErrReply("ERR slot is not moving out")
 	}
+	cluster.cleanDroppedSlot(slotId)
 	cluster.slotMu.Lock()
 	delete(cluster.slots, slotId)
 	cluster.slotMu.Unlock()
-	// todo: delete keys in slot
 	return protocol.MakeOkReply()
 }

@@ -1,6 +1,10 @@
 package cluster
 
-import "github.com/hdt3213/godis/datastruct/set"
+import (
+	"github.com/hdt3213/godis/datastruct/set"
+	"github.com/hdt3213/godis/lib/utils"
+	"github.com/hdt3213/godis/redis/connection"
+)
 
 func (cluster *Cluster) isImportedKey(key string) bool {
 	slotId := getSlot(key)
@@ -57,5 +61,19 @@ func (cluster *Cluster) setSlotMovingOut(slotID uint32, newNodeID string) {
 	defer cluster.slotMu.Unlock()
 	slot := cluster.slots[slotID]
 	slot.state = slotStateMovingOut
-	slot.newNodeID = cluster.self
+	slot.newNodeID = newNodeID
+}
+
+// cleanDroppedSlot deletes keys when slot has moved out or failed to import
+func (cluster *Cluster) cleanDroppedSlot(slotID uint32) {
+	cluster.slotMu.RLock()
+	keys := cluster.slots[slotID].importedKeys
+	cluster.slotMu.RUnlock()
+	c := connection.NewFakeConn()
+	go func() {
+		keys.ForEach(func(key string) bool {
+			cluster.db.Exec(c, utils.ToCmdLine("DEL", key))
+			return true
+		})
+	}()
 }
