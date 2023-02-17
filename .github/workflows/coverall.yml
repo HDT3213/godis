@@ -15,8 +15,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
-      
-    - uses: actions/checkout@v3
+    
+    - uses: zhulik/redis-action@1.1.0
+      with:
+        redis version: '5'
+        number of databases: 16
 
     - uses: actions/setup-go@v3
       with:
