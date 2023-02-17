@@ -17,7 +17,11 @@ func encode0(latitude, longitude float64, bitSize uint) ([]byte, [2][2]float64) 
 		{-90, 90},   // lat
 	}
 	pos := [2]float64{longitude, latitude}
-	hash := make([]byte, bitSize>>3)
+	hashLen := bitSize >> 3
+	if bitSize&7 > 0 {
+		hashLen++
+	}
+	hash := make([]byte, hashLen)
 	var precision uint = 0
 	for precision < bitSize {
 		for direction, val := range pos {
