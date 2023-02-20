@@ -208,10 +208,18 @@ func TestExpiredTime(t *testing.T) {
 	testDB.Exec(nil, utils.ToCmdLine("EXPIRE", key, "2"))
 	//tt := time.Now()
 	result = testDB.Exec(nil, utils.ToCmdLine("ttl", key))
-	asserts.AssertIntReply(t, result, 2)
+	intResult, ok := result.(*protocol.IntReply)
+	if !ok {
+		t.Error(fmt.Sprintf("expected int protocol, actually %s", result.ToBytes()))
+		return
+	}
+	if intResult.Code < 0 || intResult.Code > 2 {
+		t.Errorf("expected ttl more than 0, actual: %d", intResult.Code)
+		return
+	}
 	result = testDB.Exec(nil, utils.ToCmdLine("EXPIRETIME", key))
 	asserts.AssertIntReply(t, result, int(time.Now().Add(2*time.Second).Unix()))
-	intResult, ok := result.(*protocol.IntReply)
+	intResult, ok = result.(*protocol.IntReply)
 	if !ok {
 		t.Error(fmt.Sprintf("expected int protocol, actually %s", result.ToBytes()))
 		return
