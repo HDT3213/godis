@@ -41,7 +41,7 @@ type payload struct {
 // Listener will be called-back after receiving a aof payload
 // with a listener we can forward the updates to slave nodes etc.
 type Listener interface {
-	// Callback will be called-back after receiving a aof payload
+	// Callback will be called-back after receiving an aof payload
 	Callback([]CmdLine)
 }
 

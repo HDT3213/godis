@@ -59,6 +59,7 @@ func ParseOne(data []byte) (redis.Reply, error) {
 	return payload.Data, payload.Err
 }
 
+//parse0 RESP协议解析
 func parse0(rawReader io.Reader, ch chan<- *Payload) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -81,6 +82,7 @@ func parse0(rawReader io.Reader, ch chan<- *Payload) {
 		}
 		line = bytes.TrimSuffix(line, []byte{'\r', '\n'})
 		switch line[0] {
+		// Simple Strings。以+为前缀的响应数据
 		case '+':
 			content := string(line[1:])
 			ch <- &Payload{
@@ -94,10 +96,13 @@ func parse0(rawReader io.Reader, ch chan<- *Payload) {
 					return
 				}
 			}
+		// RESP 协议中错误响应
+		// SETNX, DEL, EXISTS, INCR, INCRBY, DECR, DECRBY, DBSIZE, LASTSAVE, RENAMENX, MOVE, LLEN, SADD, SREM, SISMEMBER, SCARD.
 		case '-':
 			ch <- &Payload{
 				Data: protocol.MakeErrReply(string(line[1:])),
 			}
+		// RESP 整型。表示响应的是整数，以 : 开头，比如 :0\r\n 和 :1000\r\n
 		case ':':
 			value, err := strconv.ParseInt(string(line[1:]), 10, 64)
 			if err != nil {
@@ -107,6 +112,11 @@ func parse0(rawReader io.Reader, ch chan<- *Payload) {
 			ch <- &Payload{
 				Data: protocol.MakeIntReply(value),
 			}
+		// RESP Bulk Strings.
+		// 批量回复，是一个大小在 512 Mb 的二进制安全字符串
+		// 以 $ 开头，紧跟一个整数代表回复字符串的大小，以 \r\n 结束
+		// 随后是 实际的字符串数据
+		// 最后以 “\r\n” 结尾
 		case '$':
 			err = parseBulkString(line, reader, ch)
 			if err != nil {
@@ -114,6 +124,9 @@ func parse0(rawReader io.Reader, ch chan<- *Payload) {
 				close(ch)
 				return
 			}
+		// RESP Arrays。数组，对于响应的集合元素，比如 LRANGE 命令，返回的是元素列表，也就是数组形式。
+		// 以 * 开头表示，紧接着是一个整数，表示数组元素个数，并以 \r\n 结尾。
+		// 数组的每个元素的都是 RESP 提供的类型。
 		case '*':
 			err = parseArray(line, reader, ch)
 			if err != nil {
