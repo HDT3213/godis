@@ -23,7 +23,7 @@ import (
 type Cluster struct {
 	self string
 
-	nodeConnections *dict.SimpleDict // map[string]*pool.Pool
+	nodeConnections dict.Dict // map[string]*pool.Pool
 
 	db           database.DBEngine
 	transactions *dict.SimpleDict // id -> Transaction
@@ -76,7 +76,7 @@ func MakeCluster() *Cluster {
 
 		db:              database2.NewStandaloneServer(),
 		transactions:    dict.MakeSimple(),
-		nodeConnections: dict.MakeSimple(),
+		nodeConnections: dict.MakeConcurrent(1),
 
 		idGenerator: idgenerator.MakeGenerator(config.Properties.Self),
 		relayImpl:   defaultRelayImpl,

@@ -91,6 +91,14 @@ func Info(v ...interface{}) {
 	logger.Println(v...)
 }
 
+// InfoF prints normal log
+func InfoF(format string, v ...interface{}) {
+	mu.Lock()
+	defer mu.Unlock()
+	setPrefix(INFO)
+	logger.Println(fmt.Sprintf(format, v...))
+}
+
 // Warn prints warning log
 func Warn(v ...interface{}) {
 	mu.Lock()

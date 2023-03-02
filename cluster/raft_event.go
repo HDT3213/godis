@@ -64,6 +64,7 @@ func (raft *Raft) applyLogEntries(entries []*logEntry) {
 			}
 			newNodeID := entry.NodeID
 			slot.NodeID = newNodeID
+			// fixme: 多个节点同时加入后 re balance 时 newNode 可能为 nil
 			newNode := raft.nodes[slot.NodeID]
 			newNode.Slots = append(newNode.Slots, slot)
 		}

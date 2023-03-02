@@ -95,6 +95,13 @@ func (raft *Raft) getLogEntries(beg, end int) []*logEntry {
 	return raft.log[i:j]
 }
 
+func (raft *Raft) getLogEntry(idx int) *logEntry {
+	if idx < raft.beginIndex || idx >= raft.beginIndex+len(raft.log) {
+		return nil
+	}
+	return raft.log[idx-raft.beginIndex]
+}
+
 func (raft *Raft) initLog(beginIndex int, entries []*logEntry) {
 	raft.beginIndex = beginIndex
 	raft.log = entries
@@ -175,7 +182,7 @@ func (raft *Raft) start(state raftState) {
 	}()
 }
 
-const heartbeatTimeout = time.Second
+const heartbeatTimeout = 3 * time.Second
 
 func (raft *Raft) followerJob() {
 	select {
@@ -192,10 +199,15 @@ func (raft *Raft) followerJob() {
 	case <-time.After(heartbeatTimeout):
 		// change to candidate
 		logger.Info("raft leader timeout")
-		timeoutMs := rand.Intn(200) + int(float64(300)/float64(raft.proposalIndex/10+1))
+		timeoutMs := rand.Intn(500) + int(float64(300)/float64(raft.proposalIndex/10+1))
+		logger.Info("sleep " + strconv.Itoa(timeoutMs) + "ms before change to candidate")
 		time.Sleep(time.Duration(timeoutMs) * time.Millisecond)
-		logger.Info("change to candidate")
 		raft.mu.Lock()
+		if raft.votedFor != "" {
+			logger.Info("has voted, give up being a candidate")
+			return
+		}
+		logger.Info("change to candidate")
 		raft.state = candidate
 		raft.mu.Unlock()
 	}
@@ -203,60 +215,89 @@ func (raft *Raft) followerJob() {
 
 func (raft *Raft) candidateJob() {
 	raft.mu.Lock()
-	defer raft.mu.Unlock()
 	raft.term++
 	raft.votedFor = raft.selfNodeID
 	raft.voteCount++
-
+	currentTerm := raft.term
 	req := &voteReq{
 		nodeID:   raft.selfNodeID,
 		logIndex: raft.proposalIndex,
 		term:     raft.term,
 	}
+	raft.mu.Unlock()
 	args := append([][]byte{
 		[]byte("raft"),
 		[]byte("request-vote"),
 	}, req.marshal()...)
 	conn := connection.NewFakeConn()
+	wg := sync.WaitGroup{}
 	for nodeID := range raft.nodes {
-		if nodeID == raft.selfNodeID {
-			continue
-		}
-		rawResp := raft.cluster.relay2(nodeID, conn, args)
-		if err, ok := rawResp.(protocol.ErrorReply); ok {
-			logger.Info(fmt.Sprintf("cannot get vote response from %s, %v", nodeID, err))
-			continue
-		}
-		respBody, ok := rawResp.(*protocol.MultiBulkReply)
-		if !ok {
-			logger.Info(fmt.Sprintf("cannot get vote response from %s, not a multi bulk reply", nodeID))
-			continue
-		}
-		resp := &voteResp{}
-		err := resp.unmarshal(respBody.Args)
-		if !ok {
-			logger.Info(fmt.Sprintf("cannot get vote response from %s, %v", nodeID, err))
-			continue
-		}
-
-		if resp.term > raft.term {
-			raft.mu.Lock()
-			raft.term = resp.term
-			raft.state = follower
-			raft.votedFor = ""
-			raft.mu.Unlock()
-		}
-
-		if resp.voteFor == raft.selfNodeID {
-			raft.mu.Lock()
-			raft.voteCount++
-			if raft.voteCount >= len(raft.nodes)/2+1 {
-				raft.state = leader
+		nodeID := nodeID
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if nodeID == raft.selfNodeID {
 				return
 			}
-			raft.mu.Unlock()
-		}
+			rawResp := raft.cluster.relay2(nodeID, conn, args)
+			if err, ok := rawResp.(protocol.ErrorReply); ok {
+				logger.Info(fmt.Sprintf("cannot get vote response from %s, %v", nodeID, err))
+				return
+			}
+			respBody, ok := rawResp.(*protocol.MultiBulkReply)
+			if !ok {
+				logger.Info(fmt.Sprintf("cannot get vote response from %s, not a multi bulk reply", nodeID))
+				return
+			}
+			resp := &voteResp{}
+			err := resp.unmarshal(respBody.Args)
+			if err != nil {
+				logger.Info(fmt.Sprintf("cannot get vote response from %s, %v", nodeID, err))
+				return
+			}
+
+			raft.mu.Lock()
+			defer raft.mu.Unlock()
+			logger.Info("received vote response from " + nodeID)
+			// check-lock-check
+			if currentTerm != raft.term || raft.state != candidate {
+				// vote has finished during waiting lock
+				logger.Info("vote has finished during waiting lock, current term " + strconv.Itoa(raft.term) + " state " + strconv.Itoa(int(raft.state)))
+				return
+			}
+			if resp.term > raft.term {
+				logger.InfoF(fmt.Sprintf("vote response from %s has newer term %d", nodeID, resp.term))
+				raft.term = resp.term
+				raft.state = follower
+				raft.votedFor = ""
+				raft.leaderId = resp.voteFor
+				return
+			}
+
+			if resp.voteFor == raft.selfNodeID {
+				logger.InfoF(fmt.Sprintf("get vote from %s", nodeID))
+				raft.voteCount++
+				if raft.voteCount >= len(raft.nodes)/2+1 {
+					logger.Info("elected to be the leader")
+					raft.state = leader
+					raft.slots = make([]*Slot, slotCount)
+					raft.nodeLock = lock.Make(1024)
+					return
+				}
+			}
+		}()
 	}
+
+	wg.Wait()
+	raft.mu.Lock()
+	defer raft.mu.Unlock()
+	if currentTerm != raft.term || raft.state != candidate {
+		logger.Info("vote has finished, continue working in new state " + strconv.Itoa(int(raft.state)))
+		return
+	}
+	logger.Info("failed to be elected, back to follower")
+	raft.state = follower
+	raft.term = currentTerm // failed to be elected neither found newer term
 }
 
 func (raft *Raft) leaderJob() {
@@ -313,8 +354,9 @@ func (raft *Raft) leaderJob() {
 			nodeStatus := raft.nodeIndexMap[node.ID]
 			raft.mu.Unlock()
 			prevLogIndex := nodeStatus.recvedIndex
+			// fixme: 新 leader 当选后可能缺少旧日志
 			if proposalIndex > prevLogIndex {
-				prevLogTerm := raft.log[prevLogIndex].Term
+				prevLogTerm := raft.getLogEntry(prevLogIndex).Term
 				cmdLine = append(cmdLine,
 					[]byte(strconv.Itoa(prevLogTerm)),
 					[]byte(strconv.Itoa(prevLogIndex)),
@@ -416,7 +458,7 @@ type voteResp struct {
 }
 
 func (resp *voteResp) unmarshal(bin [][]byte) error {
-	if len(bin) == 2 {
+	if len(bin) != 2 {
 		return errors.New("illegal vote resp length")
 	}
 	resp.voteFor = string(bin[0])
@@ -448,16 +490,37 @@ func execRaftRequestVote(cluster *Cluster, c redis.Connection, args [][]byte) re
 	}
 	cluster.topology.mu.Lock()
 	defer cluster.topology.mu.Unlock()
+	logger.Info("recv request vote from " + req.nodeID + ", term: " + strconv.Itoa(req.term))
 	resp := &voteResp{}
-	if req.term < cluster.topology.term ||
-		req.logIndex < cluster.topology.proposalIndex ||
-		cluster.topology.votedFor != "" {
+	if req.term < cluster.topology.term {
 		resp.term = cluster.topology.term
+		resp.voteFor = cluster.topology.leaderId // tell candidate the new leader
+		logger.Info("deny request vote from " + req.nodeID + " for earlier term")
 		return protocol.MakeMultiBulkReply(resp.marshal())
 	}
-	resp.voteFor = req.nodeID
+	if req.logIndex < cluster.topology.proposalIndex {
+		resp.term = cluster.topology.term
+		resp.voteFor = cluster.topology.votedFor
+		logger.Info("deny request vote from " + req.nodeID + " for  log progress")
+		logger.Info("request vote proposal index " + strconv.Itoa(req.logIndex) + " self index " + strconv.Itoa(cluster.topology.proposalIndex))
+		return protocol.MakeMultiBulkReply(resp.marshal())
+	}
+	if cluster.topology.votedFor != "" && cluster.topology.votedFor != cluster.topology.selfNodeID {
+		resp.term = cluster.topology.term
+		resp.voteFor = cluster.topology.votedFor
+		logger.Info("deny request vote from " + req.nodeID + " for voted")
+		return protocol.MakeMultiBulkReply(resp.marshal())
+	}
+	if cluster.topology.votedFor == cluster.topology.selfNodeID &&
+		cluster.topology.voteCount == 1 {
+		// cancel vote for self to avoid live lock
+		cluster.topology.votedFor = ""
+		cluster.topology.voteCount = 0
+	}
+	logger.Info("accept request vote from " + req.nodeID)
 	cluster.topology.votedFor = req.nodeID
 	cluster.topology.term = req.term
+	resp.voteFor = req.nodeID
 	resp.term = cluster.topology.term
 	return protocol.MakeMultiBulkReply(resp.marshal())
 }
@@ -481,6 +544,7 @@ func execRaftHeartbeat(cluster *Cluster, c redis.Connection, args [][]byte) redi
 	if term < cluster.topology.term {
 		return protocol.MakeIntReply(int64(cluster.topology.term))
 	} else if term > cluster.topology.term {
+		logger.Info("accept new leader " + sender)
 		cluster.topology.mu.Lock()
 		cluster.topology.term = term
 		cluster.topology.votedFor = ""

@@ -166,11 +166,13 @@ func (cluster *Cluster) Join(seed string) protocol.ErrorReply {
 	cluster.topology.Load(selfNodeId, leaderId, term, commitIndex, nodes)
 	cluster.self = selfNodeId
 	cluster.topology.start(follower)
+
+	// fixme: 完工前记得重新打开 reBalance
 	/* STEP3: asynchronous migrating slots */
-	go func() {
-		time.Sleep(time.Second) // let the cluster started
-		cluster.reBalance()
-	}()
+	//go func() {
+	//	time.Sleep(time.Second) // let the cluster started
+	//	cluster.reBalance()
+	//}()
 	return nil
 }
 
@@ -182,7 +184,7 @@ func (cluster *Cluster) reBalance() {
 		slotChan <- slot
 	}
 	close(slotChan)
-	for i := 0; i < 32; i++ {
+	for i := 0; i < 4; i++ {
 		go func() {
 			for slot := range slotChan {
 				logger.Info("start import slot ", slot.ID)
