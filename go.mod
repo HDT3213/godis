@@ -4,5 +4,6 @@ go 1.16
 
 require (
 	github.com/hdt3213/rdb v1.0.5
+	github.com/redis/go-redis/v9 v9.0.2
 	github.com/shopspring/decimal v1.2.0
 )
