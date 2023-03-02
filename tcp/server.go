@@ -70,7 +70,10 @@ func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
-			errCh <- err
+			select {
+			case errCh <- err:
+			default:
+			}
 			break
 		}
 		// handle
