@@ -194,15 +194,19 @@ func (dict *ConcurrentDict) ForEach(consumer Consumer) {
 
 	for _, s := range dict.table {
 		s.mutex.RLock()
-		func() {
+		f := func() bool {
 			defer s.mutex.RUnlock()
 			for key, value := range s.m {
 				continues := consumer(key, value)
 				if !continues {
-					return
+					return false
 				}
 			}
-		}()
+			return true
+		}
+		if !f() {
+			break
+		}
 	}
 }
 
