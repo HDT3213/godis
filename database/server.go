@@ -86,6 +86,10 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 	if cmdName == "ping" {
 		return Ping(c, cmdLine[1:])
 	}
+	// info
+	//if cmdName == "info" {
+	//	return GenGodisInfoString(c, cmdLine[1:])
+	//}
 	// authenticate
 	if cmdName == "auth" {
 		return Auth(c, cmdLine[1:])
@@ -349,3 +353,27 @@ func (server *Server) startReplCron() {
 		}
 	}(server)
 }
+
+// GenGodisInfoString Create the string returned by the INFO command
+//func GenGodisInfoString(db *DB, args [][]byte) redis.Reply {
+//	key := string(args[0])
+//	value := string(args[1])
+//	if key != "info" {
+//		return &protocol.SyntaxErrReply{}
+//	}
+//	if value == "" {
+//		value = "all"
+//	}
+//	switch value {
+//	case "server":
+//		s := fmt.Sprintf("# Server\r\n"+
+//			"redis_version:%s\r\n", "1.0.1")
+//		reply := []byte(s)
+//		return protocol.MakeBulkReply(reply)
+//	}
+//	return &protocol.NullBulkReply{}
+//}
+//
+//func init() {
+//	RegisterCommand("Info", GenGodisInfoString, nil, nil, 2, flagReadOnly)
+//}
