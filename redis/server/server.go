@@ -15,12 +15,10 @@ import (
 	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/parser"
 	"github.com/hdt3213/godis/redis/protocol"
-	"github.com/redis/go-redis/v9"
 	"io"
 	"net"
 	"strings"
 	"sync"
-	"time"
 )
 
 var (
@@ -32,12 +30,6 @@ type Handler struct {
 	activeConn sync.Map // *client -> placeholder
 	db         database.DB
 	closing    atomic.Boolean // refusing new client and new request
-}
-
-type kv struct {
-	cmd string
-	k   string
-	v   string
 }
 
 // MakeHandler creates a Handler instance
@@ -69,12 +61,7 @@ func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 	}
 
 	client := connection.NewConn(conn)
-	//wgRedisProxy := sync.WaitGroup{}
-	//wgRedisProxy.Add(10)
 	h.activeConn.Store(client, struct{}{})
-
-	rch := make(chan kv, 99)
-	defer close(rch)
 
 	ch := parser.ParseStream(conn)
 	for payload := range ch {
@@ -108,32 +95,12 @@ func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 		}
 		result := h.db.Exec(client, r.Args)
 
-		rch <- kv{
-			cmd: string(r.Args[0]),
-			k:   string(r.Args[1]),
-			v:   string(r.Args[2]),
-		}
-		go getProxyRedisClient(rch, client)
 		if result != nil {
 			_, _ = client.Write(result.ToBytes())
 		} else {
 			_, _ = client.Write(unknownErrReplyBytes)
 		}
 	}
-
-	//go func() {
-	//
-	//		redisClient, redisClientErr := getProxyRedisClient(s.k, s.v)
-	//		if redisClientErr != nil {
-	//			logger.Error("set backend redis instance failed, " + redisClientErr.Error())
-	//		} else {
-	//			logger.Info("set backend redis instance " + redisClient + " " + s.cmd + " " + s.k + " " + s.v)
-	//		}
-	//		wgRedisProxy.Done()
-	//	}
-	//}()
-	//
-	//wgRedisProxy.Wait()
 }
 
 // Close stops handler
@@ -148,28 +115,4 @@ func (h *Handler) Close() error {
 	})
 	h.db.Close()
 	return nil
-}
-
-func getProxyRedisClient(op <-chan kv, client *connection.Connection) {
-	var ctx = context.Background()
-	wgRedisProxy := sync.WaitGroup{}
-	wgRedisProxy.Add(100)
-	rdb := redis.NewClusterClient(&redis.ClusterOptions{
-		Addrs:    []string{"ks4:8280", "ks4:8280", "ks4:8280", "ks4:8280", "ks4:8280", "ks4:8280"},
-		Password: "qZr3pet",
-	})
-	for s := range op {
-		r := rdb.Set(ctx, s.k, s.v, time.Second*300)
-		result, err := r.Result()
-		if err != nil {
-			logger.Error("set backend redis instance failed, " + err.Error())
-			//_, _ = client.Write([]byte("set backend redis instance failed, " + err.Error()))
-		} else {
-			logger.Info("set backend redis instance " + result + " " + s.cmd + " " + s.k + " " + s.v)
-			//_, _ = client.Write([]byte("set backend redis instance " + result + " " + s.cmd + " " + s.k + " " + s.v))
-		}
-		wgRedisProxy.Done()
-
-	}
-	wgRedisProxy.Wait()
 }
