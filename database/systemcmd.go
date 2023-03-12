@@ -5,6 +5,10 @@ import (
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/redis/protocol"
+	"os"
+	"runtime"
+	"strings"
+	"time"
 )
 
 // Ping the server
@@ -18,25 +22,21 @@ func Ping(c redis.Connection, args [][]byte) redis.Reply {
 	}
 }
 
-// GenGodisInfoString Create the string returned by the INFO command
-func GenGodisInfoString(c redis.Connection, args [][]byte) redis.Reply {
-	key := string(args[0])
-	value := string(args[1])
-	if key != "info" {
-		return &protocol.SyntaxErrReply{}
+// Info Create the string returned by the INFO command
+func Info(c redis.Connection, args [][]byte) redis.Reply {
+	if len(args) == 1 {
+		return protocol.MakeBulkReply(GenGodisInfoString())
+	} else if len(args) == 2 {
+		section := strings.ToLower(string(args[1]))
+		switch section {
+		case "server":
+			reply := GenGodisInfoString()
+			return protocol.MakeBulkReply(reply)
+		}
+	} else {
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'info' command")
 	}
-	if value == "" {
-		value = "all"
-	}
-	switch value {
-	case "all":
-		allInfo := serverInfo()
-		return protocol.MakeBulkReply(allInfo)
-	case "server":
 
-		reply := serverInfo()
-		return protocol.MakeBulkReply(reply)
-	}
 	return &protocol.NullBulkReply{}
 }
 
@@ -63,41 +63,58 @@ func isAuthenticated(c redis.Connection) bool {
 	return c.GetPassword() == config.Properties.RequirePass
 }
 
-func serverInfo() []byte {
+func GenGodisInfoString() []byte {
+	StartUpTimeFromNow := getGodisRuninngTime()
 	s := fmt.Sprintf("# Server\r\n"+
-		"redis_version:%s\r\n"+
-		"redis_git_sha1:%s\r\n"+
-		"redis_git_dirty:%d\r\n"+
-		"redis_build_id:%s\r\n"+
-		"redis_mode:%s\r\n"+
+		"godis_version:%s\r\n"+
+		//"godis_git_sha1:%s\r\n"+
+		//"godis_git_dirty:%d\r\n"+
+		//"godis_build_id:%s\r\n"+
+		"godis_mode:%s\r\n"+
 		"os:%s %s %s\r\n"+
 		"arch_bits:%d\r\n"+
-		"multiplexing_api:%s\r\n"+
-		"gcc_version:%d.%d.%d\r\n"+
+		//"multiplexing_api:%s\r\n"+
+		"go_version:%s\r\n"+
 		"process_id:%d\r\n"+
 		"run_id:%s\r\n"+
 		"tcp_port:%d\r\n"+
 		"uptime_in_seconds:%d\r\n"+
 		"uptime_in_days:%d\r\n"+
-		"hz:%d\r\n"+
-		"lru_clock:%d\r\n"+
+		//"hz:%d\r\n"+
+		//"lru_clock:%d\r\n"+
 		"config_file:%s\r\n",
-		"1.0.1",
-		"asdfsadf",
-		1212,
-		"asdfbabab",
-		"cluster",
-		"s", "b", "c",
-		64,
-		"1.1",
-		1, 1, 1,
-		1212,
-		"asdf",
-		6399,
-		3333,
-		60,
-		1111,
-		212121,
-		"/u01/aoo/")
+		godisVersion,
+		//TODO,
+		//TODO,
+		//TODO,
+		getGodisRunningMode(),
+		runtime.GOOS, runtime.GOARCH, "22",
+		32<<(^uint(0)>>63),
+		//TODO,
+		runtime.Version(),
+		os.Getpid(),
+		config.Properties.RunID,
+		config.Properties.Port,
+		*StartUpTimeFromNow,
+		*StartUpTimeFromNow/time.Duration(3600*24),
+		//TODO,
+		//TODO,
+		config.Properties.CfPath)
+	//config.Properties.CfPath)
 	return []byte(s)
+}
+
+// getGodisRunningMode return godis running mode
+func getGodisRunningMode() string {
+	if config.Properties.ClusterEnabled == "yes" {
+		return config.ClusterMode
+	} else {
+		return config.StandaloneMode
+	}
+}
+
+// getGodisRuninngTime return the running time of godis
+func getGodisRuninngTime() *time.Duration {
+	t := time.Since(config.EachTimeServerInfo.StartUpTime) / time.Second
+	return &t
 }
