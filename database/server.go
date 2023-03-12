@@ -17,8 +17,11 @@ import (
 	"time"
 )
 
+var godisVersion = "1.2.8"
+
 // Server is a redis-server with full capabilities including multiple database, rdb loader, replication
 type Server struct {
+	//version string
 	dbSet []*atomic.Value // *DB
 
 	// handle publish/subscribe
@@ -88,7 +91,7 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 	}
 	// info
 	if cmdName == "info" {
-		return GenGodisInfoString(c, cmdLine)
+		return Info(c, cmdLine)
 	}
 	// authenticate
 	if cmdName == "auth" {
@@ -182,7 +185,11 @@ func (server *Server) AfterClientClose(c redis.Connection) {
 // Close graceful shutdown database
 func (server *Server) Close() {
 	// stop slaveStatus first
-	server.slaveStatus.close()
+	err := server.slaveStatus.close()
+	if err != nil {
+		logger.Error(err)
+		return
+	}
 	if server.persister != nil {
 		server.persister.Close()
 	}
