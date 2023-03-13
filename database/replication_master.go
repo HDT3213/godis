@@ -373,6 +373,7 @@ const maxBacklogSize = 10 * 1024 * 1024 // 10MB
 func (server *Server) masterCron() {
 	server.masterStatus.mu.Lock()
 	if len(server.masterStatus.slaveMap) == 0 { // no slaves, do nothing
+		server.masterStatus.mu.Unlock()
 		return
 	}
 	if server.masterStatus.bgSaveState == bgSaveFinish {
