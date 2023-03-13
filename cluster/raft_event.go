@@ -183,7 +183,7 @@ func execRaftJoin(cluster *Cluster, c redis.Connection, args [][]byte) redis.Rep
 	if cluster.topology.nodeIndexMap[nodeID] == nil {
 		cluster.topology.nodeIndexMap[nodeID] = &nodeIndex{}
 	}
-	cluster.topology.nodeIndexMap[nodeID].recvedIndex = cluster.topology.commitIndex
+	cluster.topology.nodeIndexMap[nodeID].proposalIndex = cluster.topology.commitIndex
 	topology := marshalTopology(cluster.topology.nodes)
 	resp := make([][]byte, 0, len(topology)+1)
 	resp = append(resp,

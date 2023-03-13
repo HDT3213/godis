@@ -20,10 +20,6 @@ func execGCluster(cluster *Cluster, c redis.Connection, args [][]byte) redis.Rep
 	}
 	subCmd := strings.ToLower(string(args[1]))
 	switch subCmd {
-	case "join":
-		// Command line: gcluster join
-		// new node request current node to join cluster
-		return execGClusterJoin(cluster, c, args[2:])
 	case "set-slot":
 		// Command line: gcluster set-slot <slotID> <targetNodeID>
 		// Other node request current node to migrate a slot to it.
@@ -41,30 +37,6 @@ func execGCluster(cluster *Cluster, c redis.Connection, args [][]byte) redis.Rep
 		return execGClusterMigrateDone(cluster, c, args[2:])
 	}
 	return protocol.MakeErrReply(" ERR unknown gcluster sub command '" + subCmd + "'")
-}
-
-// execGClusterJoin invoked when other node send `gcluster join`
-// args address
-func execGClusterJoin(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
-	if len(args) != 1 {
-		return protocol.MakeArgNumErrReply("gcluster join")
-	}
-	addr := string(args[0])
-	newNode, err := cluster.topology.NewNode(addr)
-	if err != nil {
-		return protocol.MakeErrReply(err.Error())
-	}
-
-	topology := marshalTopology(cluster.topology.nodes)
-	resp := make([][]byte, 0, len(topology)+1)
-	resp = append(resp,
-		[]byte(newNode.ID),
-		[]byte(cluster.topology.leaderId),
-		[]byte(strconv.Itoa(cluster.topology.term)),
-		[]byte(strconv.Itoa(cluster.topology.commitIndex)),
-	)
-	resp = append(resp, topology...)
-	return protocol.MakeMultiBulkReply(resp)
 }
 
 // execGClusterSetSlot set a current node hosted slot as migrating

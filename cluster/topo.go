@@ -14,57 +14,7 @@ import (
 	"net"
 	"sort"
 	"strconv"
-	"time"
 )
-
-// Node represents a node and its slots, used in cluster internal messages
-type Node struct {
-	ID        string
-	Addr      string
-	Slots     []*Slot // ascending order by slot id
-	Flags     uint32
-	lastHeard time.Time
-}
-
-const (
-	nodeFlagLeader uint32 = 1 << iota
-	nodeFlagCandidate
-	nodeFlagLearner
-)
-
-const (
-	follower raftState = iota
-	leader
-	candidate
-	learner
-)
-
-func (node *Node) setState(state raftState) {
-	node.Flags &= ^uint32(0x7) // clean
-	switch state {
-	case follower:
-		break
-	case leader:
-		node.Flags |= nodeFlagLeader
-	case candidate:
-		node.Flags |= nodeFlagCandidate
-	case learner:
-		node.Flags |= nodeFlagLearner
-	}
-}
-
-func (node *Node) getState() raftState {
-	if node.Flags&nodeFlagLeader > 0 {
-		return leader
-	}
-	if node.Flags&nodeFlagCandidate > 0 {
-		return candidate
-	}
-	if node.Flags&nodeFlagLearner > 0 {
-		return learner
-	}
-	return follower
-}
 
 func (cluster *Cluster) startAsSeed() error {
 	selfNodeId, err := cluster.topology.StartAsSeed(config.Properties.AnnounceAddress())

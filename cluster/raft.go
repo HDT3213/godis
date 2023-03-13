@@ -42,6 +42,55 @@ func getSlot(key string) uint32 {
 	return crc32.ChecksumIEEE([]byte(key)) % uint32(slotCount)
 }
 
+// Node represents a node and its slots, used in cluster internal messages
+type Node struct {
+	ID        string
+	Addr      string
+	Slots     []*Slot // ascending order by slot id
+	Flags     uint32
+	lastHeard time.Time
+}
+
+const (
+	nodeFlagLeader uint32 = 1 << iota
+	nodeFlagCandidate
+	nodeFlagLearner
+)
+
+const (
+	follower raftState = iota
+	leader
+	candidate
+	learner
+)
+
+func (node *Node) setState(state raftState) {
+	node.Flags &= ^uint32(0x7) // clean
+	switch state {
+	case follower:
+		break
+	case leader:
+		node.Flags |= nodeFlagLeader
+	case candidate:
+		node.Flags |= nodeFlagCandidate
+	case learner:
+		node.Flags |= nodeFlagLearner
+	}
+}
+
+func (node *Node) getState() raftState {
+	if node.Flags&nodeFlagLeader > 0 {
+		return leader
+	}
+	if node.Flags&nodeFlagCandidate > 0 {
+		return candidate
+	}
+	if node.Flags&nodeFlagLearner > 0 {
+		return learner
+	}
+	return follower
+}
+
 type Raft struct {
 	cluster       *Cluster
 	mu            sync.RWMutex
@@ -72,7 +121,7 @@ type heartbeat struct {
 }
 
 type nodeIndex struct {
-	recvedIndex int
+	proposalIndex int
 }
 
 // PickNode returns the node id hosting the given slot.
@@ -167,7 +216,7 @@ func (raft *Raft) GetSelfNodeID() string {
 func (raft *Raft) start(state raftState) {
 	raft.state = state
 	raft.heartbeatChan = make(chan *heartbeat, 1)
-	raft.nodeIndexMap = make(map[string]*nodeIndex)
+	//raft.nodeIndexMap = make(map[string]*nodeIndex)
 	go func() {
 		for {
 			switch raft.state {
@@ -300,15 +349,39 @@ func (raft *Raft) candidateJob() {
 	raft.term = currentTerm // failed to be elected neither found newer term
 }
 
+// askNodeIndex ask offset of each node and init nodeIndexMap as new leader
+// invoker provide lock
+func (raft *Raft) askNodeIndex() map[string]*nodeIndex {
+	nodeIndexMap := make(map[string]*nodeIndex)
+	// todo: copy nodes to avoid concurrent read-write
+	for _, node := range raft.nodes {
+		c := connection.NewFakeConn()
+		reply := raft.cluster.relay2(node.Addr, c, utils.ToCmdLine("raft", "get-offset"))
+		if protocol.IsErrorReply(reply) {
+			// todo: handle follower offline
+			continue
+		}
+		proposalOffset := int(reply.(*protocol.IntReply).Code)
+		nodeIndexMap[node.ID] = &nodeIndex{
+			proposalIndex: proposalOffset,
+		}
+	}
+	return nodeIndexMap
+}
+
 func (raft *Raft) leaderJob() {
 	raft.mu.Lock()
-	if raft.nodeIndexMap[raft.selfNodeID] == nil {
-		raft.nodeIndexMap[raft.selfNodeID] = &nodeIndex{}
+	if raft.nodeIndexMap == nil {
+		// todo: reduce lock time
+		raft.nodeIndexMap = raft.askNodeIndex()
 	}
-	raft.nodeIndexMap[raft.selfNodeID].recvedIndex = raft.proposalIndex
+	//if raft.nodeIndexMap[raft.selfNodeID] == nil {
+	//	raft.nodeIndexMap[raft.selfNodeID] = &nodeIndex{}
+	//}
+	raft.nodeIndexMap[raft.selfNodeID].proposalIndex = raft.proposalIndex
 	var recvedIndices []int
 	for _, status := range raft.nodeIndexMap {
-		recvedIndices = append(recvedIndices, status.recvedIndex)
+		recvedIndices = append(recvedIndices, status.proposalIndex)
 	}
 	sort.Slice(recvedIndices, func(i, j int) bool {
 		return recvedIndices[i] > recvedIndices[j]
@@ -353,7 +426,7 @@ func (raft *Raft) leaderJob() {
 			}
 			nodeStatus := raft.nodeIndexMap[node.ID]
 			raft.mu.Unlock()
-			prevLogIndex := nodeStatus.recvedIndex
+			prevLogIndex := nodeStatus.proposalIndex
 			// fixme: 新 leader 当选后可能缺少旧日志
 			if proposalIndex > prevLogIndex {
 				prevLogTerm := raft.getLogEntry(prevLogIndex).Term
@@ -380,7 +453,7 @@ func (raft *Raft) leaderJob() {
 					return
 				}
 				raft.mu.Lock()
-				raft.nodeIndexMap[node.ID].recvedIndex = recvedIndex
+				raft.nodeIndexMap[node.ID].proposalIndex = recvedIndex
 				raft.mu.Unlock()
 			}
 		}()
@@ -417,6 +490,9 @@ func execRaft(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	case "get-leader":
 		// execRaftGetLeader returns leader id and address
 		return execRaftGetLeader(cluster, c, args[2:])
+	case "get-offset":
+		// execRaftGetOffset returns log offset of current leader
+		return execRaftGetOffset(cluster, c, args[2:])
 	}
 	return protocol.MakeErrReply(" ERR unknown raft sub command '" + subCmd + "'")
 }
@@ -590,4 +666,13 @@ func execRaftGetLeader(cluster *Cluster, c redis.Connection, args [][]byte) redi
 		leaderNode.ID,
 		leaderNode.Addr,
 	))
+}
+
+// execRaftGetOffset returns log offset of current leader
+func execRaftGetOffset(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
+	cluster.topology.mu.RLock()
+	proposalIndex := cluster.topology.proposalIndex
+	//commitIndex := cluster.topology.commitIndex
+	cluster.topology.mu.RUnlock()
+	return protocol.MakeIntReply(int64(proposalIndex))
 }
