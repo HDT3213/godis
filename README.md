@@ -84,7 +84,7 @@ See: [commands.md](https://github.com/HDT3213/godis/blob/master/commands.md)
 
 Environment:
 
-Go version：1.16
+Go version：1.17
 
 System: macOS Catalina 10.15.7
 
