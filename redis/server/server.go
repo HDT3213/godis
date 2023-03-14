@@ -94,6 +94,7 @@ func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 			continue
 		}
 		result := h.db.Exec(client, r.Args)
+
 		if result != nil {
 			_, _ = client.Write(result.ToBytes())
 		} else {

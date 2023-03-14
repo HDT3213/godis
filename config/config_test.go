@@ -9,7 +9,8 @@ func TestParse(t *testing.T) {
 	src := "bind 0.0.0.0\n" +
 		"port 6399\n" +
 		"appendonly yes\n" +
-		"peers a,b"
+		"peers a,b\n" +
+		"cluster-enabled yes\n"
 	p := parse(strings.NewReader(src))
 	if p == nil {
 		t.Error("cannot get result")
@@ -26,5 +27,8 @@ func TestParse(t *testing.T) {
 	}
 	if len(p.Peers) != 2 || p.Peers[0] != "a" || p.Peers[1] != "b" {
 		t.Error("list parse failed")
+	}
+	if p.ClusterEnabled != "yes" {
+		t.Error("cluster enable failed")
 	}
 }

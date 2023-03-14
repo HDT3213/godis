@@ -109,6 +109,7 @@ func (db *DB) Exec(c redis.Connection, cmdLine [][]byte) redis.Reply {
 
 func (db *DB) execNormalCommand(cmdLine [][]byte) redis.Reply {
 	cmdName := strings.ToLower(string(cmdLine[0]))
+	// 校验合法命令字
 	cmd, ok := cmdTable[cmdName]
 	if !ok {
 		return protocol.MakeErrReply("ERR unknown command '" + cmdName + "'")
