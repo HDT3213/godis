@@ -73,7 +73,7 @@ redis-cli -p 6399
 
 环境:
 
-Go version：1.16
+Go version：1.17
 
 System: macOS Catalina 10.15.7
 

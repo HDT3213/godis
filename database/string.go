@@ -1,6 +1,11 @@
 package database
 
 import (
+	"math/bits"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/hdt3213/godis/aof"
 	"github.com/hdt3213/godis/datastruct/bitmap"
 	"github.com/hdt3213/godis/interface/database"
@@ -8,10 +13,6 @@ import (
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
 	"github.com/shopspring/decimal"
-	"math/bits"
-	"strconv"
-	"strings"
-	"time"
 )
 
 func (db *DB) getAsString(key string) ([]byte, protocol.ErrorReply) {
@@ -676,6 +677,7 @@ func execSetBit(db *DB, args [][]byte) redis.Reply {
 	former := bm.GetBit(offset)
 	bm.SetBit(offset, v)
 	db.PutEntity(key, &database.DataEntity{Data: bm.ToBytes()})
+	db.addAof(utils.ToCmdLine3("setBit", args...))
 	return protocol.MakeIntReply(int64(former))
 }
 
