@@ -8,6 +8,7 @@ type CmdLine = [][]byte
 func makeRouter() map[string]CmdFunc {
 	routerMap := make(map[string]CmdFunc)
 	routerMap["ping"] = ping
+	routerMap["info"] = info
 
 	routerMap["prepare"] = execPrepare
 	routerMap["commit"] = execCommit
