@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/lib/logger"
+	"github.com/hdt3213/godis/lib/utils"
 	RedisServer "github.com/hdt3213/godis/redis/server"
 	"github.com/hdt3213/godis/tcp"
 	"os"
@@ -23,6 +24,7 @@ var defaultProperties = &config.ServerProperties{
 	AppendOnly:     false,
 	AppendFilename: "",
 	MaxClients:     1000,
+	RunID:          utils.RandString(40),
 }
 
 func fileExists(filename string) bool {
