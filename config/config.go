@@ -2,17 +2,26 @@ package config
 
 import (
 	"bufio"
+	"github.com/hdt3213/godis/lib/utils"
 	"io"
 	"os"
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/hdt3213/godis/lib/logger"
 )
 
+var (
+	ClusterMode    = "cluster"
+	StandaloneMode = "standalone"
+)
+
 // ServerProperties defines global config properties
 type ServerProperties struct {
+	// for Public configuration
+	RunID             string `cfg:"runid"` // runID always different at every exec.
 	Bind              string `cfg:"bind"`
 	Port              int    `cfg:"port"`
 	AppendOnly        bool   `cfg:"appendonly"`
@@ -27,19 +36,36 @@ type ServerProperties struct {
 	SlaveAnnounceIP   string `cfg:"slave-announce-ip"`
 	ReplTimeout       int    `cfg:"repl-timeout"`
 
-	Peers []string `cfg:"peers"`
-	Self  string   `cfg:"self"`
+	// for cluster mode configuration
+	ClusterEnabled string   `cfg:"cluster-enabled"` // Not used at present.
+	Peers          []string `cfg:"peers"`
+	Self           string   `cfg:"self"`
+
+	// config file path
+	CfPath string `cfg:"cf,omitempty"`
+}
+
+type ServerInfo struct {
+	StartUpTime time.Time
 }
 
 // Properties holds global config properties
 var Properties *ServerProperties
 
+var EachTimeServerInfo *ServerInfo
+
 func init() {
+	// A few stats we don't want to reset: server startup time, and peak mem.
+	EachTimeServerInfo = &ServerInfo{
+		StartUpTime: time.Now(),
+	}
+
 	// default config
 	Properties = &ServerProperties{
 		Bind:       "127.0.0.1",
 		Port:       6379,
 		AppendOnly: false,
+		RunID:      utils.RandString(40),
 	}
 }
 
@@ -109,4 +135,5 @@ func SetupConfig(configFilename string) {
 	}
 	defer file.Close()
 	Properties = parse(file)
+	Properties.RunID = utils.RandString(40)
 }
