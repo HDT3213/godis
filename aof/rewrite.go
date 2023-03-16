@@ -140,7 +140,7 @@ func (persister *Persister) FinishRewrite(ctx *RewriteCtx) {
 		return
 	}
 	tmpFileName := tmpFile.Name()
-	tmpFile.Close()
+	_ = tmpFile.Close()
 	// replace current aof file by tmp file
 	_ = persister.aofFile.Close()
 	_ = os.Rename(tmpFileName, persister.aofFilename)
