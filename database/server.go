@@ -199,7 +199,7 @@ func execSelect(c redis.Connection, mdb *Server, args [][]byte) redis.Reply {
 
 func (server *Server) execFlushDB(dbIndex int) redis.Reply {
 	if server.persister != nil {
-		server.persister.SaveCmdLine(0, utils.ToCmdLine("FlushDB"))
+		server.persister.SaveCmdLine(dbIndex, utils.ToCmdLine("FlushDB"))
 	}
 	return server.flushDB(dbIndex)
 }
