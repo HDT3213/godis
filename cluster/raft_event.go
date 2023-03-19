@@ -8,7 +8,6 @@ import (
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/protocol"
-	"strconv"
 	"sync"
 )
 
@@ -181,17 +180,12 @@ func execRaftJoin(cluster *Cluster, c redis.Connection, args [][]byte) redis.Rep
 	cluster.topology.mu.Lock()
 	defer cluster.topology.mu.Unlock()
 	if cluster.topology.nodeIndexMap[nodeID] == nil {
-		cluster.topology.nodeIndexMap[nodeID] = &nodeIndex{}
+		cluster.topology.nodeIndexMap[nodeID] = &nodeStatus{}
 	}
-	cluster.topology.nodeIndexMap[nodeID].proposalIndex = cluster.topology.commitIndex
-	topology := marshalTopology(cluster.topology.nodes)
-	resp := make([][]byte, 0, len(topology)+1)
-	resp = append(resp,
-		[]byte(nodeID),
-		[]byte(cluster.topology.leaderId),
-		[]byte(strconv.Itoa(cluster.topology.term)),
-		[]byte(strconv.Itoa(cluster.topology.commitIndex)),
-	)
-	resp = append(resp, topology...)
-	return protocol.MakeMultiBulkReply(resp)
+	cluster.topology.nodeIndexMap[nodeID].receivedIndex = cluster.topology.committedIndex
+	cluster.topology.mu.RLock()
+	snapshot := cluster.topology.makeSnapshot()
+	cluster.topology.mu.RUnlock()
+	snapshot[0] = []byte(nodeID)
+	return protocol.MakeMultiBulkReply(snapshot)
 }

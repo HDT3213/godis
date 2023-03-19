@@ -3,6 +3,7 @@ package cluster
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/hdt3213/godis/redis/protocol"
 	"sort"
 	"strconv"
 	"strings"
@@ -88,7 +89,7 @@ type nodePayload struct {
 	Flags    uint32   `json:"flags"`
 }
 
-func marshalTopology(nodes map[string]*Node) [][]byte {
+func marshalNodes(nodes map[string]*Node) [][]byte {
 	var args [][]byte
 	for _, node := range nodes {
 		slotLines := marshalSlotIds(node.Slots)
@@ -104,7 +105,7 @@ func marshalTopology(nodes map[string]*Node) [][]byte {
 	return args
 }
 
-func unmarshalTopology(args [][]byte) (map[string]*Node, error) {
+func unmarshalNodes(args [][]byte) (map[string]*Node, error) {
 	nodeMap := make(map[string]*Node)
 	for i, bin := range args {
 		payload := &nodePayload{}
@@ -131,4 +132,53 @@ func unmarshalTopology(args [][]byte) (map[string]*Node, error) {
 		nodeMap[node.ID] = node
 	}
 	return nodeMap, nil
+}
+
+// genSnapshot
+// invoker provide lock
+func (raft *Raft) makeSnapshot() [][]byte {
+	topology := marshalNodes(raft.nodes)
+	snapshot := [][]byte{
+		[]byte(raft.selfNodeID),
+		[]byte(raft.leaderId),
+		[]byte(strconv.Itoa(raft.term)),
+		[]byte(strconv.Itoa(raft.committedIndex)),
+	}
+	snapshot = append(snapshot, topology...)
+	return snapshot
+}
+
+func (raft *Raft) loadSnapshot(snapshot [][]byte) protocol.ErrorReply {
+	// make sure raft.slots and node.Slots is the same object
+	selfNodeId := string(snapshot[0])
+	leaderId := string(snapshot[1])
+	term, err := strconv.Atoi(string(snapshot[2]))
+	if err != nil {
+		return protocol.MakeErrReply("illegal term: " + string(snapshot[2]))
+	}
+	commitIndex, err := strconv.Atoi(string(snapshot[3]))
+	if err != nil {
+		return protocol.MakeErrReply("illegal commit index: " + string(snapshot[3]))
+	}
+	nodes, err := unmarshalNodes(snapshot[4:])
+	if err != nil {
+		return protocol.MakeErrReply(err.Error())
+	}
+	raft.selfNodeID = selfNodeId
+	raft.leaderId = leaderId
+	raft.term = term
+	raft.committedIndex = commitIndex
+	raft.proposalIndex = commitIndex
+	raft.initLog(commitIndex, nil)
+	raft.slots = make([]*Slot, slotCount)
+	for _, node := range nodes {
+		for _, slot := range node.Slots {
+			raft.slots[int(slot.ID)] = slot
+		}
+		if node.getState() == leader {
+			raft.leaderId = node.ID
+		}
+	}
+	raft.nodes = nodes
+	return nil
 }

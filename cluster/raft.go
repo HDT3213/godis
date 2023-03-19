@@ -92,24 +92,24 @@ func (node *Node) getState() raftState {
 }
 
 type Raft struct {
-	cluster       *Cluster
-	mu            sync.RWMutex
-	selfNodeID    string
-	slots         []*Slot
-	leaderId      string
-	nodes         map[string]*Node
-	log           []*logEntry
-	beginIndex    int
-	state         raftState
-	term          int
-	votedFor      string
-	voteCount     int
-	commitIndex   int // index of the last committed logEntry
-	proposalIndex int // index of the last proposed logEntry
-	heartbeatChan chan *heartbeat
+	cluster        *Cluster
+	mu             sync.RWMutex
+	selfNodeID     string
+	slots          []*Slot
+	leaderId       string
+	nodes          map[string]*Node
+	log            []*logEntry
+	beginIndex     int
+	state          raftState
+	term           int
+	votedFor       string
+	voteCount      int
+	committedIndex int // index of the last committed logEntry
+	proposalIndex  int // index of the last proposed logEntry
+	heartbeatChan  chan *heartbeat
 
 	// for leader
-	nodeIndexMap map[string]*nodeIndex
+	nodeIndexMap map[string]*nodeStatus
 	nodeLock     *lock.Locks
 }
 
@@ -120,8 +120,8 @@ type heartbeat struct {
 	commitTo int
 }
 
-type nodeIndex struct {
-	proposalIndex int
+type nodeStatus struct {
+	receivedIndex int // received log index, not committed index
 }
 
 // PickNode returns the node id hosting the given slot.
@@ -142,6 +142,14 @@ func (raft *Raft) getLogEntries(beg, end int) []*logEntry {
 	i := beg - raft.beginIndex
 	j := end - raft.beginIndex
 	return raft.log[i:j]
+}
+
+func (raft *Raft) getLogEntriesFrom(beg int) []*logEntry {
+	if beg < raft.beginIndex {
+		return nil
+	}
+	i := beg - raft.beginIndex
+	return raft.log[i:]
 }
 
 func (raft *Raft) getLogEntry(idx int) *logEntry {
@@ -181,29 +189,6 @@ func (raft *Raft) StartAsSeed(addr string) (string, error) {
 	return selfNodeID, nil
 }
 
-// Load loads topology, used in join cluster
-func (raft *Raft) Load(selfNodeId string, leaderId string, term int, commitIndex int, nodes map[string]*Node) {
-	// make sure raft.slots and node.Slots is the same object
-	raft.mu.Lock()
-	defer raft.mu.Unlock()
-	raft.selfNodeID = selfNodeId
-	raft.leaderId = leaderId
-	raft.term = term
-	raft.commitIndex = commitIndex
-	raft.proposalIndex = commitIndex
-	raft.initLog(commitIndex, nil)
-	raft.slots = make([]*Slot, slotCount)
-	for _, node := range nodes {
-		for _, slot := range node.Slots {
-			raft.slots[int(slot.ID)] = slot
-		}
-		if node.getState() == leader {
-			raft.leaderId = node.ID
-		}
-	}
-	raft.nodes = nodes
-}
-
 func (raft *Raft) GetSlots() []*Slot {
 	return raft.slots
 }
@@ -216,7 +201,7 @@ func (raft *Raft) GetSelfNodeID() string {
 func (raft *Raft) start(state raftState) {
 	raft.state = state
 	raft.heartbeatChan = make(chan *heartbeat, 1)
-	//raft.nodeIndexMap = make(map[string]*nodeIndex)
+	//raft.nodeIndexMap = make(map[string]*nodeStatus)
 	go func() {
 		for {
 			switch raft.state {
@@ -242,8 +227,8 @@ func (raft *Raft) followerJob() {
 		// todo: drop duplicate entry
 		raft.log = append(raft.log, hb.entries...)
 		raft.proposalIndex += len(hb.entries)
-		raft.applyLogEntries(raft.getLogEntries(raft.commitIndex+1, hb.commitTo+1))
-		raft.commitIndex = hb.commitTo
+		raft.applyLogEntries(raft.getLogEntries(raft.committedIndex+1, hb.commitTo+1))
+		raft.committedIndex = hb.commitTo
 		raft.mu.Unlock()
 	case <-time.After(heartbeatTimeout):
 		// change to candidate
@@ -351,8 +336,8 @@ func (raft *Raft) candidateJob() {
 
 // askNodeIndex ask offset of each node and init nodeIndexMap as new leader
 // invoker provide lock
-func (raft *Raft) askNodeIndex() map[string]*nodeIndex {
-	nodeIndexMap := make(map[string]*nodeIndex)
+func (raft *Raft) askNodeIndex() map[string]*nodeStatus {
+	nodeIndexMap := make(map[string]*nodeStatus)
 	// todo: copy nodes to avoid concurrent read-write
 	for _, node := range raft.nodes {
 		c := connection.NewFakeConn()
@@ -362,8 +347,8 @@ func (raft *Raft) askNodeIndex() map[string]*nodeIndex {
 			continue
 		}
 		proposalOffset := int(reply.(*protocol.IntReply).Code)
-		nodeIndexMap[node.ID] = &nodeIndex{
-			proposalIndex: proposalOffset,
+		nodeIndexMap[node.ID] = &nodeStatus{
+			receivedIndex: proposalOffset,
 		}
 	}
 	return nodeIndexMap
@@ -375,13 +360,10 @@ func (raft *Raft) leaderJob() {
 		// todo: reduce lock time
 		raft.nodeIndexMap = raft.askNodeIndex()
 	}
-	//if raft.nodeIndexMap[raft.selfNodeID] == nil {
-	//	raft.nodeIndexMap[raft.selfNodeID] = &nodeIndex{}
-	//}
-	raft.nodeIndexMap[raft.selfNodeID].proposalIndex = raft.proposalIndex
+	raft.nodeIndexMap[raft.selfNodeID].receivedIndex = raft.proposalIndex
 	var recvedIndices []int
 	for _, status := range raft.nodeIndexMap {
-		recvedIndices = append(recvedIndices, status.proposalIndex)
+		recvedIndices = append(recvedIndices, status.receivedIndex)
 	}
 	sort.Slice(recvedIndices, func(i, j int) bool {
 		return recvedIndices[i] > recvedIndices[j]
@@ -391,51 +373,59 @@ func (raft *Raft) leaderJob() {
 	if len(recvedIndices) > 0 {
 		commitTo = recvedIndices[len(recvedIndices)/2]
 	}
-	// new node (received index is 0) may cause commitTo less than commitTo
-	if commitTo > raft.commitIndex {
-		toCommit := raft.getLogEntries(raft.commitIndex, commitTo)
+	// todo: 排除掉未完成同步的新节点?
+	// new node (received index is 0) may cause commitTo less than raft.committedIndex
+	if commitTo > raft.committedIndex {
+		toCommit := raft.getLogEntries(raft.committedIndex, commitTo)
 		raft.applyLogEntries(toCommit)
-		raft.commitIndex = commitTo
+		raft.committedIndex = commitTo
 		for _, entry := range toCommit {
 			if entry.wg != nil {
 				entry.wg.Done()
 			}
 		}
 	}
-	raft.mu.Unlock()
-	// save proposalIndex in local variable in case changed by other goroutines
+	// save receivedIndex in local variable in case changed by other goroutines
 	proposalIndex := raft.proposalIndex
+	snapshot := raft.makeSnapshot() // the snapshot is consistent with the committed log
 	for _, node := range raft.nodes {
 		if node.ID == raft.selfNodeID {
 			continue
 		}
 		node := node
+		status := raft.nodeIndexMap[node.ID]
 		go func() {
 			raft.nodeLock.Lock(node.ID)
 			defer raft.nodeLock.UnLock(node.ID)
-			cmdLine := utils.ToCmdLine(
-				"raft",
-				"heartbeat",
-				raft.selfNodeID,
-				strconv.Itoa(raft.term),
-				strconv.Itoa(commitTo),
-			)
-			raft.mu.Lock()
-			if raft.nodeIndexMap[node.ID] == nil {
-				raft.nodeIndexMap[node.ID] = &nodeIndex{}
-			}
-			nodeStatus := raft.nodeIndexMap[node.ID]
-			raft.mu.Unlock()
-			prevLogIndex := nodeStatus.proposalIndex
-			// fixme: 新 leader 当选后可能缺少旧日志
-			if proposalIndex > prevLogIndex {
-				prevLogTerm := raft.getLogEntry(prevLogIndex).Term
-				cmdLine = append(cmdLine,
-					[]byte(strconv.Itoa(prevLogTerm)),
-					[]byte(strconv.Itoa(prevLogIndex)),
+			var cmdLine [][]byte
+			if status.receivedIndex < raft.beginIndex {
+				// some entries are missed due to change of leader, send full snapshot
+				cmdLine = utils.ToCmdLine(
+					"raft",
+					"load-snapshot",
+					raft.selfNodeID,
 				)
-				for _, entry := range raft.log[prevLogIndex:] {
-					cmdLine = append(cmdLine, entry.marshal())
+				cmdLine = append(cmdLine, snapshot...)
+			} else {
+				// leader has all needed entries, send normal heartbeat
+				cmdLine = utils.ToCmdLine(
+					"raft",
+					"heartbeat",
+					raft.selfNodeID,
+					strconv.Itoa(raft.term),
+					strconv.Itoa(commitTo),
+				)
+				// append new entries to heartbeat payload
+				if proposalIndex > status.receivedIndex {
+					prevLogTerm := raft.getLogEntry(status.receivedIndex).Term
+					entries := raft.getLogEntriesFrom(status.receivedIndex + 1)
+					cmdLine = append(cmdLine,
+						[]byte(strconv.Itoa(prevLogTerm)),
+						[]byte(strconv.Itoa(status.receivedIndex)),
+					)
+					for _, entry := range entries {
+						cmdLine = append(cmdLine, entry.marshal())
+					}
 				}
 			}
 
@@ -453,11 +443,12 @@ func (raft *Raft) leaderJob() {
 					return
 				}
 				raft.mu.Lock()
-				raft.nodeIndexMap[node.ID].proposalIndex = recvedIndex
+				raft.nodeIndexMap[node.ID].receivedIndex = recvedIndex
 				raft.mu.Unlock()
 			}
 		}()
 	}
+	raft.mu.Unlock()
 	time.Sleep(time.Millisecond * 1000)
 }
 
@@ -479,6 +470,10 @@ func execRaft(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 		// execRaftHeartbeat handles heartbeat from leader as follower or learner
 		// command line: raft heartbeat nodeID term number-of-log-log log log
 		return execRaftHeartbeat(cluster, c, args[2:])
+	case "load-snapshot":
+		// execRaftLoadSnapshot load snapshot from leader
+		// command line: raft load-snapshot leaderId snapshot(see raft.makeSnapshot)
+		return execRaftLoadSnapshot(cluster, c, args[2:])
 	case "propose":
 		// execRaftPropose handles event proposal as leader
 		// command line: raft propose <logEntry>
@@ -647,7 +642,32 @@ func execRaftHeartbeat(cluster *Cluster, c redis.Connection, args [][]byte) redi
 	}
 	return protocol.MakeMultiBulkReply(utils.ToCmdLine(
 		strconv.Itoa(term),
-		strconv.Itoa(cluster.topology.proposalIndex+len(entries)),
+		strconv.Itoa(cluster.topology.proposalIndex+len(entries)), // new received index
+	))
+}
+
+// execRaftLoadSnapshot load snapshot from leader
+// command line: raft load-snapshot leaderId snapshot(see raft.makeSnapshot)
+func execRaftLoadSnapshot(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
+	// leaderId snapshot
+	if len(args) < 5 {
+		return protocol.MakeArgNumErrReply("raft load snapshot")
+	}
+	cluster.topology.mu.Lock()
+	defer cluster.topology.mu.Unlock()
+	if errReply := cluster.topology.loadSnapshot(args[1:]); errReply != nil {
+		return errReply
+	}
+	sender := string(args[0])
+	cluster.topology.heartbeatChan <- &heartbeat{
+		sender:   sender,
+		term:     cluster.topology.term,
+		entries:  nil,
+		commitTo: cluster.topology.committedIndex,
+	}
+	return protocol.MakeMultiBulkReply(utils.ToCmdLine(
+		strconv.Itoa(cluster.topology.term),
+		strconv.Itoa(cluster.topology.proposalIndex),
 	))
 }
 
@@ -672,7 +692,7 @@ func execRaftGetLeader(cluster *Cluster, c redis.Connection, args [][]byte) redi
 func execRaftGetOffset(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	cluster.topology.mu.RLock()
 	proposalIndex := cluster.topology.proposalIndex
-	//commitIndex := cluster.topology.commitIndex
+	//committedIndex := cluster.topology.committedIndex
 	cluster.topology.mu.RUnlock()
 	return protocol.MakeIntReply(int64(proposalIndex))
 }

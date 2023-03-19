@@ -101,20 +101,16 @@ func (cluster *Cluster) Join(seed string) protocol.ErrorReply {
 	if protocol.IsErrorReply(ret) {
 		return ret.(protocol.ErrorReply)
 	}
-	topology, ok := ret.(*protocol.MultiBulkReply)
-	if !ok || len(topology.Args) < 4 {
+	snapshot, ok := ret.(*protocol.MultiBulkReply)
+	if !ok || len(snapshot.Args) < 4 {
 		return protocol.MakeErrReply("ERR gcluster join returns wrong reply")
 	}
-	selfNodeId := string(topology.Args[0])
-	leaderId := string(topology.Args[1])
-	term, _ := strconv.Atoi(string(topology.Args[2]))
-	commitIndex, _ := strconv.Atoi(string(topology.Args[3]))
-	nodes, err := unmarshalTopology(topology.Args[4:])
-	if err != nil {
-		return protocol.MakeErrReply(err.Error())
+	cluster.topology.mu.Lock()
+	defer cluster.topology.mu.Unlock()
+	if errReply := cluster.topology.loadSnapshot(snapshot.Args); errReply != nil {
+		return errReply
 	}
-	cluster.topology.Load(selfNodeId, leaderId, term, commitIndex, nodes)
-	cluster.self = selfNodeId
+	cluster.self = cluster.topology.selfNodeID
 	cluster.topology.start(follower)
 
 	// fixme: 完工前记得重新打开 reBalance
