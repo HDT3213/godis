@@ -17,6 +17,8 @@ import (
 	"time"
 )
 
+var godisVersion = "1.2.8" // do not modify
+
 // Server is a redis-server with full capabilities including multiple database, rdb loader, replication
 type Server struct {
 	dbSet []*atomic.Value // *DB
@@ -89,6 +91,10 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 	// authenticate
 	if cmdName == "auth" {
 		return Auth(c, cmdLine[1:])
+	}
+	// info
+	if cmdName == "info" {
+		return Info(c, cmdLine)
 	}
 	if !isAuthenticated(c) {
 		return protocol.MakeErrReply("NOAUTH Authentication required")
