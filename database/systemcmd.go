@@ -33,11 +33,8 @@ func Info(c redis.Connection, args [][]byte) redis.Reply {
 			reply := GenGodisInfoString()
 			return protocol.MakeBulkReply(reply)
 		}
-	} else {
-		return protocol.MakeErrReply("ERR wrong number of arguments for 'info' command")
 	}
-
-	return &protocol.NullBulkReply{}
+	return protocol.MakeErrReply("ERR wrong number of arguments for 'info' command")
 }
 
 // Auth validate client's password
@@ -64,7 +61,7 @@ func isAuthenticated(c redis.Connection) bool {
 }
 
 func GenGodisInfoString() []byte {
-	startUpTimeFromNow := getGodisRuninngTime()
+	startUpTimeFromNow := getGodisRunningTime()
 	s := fmt.Sprintf("# Server\r\n"+
 		"godis_version:%s\r\n"+
 		//"godis_git_sha1:%s\r\n"+
@@ -112,7 +109,7 @@ func getGodisRunningMode() string {
 	}
 }
 
-// getGodisRuninngTime return the running time of godis
-func getGodisRuninngTime() time.Duration {
+// getGodisRunningTime return the running time of godis
+func getGodisRunningTime() time.Duration {
 	return time.Since(config.EachTimeServerInfo.StartUpTime) / time.Second
 }
