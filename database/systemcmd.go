@@ -32,9 +32,14 @@ func Info(c redis.Connection, args [][]byte) redis.Reply {
 		case "server":
 			reply := GenGodisInfoString()
 			return protocol.MakeBulkReply(reply)
+		default:
+			return protocol.MakeNullBulkReply()
 		}
+	} else {
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'info' command")
 	}
-	return protocol.MakeErrReply("ERR wrong number of arguments for 'info' command")
+
+	return &protocol.NullBulkReply{}
 }
 
 // Auth validate client's password
