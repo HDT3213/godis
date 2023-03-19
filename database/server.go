@@ -136,7 +136,7 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 		if c.InMultiState() {
 			return protocol.MakeErrReply("ERR command 'FlushDB' cannot be used in MULTI")
 		}
-		return server.flushDB(c.GetDBIndex(), false)
+		return server.execFlushDB(c.GetDBIndex())
 	} else if cmdName == "save" {
 		return SaveRDB(server, cmdLine[1:])
 	} else if cmdName == "bgsave" {
@@ -197,15 +197,19 @@ func execSelect(c redis.Connection, mdb *Server, args [][]byte) redis.Reply {
 	return protocol.MakeOkReply()
 }
 
-func (server *Server) flushDB(dbIndex int, isFlushAll bool) redis.Reply {
+func (server *Server) execFlushDB(dbIndex int) redis.Reply {
+	if server.persister != nil {
+		server.persister.SaveCmdLine(0, utils.ToCmdLine("FlushDB"))
+	}
+	return server.flushDB(dbIndex)
+}
+
+func (server *Server) flushDB(dbIndex int) redis.Reply {
 	if dbIndex >= len(server.dbSet) || dbIndex < 0 {
 		return protocol.MakeErrReply("ERR DB index is out of range")
 	}
 	newDB := makeDB()
 	server.loadDB(dbIndex, newDB)
-	if !isFlushAll && server.persister != nil {
-		server.persister.SaveCmdLine(dbIndex, utils.ToCmdLine("FlushDB"))
-	}
 	return &protocol.OkReply{}
 }
 
@@ -222,7 +226,7 @@ func (server *Server) loadDB(dbIndex int, newDB *DB) redis.Reply {
 
 func (server *Server) flushAll() redis.Reply {
 	for i := range server.dbSet {
-		server.flushDB(i, true)
+		server.flushDB(i)
 	}
 	if server.persister != nil {
 		server.persister.SaveCmdLine(0, utils.ToCmdLine("FlushAll"))
