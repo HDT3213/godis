@@ -50,6 +50,11 @@ func (raft *Raft) applyLogEntries(entries []*logEntry) {
 				Addr: entry.Addr,
 			}
 			raft.nodes[node.ID] = node
+			if raft.state == leader {
+				raft.nodeIndexMap[entry.NodeID] = &nodeStatus{
+					receivedIndex: entry.Index, // the new node should not receive its own join event
+				}
+			}
 		case eventSetSlot:
 			slot := raft.slots[int(entry.SlotID)]
 			oldNode := raft.nodes[slot.NodeID]
@@ -102,16 +107,15 @@ func (raft *Raft) propose(e *logEntry) protocol.ErrorReply {
 			return protocol.MakeErrReply("node exists")
 		}
 	}
-	cluster := raft.cluster
 	wg := wgPool.Get().(*sync.WaitGroup)
 	defer wgPool.Put(wg)
 	e.wg = wg
-	cluster.topology.mu.Lock()
-	cluster.topology.proposalIndex++
-	e.Term = cluster.topology.term
-	e.Index = cluster.topology.proposalIndex
-	cluster.topology.log = append(cluster.topology.log, e)
-	cluster.topology.mu.Unlock()
+	raft.mu.Lock()
+	raft.proposedIndex++
+	raft.log = append(raft.log, e)
+	e.Term = raft.term
+	e.Index = raft.proposedIndex
+	raft.mu.Unlock()
 	e.wg.Add(1)
 	e.wg.Wait() // wait for the raft group to reach a consensus
 	return nil
@@ -157,7 +161,7 @@ func (raft *Raft) SetSlot(slotID uint32, newNodeID string) error {
 	return nil
 }
 
-// execRaftJoin handles requests from a new node to join raft group as leader
+// execRaftJoin handles requests from a new node to join raft group, current node should be leader
 // command line: raft join addr
 func execRaftJoin(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	if len(args) != 1 {
@@ -177,12 +181,7 @@ func execRaftJoin(cluster *Cluster, c redis.Connection, args [][]byte) redis.Rep
 	if err := cluster.topology.propose(proposal); err != nil {
 		return err
 	}
-	cluster.topology.mu.Lock()
-	defer cluster.topology.mu.Unlock()
-	if cluster.topology.nodeIndexMap[nodeID] == nil {
-		cluster.topology.nodeIndexMap[nodeID] = &nodeStatus{}
-	}
-	cluster.topology.nodeIndexMap[nodeID].receivedIndex = cluster.topology.committedIndex
+	// todo: 交给 leader job 发送 snapshot
 	cluster.topology.mu.RLock()
 	snapshot := cluster.topology.makeSnapshot()
 	cluster.topology.mu.RUnlock()
