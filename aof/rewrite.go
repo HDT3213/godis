@@ -139,10 +139,11 @@ func (persister *Persister) FinishRewrite(ctx *RewriteCtx) {
 		logger.Error("copy aof filed failed: " + err.Error())
 		return
 	}
-
+	tmpFileName := tmpFile.Name()
+	_ = tmpFile.Close()
 	// replace current aof file by tmp file
 	_ = persister.aofFile.Close()
-	_ = os.Rename(tmpFile.Name(), persister.aofFilename)
+	_ = os.Rename(tmpFileName, persister.aofFilename)
 
 	// reopen aof file for further write
 	aofFile, err := os.OpenFile(persister.aofFilename, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0600)

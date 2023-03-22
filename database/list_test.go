@@ -80,7 +80,7 @@ func TestPush(t *testing.T) {
 		args[i+1] = value
 		expectedValues[size-i-1] = []byte(value)
 	}
-	result = execLPush(testDB, values)
+	// result = execLPush(testDB, values)
 	result = testDB.Exec(nil, utils.ToCmdLine2("lpush", args...))
 	if intResult, _ := result.(*protocol.IntReply); intResult.Code != int64(size) {
 		t.Error(fmt.Sprintf("expected %d, actually %d", size, intResult.Code))
