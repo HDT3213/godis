@@ -238,6 +238,7 @@ func (raft *Raft) followerJob() {
 		time.Sleep(time.Duration(timeoutMs) * time.Millisecond)
 		raft.mu.Lock()
 		if raft.votedFor != "" {
+			raft.mu.Unlock()
 			logger.Info("has voted, give up being a candidate")
 			return
 		}
@@ -300,7 +301,7 @@ func (raft *Raft) candidateJob() {
 				return
 			}
 			if resp.term > raft.term {
-				logger.InfoF(fmt.Sprintf("vote response from %s has newer term %d", nodeID, resp.term))
+				logger.Infof(fmt.Sprintf("vote response from %s has newer term %d", nodeID, resp.term))
 				raft.term = resp.term
 				raft.state = follower
 				raft.votedFor = ""
@@ -309,9 +310,10 @@ func (raft *Raft) candidateJob() {
 			}
 
 			if resp.voteFor == raft.selfNodeID {
-				logger.InfoF(fmt.Sprintf("get vote from %s", nodeID))
+				logger.Infof(fmt.Sprintf("get vote from %s", nodeID))
 				raft.voteCount++
 				if raft.voteCount >= len(raft.nodes)/2+1 {
+					// todo: do not wait other nodes, start leader job
 					logger.Info("elected to be the leader")
 					raft.state = leader
 					raft.slots = make([]*Slot, slotCount)
@@ -344,7 +346,9 @@ func (raft *Raft) askNodeIndex() map[string]*nodeStatus {
 			nodeIndexMap[node.ID] = &nodeStatus{
 				receivedIndex: raft.proposedIndex,
 			}
+			continue
 		}
+		logger.Debugf("ask %s for offset", node.ID)
 		c := connection.NewFakeConn()
 		reply := raft.cluster.relay2(node.Addr, c, utils.ToCmdLine("raft", "get-offset"))
 		if protocol.IsErrorReply(reply) {
@@ -356,6 +360,7 @@ func (raft *Raft) askNodeIndex() map[string]*nodeStatus {
 			receivedIndex: proposalOffset,
 		}
 	}
+	logger.Info("got offsets of nodes")
 	return nodeIndexMap
 }
 
@@ -402,6 +407,11 @@ func (raft *Raft) leaderJob() {
 			raft.nodeLock.Lock(node.ID)
 			defer raft.nodeLock.UnLock(node.ID)
 			var cmdLine [][]byte
+			if status == nil {
+				// todo: handle follower offline
+				logger.Infof("node %s offline", node.ID)
+				return
+			}
 			if status.receivedIndex < raft.beginIndex {
 				// some entries are missed due to change of leader, send full snapshot
 				cmdLine = utils.ToCmdLine(
@@ -612,6 +622,7 @@ func execRaftHeartbeat(cluster *Cluster, c redis.Connection, args [][]byte) redi
 	if err != nil {
 		return protocol.MakeErrReply("illegal term: " + string(args[1]))
 	}
+	logger.Debugf("recv heartbeat from %s term %d self term %d", sender, term, cluster.topology.term)
 	commitTo, err := strconv.Atoi(string(args[2]))
 	if err != nil {
 		return protocol.MakeErrReply("illegal commitTo: " + string(args[1]))

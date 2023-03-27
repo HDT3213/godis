@@ -83,6 +83,13 @@ func Debug(v ...interface{}) {
 	logger.Println(v...)
 }
 
+func Debugf(format string, v ...interface{}) {
+	mu.Lock()
+	defer mu.Unlock()
+	setPrefix(DEBUG)
+	logger.Println(fmt.Sprintf(format, v...))
+}
+
 // Info prints normal log
 func Info(v ...interface{}) {
 	mu.Lock()
@@ -91,8 +98,8 @@ func Info(v ...interface{}) {
 	logger.Println(v...)
 }
 
-// InfoF prints normal log
-func InfoF(format string, v ...interface{}) {
+// Infof prints normal log
+func Infof(format string, v ...interface{}) {
 	mu.Lock()
 	defer mu.Unlock()
 	setPrefix(INFO)
