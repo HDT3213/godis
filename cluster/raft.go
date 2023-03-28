@@ -408,8 +408,7 @@ func (raft *Raft) leaderJob() {
 			defer raft.nodeLock.UnLock(node.ID)
 			var cmdLine [][]byte
 			if status == nil {
-				// todo: handle follower offline
-				logger.Infof("node %s offline", node.ID)
+				logger.Debugf("node %s offline", node.ID)
 				return
 			}
 			if status.receivedIndex < raft.beginIndex {
@@ -622,7 +621,7 @@ func execRaftHeartbeat(cluster *Cluster, c redis.Connection, args [][]byte) redi
 	if err != nil {
 		return protocol.MakeErrReply("illegal term: " + string(args[1]))
 	}
-	logger.Debugf("recv heartbeat from %s term %d self term %d", sender, term, cluster.topology.term)
+	//logger.Debugf("recv heartbeat from %s term %d self term %d", sender, term, cluster.topology.term)
 	commitTo, err := strconv.Atoi(string(args[2]))
 	if err != nil {
 		return protocol.MakeErrReply("illegal commitTo: " + string(args[1]))

@@ -22,9 +22,9 @@ type logEntry struct {
 	Event int
 	wg    *sync.WaitGroup
 	// payload
-	SlotID uint32
-	NodeID string
-	Addr   string
+	SlotIDs []uint32
+	NodeID  string
+	Addr    string
 }
 
 func (e *logEntry) marshal() []byte {
@@ -56,21 +56,23 @@ func (raft *Raft) applyLogEntries(entries []*logEntry) {
 				}
 			}
 		case eventSetSlot:
-			slot := raft.slots[int(entry.SlotID)]
-			oldNode := raft.nodes[slot.NodeID]
-			// remove from old oldNode
-			for i, s := range oldNode.Slots {
-				if s.ID == slot.ID {
-					copy(oldNode.Slots[i:], oldNode.Slots[i+1:])
-					oldNode.Slots = oldNode.Slots[:len(oldNode.Slots)-1]
-					break
+			for _, slotID := range entry.SlotIDs {
+				slot := raft.slots[slotID]
+				oldNode := raft.nodes[slot.NodeID]
+				// remove from old oldNode
+				for i, s := range oldNode.Slots {
+					if s.ID == slot.ID {
+						copy(oldNode.Slots[i:], oldNode.Slots[i+1:])
+						oldNode.Slots = oldNode.Slots[:len(oldNode.Slots)-1]
+						break
+					}
 				}
+				newNodeID := entry.NodeID
+				slot.NodeID = newNodeID
+				// fixme: 多个节点同时加入后 re balance 时 newNode 可能为 nil
+				newNode := raft.nodes[slot.NodeID]
+				newNode.Slots = append(newNode.Slots, slot)
 			}
-			newNodeID := entry.NodeID
-			slot.NodeID = newNodeID
-			// fixme: 多个节点同时加入后 re balance 时 newNode 可能为 nil
-			newNode := raft.nodes[slot.NodeID]
-			newNode.Slots = append(newNode.Slots, slot)
 		}
 	}
 }
@@ -146,11 +148,11 @@ func (raft *Raft) NewNode(addr string) (*Node, error) {
 }
 
 // SetSlot propose
-func (raft *Raft) SetSlot(slotID uint32, newNodeID string) error {
+func (raft *Raft) SetSlot(slotIDs []uint32, newNodeID string) error {
 	proposal := &logEntry{
-		Event:  eventSetSlot,
-		NodeID: newNodeID,
-		SlotID: slotID,
+		Event:   eventSetSlot,
+		NodeID:  newNodeID,
+		SlotIDs: slotIDs,
 	}
 	conn := connection.NewFakeConn()
 	resp := raft.cluster.relay2(raft.leaderId, conn,

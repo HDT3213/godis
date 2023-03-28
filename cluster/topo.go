@@ -14,6 +14,7 @@ import (
 	"net"
 	"sort"
 	"strconv"
+	"time"
 )
 
 func (cluster *Cluster) startAsSeed() error {
@@ -115,15 +116,24 @@ func (cluster *Cluster) Join(seed string) protocol.ErrorReply {
 
 	// fixme: 完工前记得重新打开 reBalance
 	/* STEP3: asynchronous migrating slots */
-	//go func() {
-	//	time.Sleep(time.Second) // let the cluster started
-	//	cluster.reBalance()
-	//}()
+	go func() {
+		time.Sleep(time.Second) // let the cluster started
+		cluster.reBalance()
+	}()
 	return nil
 }
 
 func (cluster *Cluster) reBalance() {
 	slots := cluster.findSlotsForNewNode()
+	var slotIds []uint32
+	for _, slot := range slots {
+		slotIds = append(slotIds, slot.ID)
+	}
+	err := cluster.topology.SetSlot(slotIds, cluster.self)
+	if err != nil {
+		logger.Errorf("set slot route failed: %v", err)
+		return
+	}
 	// serial migrations to avoid overloading the cluster
 	slotChan := make(chan *Slot, len(slots))
 	for _, slot := range slots {
@@ -204,7 +214,17 @@ slotLoop:
 		case *protocol.StatusReply:
 			if protocol.IsOKReply(reply) {
 				break slotLoop
+			} else {
+				// todo: return slot to former host node
+				msg := fmt.Sprintf("migrate slot %d error: %s", slot.ID, reply.Status)
+				logger.Errorf(msg)
+				return protocol.MakeErrReply(msg)
 			}
+		case protocol.ErrorReply:
+			// todo: return slot to former host node
+			msg := fmt.Sprintf("migrate slot %d error: %s", slot.ID, reply.Error())
+			logger.Errorf(msg)
+			return protocol.MakeErrReply(msg)
 		}
 	}
 	cluster.finishSlotImport(slot.ID)
