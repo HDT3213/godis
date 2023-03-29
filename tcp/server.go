@@ -25,6 +25,9 @@ type Config struct {
 	Timeout    time.Duration `yaml:"timeout"`
 }
 
+// ClientCounter Record the number of clients in the current Godis server
+var ClientCounter int
+
 // ListenAndServeWithSignal binds port and handle requests, blocking until receive stop signal
 func ListenAndServeWithSignal(cfg *Config, handler tcp.Handler) error {
 	closeChan := make(chan struct{})
@@ -75,10 +78,12 @@ func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan
 		}
 		// handle
 		logger.Info("accept link")
+		ClientCounter++
 		waitDone.Add(1)
 		go func() {
 			defer func() {
 				waitDone.Done()
+				ClientCounter--
 			}()
 			handler.Handle(ctx, conn)
 		}()

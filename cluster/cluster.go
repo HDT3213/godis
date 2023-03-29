@@ -132,6 +132,9 @@ func (cluster *Cluster) Exec(c redis.Connection, cmdLine [][]byte) (result redis
 		}
 	}()
 	cmdName := strings.ToLower(string(cmdLine[0]))
+	if cmdName == "info" {
+		return database2.Info(c, cmdLine)
+	}
 	if cmdName == "auth" {
 		return database2.Auth(c, cmdLine[1:])
 	}
