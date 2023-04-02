@@ -64,6 +64,13 @@ const (
 	learner
 )
 
+var stateNames = map[raftState]string{
+	follower:  "follower",
+	leader:    "leader",
+	candidate: "candidate",
+	learner:   "learner",
+}
+
 func (node *Node) setState(state raftState) {
 	node.Flags &= ^uint32(0x7) // clean
 	switch state {
@@ -107,6 +114,7 @@ type Raft struct {
 	committedIndex int // index of the last committed logEntry
 	proposedIndex  int // index of the last proposed logEntry
 	heartbeatChan  chan *heartbeat
+	persistFile    string
 
 	// for leader
 	nodeIndexMap map[string]*nodeStatus
@@ -168,7 +176,6 @@ func (raft *Raft) initLog(beginIndex int, entries []*logEntry) {
 func (raft *Raft) StartAsSeed(addr string) (string, error) {
 	selfNodeID := config.Properties.AnnounceAddress()
 	raft.slots = make([]*Slot, slotCount)
-	raft.nodeLock = lock.Make(1024)
 	// claim all slots
 	for i := range raft.slots {
 		raft.slots[i] = &Slot{
@@ -316,8 +323,6 @@ func (raft *Raft) candidateJob() {
 					// todo: do not wait other nodes, start leader job
 					logger.Info("elected to be the leader")
 					raft.state = leader
-					raft.slots = make([]*Slot, slotCount)
-					raft.nodeLock = lock.Make(1024)
 					return
 				}
 			}
@@ -336,41 +341,50 @@ func (raft *Raft) candidateJob() {
 	raft.term = currentTerm // failed to be elected neither found newer term
 }
 
-// askNodeIndex ask offset of each node and init nodeIndexMap as new leader
+// getNodeIndexMap ask offset of each node and init nodeIndexMap as new leader
 // invoker provide lock
-func (raft *Raft) askNodeIndex() map[string]*nodeStatus {
+func (raft *Raft) getNodeIndexMap() {
+	// ask node index
 	nodeIndexMap := make(map[string]*nodeStatus)
-	// todo: copy nodes to avoid concurrent read-write
 	for _, node := range raft.nodes {
-		if node.ID == raft.selfNodeID {
-			nodeIndexMap[node.ID] = &nodeStatus{
-				receivedIndex: raft.proposedIndex,
-			}
-			continue
-		}
-		logger.Debugf("ask %s for offset", node.ID)
-		c := connection.NewFakeConn()
-		reply := raft.cluster.relay2(node.Addr, c, utils.ToCmdLine("raft", "get-offset"))
-		if protocol.IsErrorReply(reply) {
-			// todo: handle follower offline
-			continue
-		}
-		proposalOffset := int(reply.(*protocol.IntReply).Code)
-		nodeIndexMap[node.ID] = &nodeStatus{
-			receivedIndex: proposalOffset,
+		status := raft.askNodeIndex(node)
+		if status != nil {
+			nodeIndexMap[node.ID] = status
 		}
 	}
 	logger.Info("got offsets of nodes")
-	return nodeIndexMap
+	raft.nodeIndexMap = nodeIndexMap
+}
+
+// askNodeIndex ask another node for its log index
+// return nil if failed
+func (raft *Raft) askNodeIndex(node *Node) *nodeStatus {
+	if node.ID == raft.selfNodeID {
+		return &nodeStatus{
+			receivedIndex: raft.proposedIndex,
+		}
+	}
+	logger.Debugf("ask %s for offset", node.ID)
+	c := connection.NewFakeConn()
+	reply := raft.cluster.relay2(node.Addr, c, utils.ToCmdLine("raft", "get-offset"))
+	if protocol.IsErrorReply(reply) {
+		logger.Infof("ask node %s index failed: %v", node.ID, reply)
+		return nil
+	}
+	return &nodeStatus{
+		receivedIndex: int(reply.(*protocol.IntReply).Code),
+	}
 }
 
 func (raft *Raft) leaderJob() {
 	raft.mu.Lock()
 	if raft.nodeIndexMap == nil {
-		// todo: reduce lock time
-		raft.nodeIndexMap = raft.askNodeIndex()
+		// getNodeIndexMap with lock, because leader cannot work without nodeIndexMap
+		raft.getNodeIndexMap()
 	}
-	raft.nodeIndexMap[raft.selfNodeID].receivedIndex = raft.proposedIndex
+	if raft.nodeLock == nil {
+		raft.nodeLock = lock.Make(1024)
+	}
 	var recvedIndices []int
 	for _, status := range raft.nodeIndexMap {
 		recvedIndices = append(recvedIndices, status.receivedIndex)
@@ -409,7 +423,16 @@ func (raft *Raft) leaderJob() {
 			var cmdLine [][]byte
 			if status == nil {
 				logger.Debugf("node %s offline", node.ID)
-				return
+				status = raft.askNodeIndex(node)
+				if status != nil {
+					// get status, node has back online
+					raft.mu.Lock()
+					raft.nodeIndexMap[node.ID] = status
+					raft.mu.Unlock()
+				} else {
+					// node still offline
+					return
+				}
 			}
 			if status.receivedIndex < raft.beginIndex {
 				// some entries are missed due to change of leader, send full snapshot
@@ -418,7 +441,9 @@ func (raft *Raft) leaderJob() {
 					"load-snapshot",
 					raft.selfNodeID,
 				)
-				cmdLine = append(cmdLine, snapshot...)
+				// see makeSnapshotForFollower
+				cmdLine = append(cmdLine, []byte(node.ID), []byte{byte(follower)})
+				cmdLine = append(cmdLine, snapshot[2:]...)
 			} else {
 				// leader has all needed entries, send normal heartbeat
 				cmdLine = utils.ToCmdLine(

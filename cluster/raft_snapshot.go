@@ -140,6 +140,7 @@ func (raft *Raft) makeSnapshot() [][]byte {
 	topology := marshalNodes(raft.nodes)
 	snapshot := [][]byte{
 		[]byte(raft.selfNodeID),
+		{byte(raft.state)},
 		[]byte(raft.leaderId),
 		[]byte(strconv.Itoa(raft.term)),
 		[]byte(strconv.Itoa(raft.committedIndex)),
@@ -148,23 +149,38 @@ func (raft *Raft) makeSnapshot() [][]byte {
 	return snapshot
 }
 
+// makeSnapshotForFollower used by leader node to generate snapshot for follower
+// invoker provide with lock
+func (raft *Raft) makeSnapshotForFollower(followerId string) [][]byte {
+	snapshot := raft.makeSnapshot()
+	snapshot[0] = []byte(followerId)
+	snapshot[1] = []byte{byte(follower)}
+	return snapshot
+}
+
+// invoker provide with lock
 func (raft *Raft) loadSnapshot(snapshot [][]byte) protocol.ErrorReply {
 	// make sure raft.slots and node.Slots is the same object
 	selfNodeId := string(snapshot[0])
-	leaderId := string(snapshot[1])
-	term, err := strconv.Atoi(string(snapshot[2]))
-	if err != nil {
-		return protocol.MakeErrReply("illegal term: " + string(snapshot[2]))
+	state := raftState(snapshot[1][0])
+	if _, ok := stateNames[state]; !ok {
+		return protocol.MakeErrReply("unknown state: " + strconv.Itoa(int(state)))
 	}
-	commitIndex, err := strconv.Atoi(string(snapshot[3]))
+	leaderId := string(snapshot[2])
+	term, err := strconv.Atoi(string(snapshot[3]))
+	if err != nil {
+		return protocol.MakeErrReply("illegal term: " + string(snapshot[3]))
+	}
+	commitIndex, err := strconv.Atoi(string(snapshot[4]))
 	if err != nil {
 		return protocol.MakeErrReply("illegal commit index: " + string(snapshot[3]))
 	}
-	nodes, err := unmarshalNodes(snapshot[4:])
+	nodes, err := unmarshalNodes(snapshot[5:])
 	if err != nil {
 		return protocol.MakeErrReply(err.Error())
 	}
 	raft.selfNodeID = selfNodeId
+	raft.state = state
 	raft.leaderId = leaderId
 	raft.term = term
 	raft.committedIndex = commitIndex

@@ -4,6 +4,7 @@ import (
 	"github.com/hdt3213/godis/datastruct/set"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/connection"
+	"sort"
 )
 
 func (cluster *Cluster) isImportedKey(key string) bool {
@@ -76,4 +77,38 @@ func (cluster *Cluster) cleanDroppedSlot(slotID uint32) {
 			return true
 		})
 	}()
+}
+
+// findSlotsForNewNode try to find slots for new node, but do not actually migrate
+func (cluster *Cluster) findSlotsForNewNode() []*Slot {
+	nodeMap := cluster.topology.GetTopology() // including the new node
+	avgSlot := slotCount / len(nodeMap)
+	nodes := make([]*Node, 0, len(nodeMap))
+	for _, node := range nodeMap {
+		nodes = append(nodes, node)
+	}
+	sort.Slice(nodes, func(i, j int) bool {
+		return len(nodes[i].Slots) > len(nodes[j].Slots)
+	})
+	result := make([]*Slot, 0, avgSlot)
+	// there are always some nodes has more slots than avgSlot
+	for _, node := range nodes {
+		if len(node.Slots) <= avgSlot {
+			// nodes are in decreasing order by len(node.Slots)
+			// if len(node.Slots) < avgSlot, then all following nodes has fewer slots than avgSlot
+			break
+		}
+		n := 2*avgSlot - len(result)
+		if n < len(node.Slots) {
+			// n - len(result) - avgSlot = avgSlot - len(result)
+			// now len(result) == avgSlot
+			result = append(result, node.Slots[avgSlot:n]...)
+		} else {
+			result = append(result, node.Slots[avgSlot:]...)
+		}
+		if len(result) >= avgSlot {
+			break
+		}
+	}
+	return result
 }

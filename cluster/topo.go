@@ -1,6 +1,7 @@
 package cluster
 
 import (
+	"bufio"
 	"fmt"
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/database"
@@ -12,7 +13,7 @@ import (
 	"github.com/hdt3213/godis/redis/parser"
 	"github.com/hdt3213/godis/redis/protocol"
 	"net"
-	"sort"
+	"os"
 	"strconv"
 	"time"
 )
@@ -27,40 +28,6 @@ func (cluster *Cluster) startAsSeed() error {
 	}
 	cluster.self = selfNodeId
 	return nil
-}
-
-// findSlotsForNewNode try to find slots for new node, but do not actually migrate
-func (cluster *Cluster) findSlotsForNewNode() []*Slot {
-	nodeMap := cluster.topology.GetTopology() // including the new node
-	avgSlot := slotCount / len(nodeMap)
-	nodes := make([]*Node, 0, len(nodeMap))
-	for _, node := range nodeMap {
-		nodes = append(nodes, node)
-	}
-	sort.Slice(nodes, func(i, j int) bool {
-		return len(nodes[i].Slots) > len(nodes[j].Slots)
-	})
-	result := make([]*Slot, 0, avgSlot)
-	// there are always some nodes has more slots than avgSlot
-	for _, node := range nodes {
-		if len(node.Slots) <= avgSlot {
-			// nodes are in decreasing order by len(node.Slots)
-			// if len(node.Slots) < avgSlot, then all following nodes has fewer slots than avgSlot
-			break
-		}
-		n := 2*avgSlot - len(result)
-		if n < len(node.Slots) {
-			// n - len(result) - avgSlot = avgSlot - len(result)
-			// now len(result) == avgSlot
-			result = append(result, node.Slots[avgSlot:n]...)
-		} else {
-			result = append(result, node.Slots[avgSlot:]...)
-		}
-		if len(result) >= avgSlot {
-			break
-		}
-	}
-	return result
 }
 
 // Join send `gcluster join` to node in cluster to join
@@ -114,12 +81,39 @@ func (cluster *Cluster) Join(seed string) protocol.ErrorReply {
 	cluster.self = cluster.topology.selfNodeID
 	cluster.topology.start(follower)
 
-	// fixme: 完工前记得重新打开 reBalance
 	/* STEP3: asynchronous migrating slots */
 	go func() {
 		time.Sleep(time.Second) // let the cluster started
 		cluster.reBalance()
 	}()
+	return nil
+}
+
+var errConfigFileNotExist = protocol.MakeErrReply("cluster config file not exist")
+
+// LoadConfig try to load cluster-config-file and re-join the cluster
+func (cluster *Cluster) LoadConfig() protocol.ErrorReply {
+	f, err := os.Open(cluster.topology.persistFile)
+	if err == os.ErrNotExist {
+		return errConfigFileNotExist
+	}
+	defer func() {
+		if err := f.Close(); err != nil {
+			logger.Error("close cloud config file error: %v", err)
+		}
+	}()
+	scanner := bufio.NewScanner(f)
+	var snapshot [][]byte
+	for scanner.Scan() {
+		snapshot = append(snapshot, scanner.Bytes())
+	}
+	cluster.topology.mu.Lock()
+	defer cluster.topology.mu.Unlock()
+	if errReply := cluster.topology.loadSnapshot(snapshot); errReply != nil {
+		return errReply
+	}
+	cluster.self = cluster.topology.selfNodeID
+	cluster.topology.start(cluster.topology.state)
 	return nil
 }
 

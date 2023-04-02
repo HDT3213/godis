@@ -13,6 +13,8 @@ import (
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/pool"
 	"github.com/hdt3213/godis/redis/protocol"
+	"os"
+	"path"
 	"runtime/debug"
 	"strings"
 	"sync"
@@ -82,14 +84,16 @@ func MakeCluster() *Cluster {
 		relayImpl:   defaultRelayImpl,
 	}
 	cluster.topology = &Raft{
-		cluster: cluster,
+		cluster:     cluster,
+		persistFile: path.Join(config.Properties.Dir, config.Properties.ClusterConfigFile),
 	}
 	cluster.db.SetKeyInsertedCallback(cluster.makeInsertCallback())
 	cluster.db.SetKeyDeletedCallback(cluster.makeDeleteCallback())
 	cluster.slots = make(map[uint32]*hostSlot)
-	// connect with other peers
 	var err error
-	if config.Properties.ClusterAsSeed {
+	if cluster.topology.persistFile != "" && fileExists(cluster.topology.persistFile) {
+		err = cluster.LoadConfig()
+	} else if config.Properties.ClusterAsSeed {
 		err = cluster.startAsSeed()
 	} else {
 		err = cluster.Join(config.Properties.ClusterSeed)
@@ -197,4 +201,9 @@ func (cluster *Cluster) makeDeleteCallback() database.KeyEventCallback {
 			slot.keys.Remove(key)
 		}
 	}
+}
+
+func fileExists(filename string) bool {
+	info, err := os.Stat(filename)
+	return err == nil && !info.IsDir()
 }

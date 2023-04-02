@@ -1,13 +1,17 @@
 package cluster
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/protocol"
+	"os"
 	"sync"
 )
 
@@ -75,6 +79,36 @@ func (raft *Raft) applyLogEntries(entries []*logEntry) {
 			}
 		}
 	}
+	if err := raft.persist(); err != nil {
+		logger.Error("persist raft error: %v", err)
+	}
+
+}
+
+// invoker should provide with raft.mu lock
+func (raft *Raft) persist() error {
+	if raft.persistFile == "" {
+		return nil
+	}
+	tmpFile, err := os.CreateTemp(config.Properties.Dir, "tmp-cluster-conf-*.conf")
+	if err != nil {
+		return err
+	}
+	snapshot := raft.makeSnapshot()
+	buf := bytes.NewBuffer(nil)
+	for _, line := range snapshot {
+		buf.Write(line)
+		buf.WriteByte('\n')
+	}
+	_, err = tmpFile.Write(buf.Bytes())
+	if err != nil {
+		return err
+	}
+	err = os.Rename(tmpFile.Name(), raft.persistFile)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // execRaftPropose handles requests from other nodes (follower or learner) to propose a change
@@ -175,18 +209,25 @@ func execRaftJoin(cluster *Cluster, c redis.Connection, args [][]byte) redis.Rep
 	}
 	addr := string(args[0])
 	nodeID := addr
-	proposal := &logEntry{
-		Event:  eventNewNode,
-		NodeID: nodeID,
-		Addr:   addr,
-	}
-	if err := cluster.topology.propose(proposal); err != nil {
-		return err
-	}
-	// todo: 交给 leader job 发送 snapshot
+
 	cluster.topology.mu.RLock()
-	snapshot := cluster.topology.makeSnapshot()
+	_, exist := cluster.topology.nodes[addr]
 	cluster.topology.mu.RUnlock()
-	snapshot[0] = []byte(nodeID)
+	// if node has joint cluster but terminated before persisting cluster config,
+	// it may try to join at next start.
+	// In this case, we only have to send a snapshot for it
+	if !exist {
+		proposal := &logEntry{
+			Event:  eventNewNode,
+			NodeID: nodeID,
+			Addr:   addr,
+		}
+		if err := cluster.topology.propose(proposal); err != nil {
+			return err
+		}
+	}
+	cluster.topology.mu.RLock()
+	snapshot := cluster.topology.makeSnapshotForFollower(nodeID)
+	cluster.topology.mu.RUnlock()
 	return protocol.MakeMultiBulkReply(snapshot)
 }
