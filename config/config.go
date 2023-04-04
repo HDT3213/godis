@@ -5,6 +5,7 @@ import (
 	"github.com/hdt3213/godis/lib/utils"
 	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 	"strconv"
 	"strings"
@@ -136,4 +137,9 @@ func SetupConfig(configFilename string) {
 	defer file.Close()
 	Properties = parse(file)
 	Properties.RunID = utils.RandString(40)
+	configFilePath, err := filepath.Abs(configFilename)
+	if err != nil {
+		return
+	}
+	Properties.CfPath = configFilePath
 }
