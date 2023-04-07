@@ -3,11 +3,6 @@ package database
 import (
 	"errors"
 	"fmt"
-	"github.com/hdt3213/godis/interface/redis"
-	"github.com/hdt3213/godis/lib/logger"
-	"github.com/hdt3213/godis/lib/sync/atomic"
-	"github.com/hdt3213/godis/lib/utils"
-	"github.com/hdt3213/godis/redis/protocol"
 	"io"
 	"io/ioutil"
 	"os"
@@ -15,6 +10,12 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/lib/logger"
+	"github.com/hdt3213/godis/lib/sync/atomic"
+	"github.com/hdt3213/godis/lib/utils"
+	"github.com/hdt3213/godis/redis/protocol"
 )
 
 const (
@@ -85,6 +86,7 @@ type masterStatus struct {
 	rewriting    atomic.Boolean
 }
 
+// bgSaveForReplication does bg-save and send rdb to waiting slaves
 func (server *Server) bgSaveForReplication() {
 	go func() {
 		defer func() {
@@ -116,7 +118,7 @@ func (server *Server) saveForReplication() error {
 	server.masterStatus.aofListener = aofListener
 	server.masterStatus.mu.Unlock()
 
-	err = server.persister.Rewrite2RDBForReplication(rdbFilename, aofListener, nil)
+	err = server.persister.GenerateRDBForReplication(rdbFilename, aofListener, nil)
 	if err != nil {
 		return err
 	}
@@ -132,6 +134,7 @@ func (server *Server) saveForReplication() error {
 	server.masterStatus.waitSlaves = nil
 	server.masterStatus.mu.Unlock()
 
+	// send rdb to waiting slaves
 	for slave := range waitSlaves {
 		err = server.masterFullReSyncWithSlave(slave)
 		if err != nil {
@@ -161,7 +164,7 @@ func (server *Server) rewriteRDB() error {
 		defer server.masterStatus.mu.Unlock()
 		newBacklog.beginOffset = server.masterStatus.backlog.currentOffset
 	}
-	err = server.persister.Rewrite2RDBForReplication(rdbFilename, aofListener, hook)
+	err = server.persister.GenerateRDBForReplication(rdbFilename, aofListener, hook)
 	if err != nil { // wait rdb result
 		return err
 	}
