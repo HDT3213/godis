@@ -1,6 +1,15 @@
 package database
 
 import (
+	"io/ioutil"
+	"os"
+	"path"
+	"strconv"
+	"testing"
+	"time"
+
+	"github.com/hdt3213/godis/aof"
+
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/interface/redis"
@@ -8,12 +17,6 @@ import (
 	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/protocol"
 	"github.com/hdt3213/godis/redis/protocol/asserts"
-	"io/ioutil"
-	"os"
-	"path"
-	"strconv"
-	"testing"
-	"time"
 )
 
 func makeTestData(db database.DB, dbIndex int, prefix string, size int) {
@@ -105,13 +108,16 @@ func TestAof(t *testing.T) {
 		_ = os.Remove(aofFilename)
 	}()
 	config.Properties = &config.ServerProperties{
-		AppendOnly:     true,
-		AppendFilename: aofFilename,
+		AppendOnly:        true,
+		AppendFilename:    aofFilename,
+		AofUseRdbPreamble: false,
+		AppendFsync:       aof.FsyncEverySec,
 	}
 	dbNum := 4
 	size := 10
 	var prefixes []string
 	aofWriteDB := NewStandaloneServer()
+	// generate test data
 	for i := 0; i < dbNum; i++ {
 		prefix := utils.RandString(8)
 		prefixes = append(prefixes, prefix)
@@ -165,7 +171,7 @@ func TestRDB(t *testing.T) {
 }
 
 func TestRewriteAOF(t *testing.T) {
-	tmpFile, err := ioutil.TempFile("", "*.aof")
+	tmpFile, err := os.CreateTemp(config.GetTmpDir(), "*.aof")
 	if err != nil {
 		t.Error(err)
 		return
@@ -175,8 +181,10 @@ func TestRewriteAOF(t *testing.T) {
 		_ = os.Remove(aofFilename)
 	}()
 	config.Properties = &config.ServerProperties{
-		AppendOnly:     true,
-		AppendFilename: aofFilename,
+		AppendOnly:        true,
+		AppendFilename:    aofFilename,
+		AofUseRdbPreamble: false,
+		AppendFsync:       aof.FsyncEverySec,
 	}
 	aofWriteDB := NewStandaloneServer()
 	size := 1
@@ -201,53 +209,79 @@ func TestRewriteAOF(t *testing.T) {
 
 // TestRewriteAOF2 tests execute commands during rewrite procedure
 func TestRewriteAOF2(t *testing.T) {
-	tmpFile, err := ioutil.TempFile("", "*.aof")
+	/* prepare */
+	tmpFile, err := os.CreateTemp(config.GetTmpDir(), "*.aof")
 	if err != nil {
 		t.Error(err)
 		return
 	}
 	aofFilename := tmpFile.Name()
-	defer func() {
-		_ = os.Remove(aofFilename)
-	}()
 	config.Properties = &config.ServerProperties{
 		AppendOnly:     true,
 		AppendFilename: aofFilename,
+		// set Aof-use-rdb-preamble to true to make sure rewrite procedure
+		AppendFsync:       aof.FsyncAlways,
+		AofUseRdbPreamble: true,
 	}
+
+	keySize1 := 100
+	keySize2 := 250
+	/* write data */
 	aofWriteDB := NewStandaloneServer()
 	dbNum := 4
 	conn := connection.NewFakeConn()
 	for i := 0; i < dbNum; i++ {
 		conn.SelectDB(i)
-		key := strconv.Itoa(i)
-		aofWriteDB.Exec(conn, utils.ToCmdLine("SET", key, key))
+		for j := 0; j < keySize1; j++ {
+			key := strconv.Itoa(j)
+			aofWriteDB.Exec(conn, utils.ToCmdLine("SET", key, key))
+		}
 	}
 
+	/* rewrite */
 	ctx, err := aofWriteDB.persister.StartRewrite()
 	if err != nil {
-		t.Error(err)
+		t.Error(err, "start rewrite failed")
 		return
 	}
-	// add data during rewrite
-	for i := 0; i < dbNum; i++ {
-		conn.SelectDB(i)
-		key := "a" + strconv.Itoa(i)
-		aofWriteDB.Exec(conn, utils.ToCmdLine("SET", key, key))
+
+	/* add data during rewrite */
+	ch := make(chan struct{})
+	go func() {
+		for i := 0; i < dbNum; i++ {
+			conn.SelectDB(i)
+			for j := 0; j < keySize2; j++ {
+				key := "a" + strconv.Itoa(j)
+				aofWriteDB.Exec(conn, utils.ToCmdLine("SET", key, key))
+			}
+		}
+		ch <- struct{}{}
+	}()
+
+	doRewriteErr := aofWriteDB.persister.DoRewrite(ctx)
+	if doRewriteErr != nil {
+		t.Error(doRewriteErr, "do rewrite failed")
+		return
 	}
-	aofWriteDB.persister.DoRewrite(ctx)
 	aofWriteDB.persister.FinishRewrite(ctx)
+	<-ch
+	aofWriteDB.Close() // wait for aof finished
 
-	aofWriteDB.Close()                 // wait for aof finished
-	aofReadDB := NewStandaloneServer() // start new db and read aof file
+	// start new db and read aof file
+	aofReadDB := NewStandaloneServer()
 	for i := 0; i < dbNum; i++ {
 		conn.SelectDB(i)
-		key := strconv.Itoa(i)
-		ret := aofReadDB.Exec(conn, utils.ToCmdLine("GET", key))
-		asserts.AssertBulkReply(t, ret, key)
 
-		key = "a" + strconv.Itoa(i)
-		ret = aofReadDB.Exec(conn, utils.ToCmdLine("GET", key))
-		asserts.AssertBulkReply(t, ret, key)
+		for j := 0; j < keySize1; j++ {
+			key := strconv.Itoa(j)
+			ret := aofReadDB.Exec(conn, utils.ToCmdLine("GET", key))
+			asserts.AssertBulkReply(t, ret, key)
+		}
+		for j := 0; j < keySize2; j++ {
+			key := "a" + strconv.Itoa(j)
+			ret := aofReadDB.Exec(conn, utils.ToCmdLine("GET", key))
+			asserts.AssertBulkReply(t, ret, key)
+		}
 	}
 	aofReadDB.Close()
 }

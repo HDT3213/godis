@@ -5,15 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/hdt3213/godis/aof"
-	"github.com/hdt3213/godis/config"
-	"github.com/hdt3213/godis/interface/redis"
-	"github.com/hdt3213/godis/lib/logger"
-	"github.com/hdt3213/godis/lib/utils"
-	"github.com/hdt3213/godis/redis/connection"
-	"github.com/hdt3213/godis/redis/parser"
-	"github.com/hdt3213/godis/redis/protocol"
-	rdb "github.com/hdt3213/rdb/parser"
 	"io/ioutil"
 	"net"
 	"os"
@@ -22,6 +13,16 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/hdt3213/godis/aof"
+	"github.com/hdt3213/godis/config"
+	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/lib/logger"
+	rdb "github.com/hdt3213/rdb/parser"
+	"github.com/hdt3213/godis/lib/utils"
+	"github.com/hdt3213/godis/redis/connection"
+	"github.com/hdt3213/godis/redis/parser"
+	"github.com/hdt3213/godis/redis/protocol"
 )
 
 const (
@@ -114,6 +115,7 @@ func (repl *slaveStatus) close() error {
 	return nil
 }
 
+// setupMaster connects to master and starts full sync
 func (server *Server) setupMaster() {
 	defer func() {
 		if err := recover(); err != nil {
@@ -342,7 +344,7 @@ func (server *Server) loadMasterRDB(configVersion int32) error {
 	if err != nil {
 		return err
 	}
-	err = rdbLoader.loadRDB(rdbDec)
+	err = rdbLoader.LoadRDB(rdbDec)
 	if err != nil {
 		return errors.New("dump rdb failed: " + err.Error())
 	}
