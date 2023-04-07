@@ -1,16 +1,15 @@
 package aof
 
 import (
-	"github.com/hdt3213/godis/config"
-	"github.com/hdt3213/godis/interface/database"
-	"github.com/hdt3213/godis/lib/logger"
-	"github.com/hdt3213/godis/lib/utils"
-	"github.com/hdt3213/godis/redis/protocol"
 	"io"
 	"io/ioutil"
 	"os"
 	"strconv"
-	"time"
+
+	"github.com/hdt3213/godis/config"
+	"github.com/hdt3213/godis/lib/logger"
+	"github.com/hdt3213/godis/lib/utils"
+	"github.com/hdt3213/godis/redis/protocol"
 )
 
 func (persister *Persister) newRewriteHandler() *Persister {
@@ -22,7 +21,7 @@ func (persister *Persister) newRewriteHandler() *Persister {
 
 // RewriteCtx holds context of an AOF rewriting procedure
 type RewriteCtx struct {
-	tmpFile  *os.File
+	tmpFile  *os.File // tmpFile is the file handler of aof tmpFile
 	fileSize int64
 	dbIdx    int // selected db index when startRewrite
 }
@@ -44,42 +43,22 @@ func (persister *Persister) Rewrite() error {
 
 // DoRewrite actually rewrite aof file
 // makes DoRewrite public for testing only, please use Rewrite instead
-func (persister *Persister) DoRewrite(ctx *RewriteCtx) error {
-	tmpFile := ctx.tmpFile
-
-	// load aof tmpFile
-	tmpAof := persister.newRewriteHandler()
-	tmpAof.LoadAof(int(ctx.fileSize))
-
-	// rewrite aof tmpFile
-	for i := 0; i < config.Properties.Databases; i++ {
-		// select db
-		data := protocol.MakeMultiBulkReply(utils.ToCmdLine("SELECT", strconv.Itoa(i))).ToBytes()
-		_, err := tmpFile.Write(data)
-		if err != nil {
-			return err
-		}
-		// dump db
-		tmpAof.db.ForEach(i, func(key string, entity *database.DataEntity, expiration *time.Time) bool {
-			cmd := EntityToCmd(key, entity)
-			if cmd != nil {
-				_, _ = tmpFile.Write(cmd.ToBytes())
-			}
-			if expiration != nil {
-				cmd := MakeExpireCmd(key, *expiration)
-				if cmd != nil {
-					_, _ = tmpFile.Write(cmd.ToBytes())
-				}
-			}
-			return true
-		})
+func (persister *Persister) DoRewrite(ctx *RewriteCtx) (err error) {
+	// start rewrite
+	if !config.Properties.AofUseRdbPreamble {
+		logger.Warn("generate aof preamble")
+		err = persister.generateAof(ctx)
+	} else {
+		logger.Warn("generate rdb preamble")
+		err = persister.generateRDB(ctx)
 	}
-	return nil
+	return err
 }
 
 // StartRewrite prepares rewrite procedure
 func (persister *Persister) StartRewrite() (*RewriteCtx, error) {
-	persister.pausingAof.Lock() // pausing aof
+	// pausing aof
+	persister.pausingAof.Lock()
 	defer persister.pausingAof.Unlock()
 
 	err := persister.aofFile.Sync()
@@ -93,7 +72,7 @@ func (persister *Persister) StartRewrite() (*RewriteCtx, error) {
 	filesize := fileInfo.Size()
 
 	// create tmp file
-	file, err := ioutil.TempFile("", "*.aof")
+	file, err := ioutil.TempFile("./", "*.aof")
 	if err != nil {
 		logger.Warn("tmp file create failed")
 		return nil, err
@@ -117,9 +96,7 @@ func (persister *Persister) FinishRewrite(ctx *RewriteCtx) {
 		logger.Error("open aofFilename failed: " + err.Error())
 		return
 	}
-	defer func() {
-		_ = src.Close()
-	}()
+
 	_, err = src.Seek(ctx.fileSize, 0)
 	if err != nil {
 		logger.Error("seek failed: " + err.Error())
@@ -143,8 +120,13 @@ func (persister *Persister) FinishRewrite(ctx *RewriteCtx) {
 	_ = tmpFile.Close()
 	// replace current aof file by tmp file
 	_ = persister.aofFile.Close()
-	_ = os.Rename(tmpFileName, persister.aofFilename)
-
+	// remove old aof file
+	if err = os.Remove(persister.aofFilename); err != nil {
+		logger.Warn(err)
+	}
+	if err = os.Rename(tmpFileName, persister.aofFilename); err != nil {
+		logger.Warn(err)
+	}
 	// reopen aof file for further write
 	aofFile, err := os.OpenFile(persister.aofFilename, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0600)
 	if err != nil {

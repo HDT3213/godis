@@ -2,6 +2,12 @@ package database
 
 import (
 	"fmt"
+	"runtime/debug"
+	"strconv"
+	"strings"
+	"sync/atomic"
+	"time"
+
 	"github.com/hdt3213/godis/aof"
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/interface/database"
@@ -10,14 +16,10 @@ import (
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/pubsub"
 	"github.com/hdt3213/godis/redis/protocol"
-	"runtime/debug"
-	"strconv"
-	"strings"
-	"sync/atomic"
-	"time"
 )
 
 var godisVersion = "1.2.8" // do not modify
+var GlobalServer *Server
 
 // Server is a redis-server with full capabilities including multiple database, rdb loader, replication
 type Server struct {
@@ -49,6 +51,7 @@ func NewStandaloneServer() *Server {
 		server.dbSet[i] = holder
 	}
 	server.hub = pubsub.MakeHub()
+	// record aof
 	validAof := false
 	if config.Properties.AppendOnly {
 		aofHandler, err := NewPersister(server,
@@ -129,6 +132,10 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 	} else if cmdName == "unsubscribe" {
 		return pubsub.UnSubscribe(server.hub, c, cmdLine[1:])
 	} else if cmdName == "bgrewriteaof" {
+		// if not in append only mode, return error
+		if server.persister == nil {
+			return protocol.MakeErrReply("please enable aof before using bgrewriteaof")
+		}
 		// aof.go imports router.go, router.go cannot import BGRewriteAOF from aof.go
 		return BGRewriteAOF(server, cmdLine[1:])
 	} else if cmdName == "rewriteaof" {
@@ -210,6 +217,7 @@ func (server *Server) execFlushDB(dbIndex int) redis.Reply {
 	return server.flushDB(dbIndex)
 }
 
+// flushDB flushes the selected database
 func (server *Server) flushDB(dbIndex int) redis.Reply {
 	if dbIndex >= len(server.dbSet) || dbIndex < 0 {
 		return protocol.MakeErrReply("ERR DB index is out of range")
@@ -230,6 +238,7 @@ func (server *Server) loadDB(dbIndex int, newDB *DB) redis.Reply {
 	return &protocol.OkReply{}
 }
 
+// flushAll flushes all databases.
 func (server *Server) flushAll() redis.Reply {
 	for i := range server.dbSet {
 		server.flushDB(i)
@@ -240,6 +249,7 @@ func (server *Server) flushAll() redis.Reply {
 	return &protocol.OkReply{}
 }
 
+// selectDB returns the database with the given index, or an error if the index is out of range.
 func (server *Server) selectDB(dbIndex int) (*DB, *protocol.StandardErrReply) {
 	if dbIndex >= len(server.dbSet) || dbIndex < 0 {
 		return nil, protocol.MakeErrReply("ERR DB index is out of range")
@@ -247,6 +257,7 @@ func (server *Server) selectDB(dbIndex int) (*DB, *protocol.StandardErrReply) {
 	return server.dbSet[dbIndex].Load().(*DB), nil
 }
 
+// mustSelectDB is like selectDB, but panics if an error occurs.
 func (server *Server) mustSelectDB(dbIndex int) *DB {
 	selectedDB, err := server.selectDB(dbIndex)
 	if err != nil {
@@ -317,7 +328,7 @@ func SaveRDB(db *Server, args [][]byte) redis.Reply {
 	if rdbFilename == "" {
 		rdbFilename = "dump.rdb"
 	}
-	err := db.persister.Rewrite2RDB(rdbFilename)
+	err := db.persister.GenerateRDB(rdbFilename)
 	if err != nil {
 		return protocol.MakeErrReply(err.Error())
 	}
@@ -339,7 +350,7 @@ func BGSaveRDB(db *Server, args [][]byte) redis.Reply {
 		if rdbFilename == "" {
 			rdbFilename = "dump.rdb"
 		}
-		err := db.persister.Rewrite2RDB(rdbFilename)
+		err := db.persister.GenerateRDB(rdbFilename)
 		if err != nil {
 			logger.Error(err)
 		}

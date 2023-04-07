@@ -6,6 +6,11 @@ package server
 
 import (
 	"context"
+	"io"
+	"net"
+	"strings"
+	"sync"
+
 	"github.com/hdt3213/godis/cluster"
 	"github.com/hdt3213/godis/config"
 	database2 "github.com/hdt3213/godis/database"
@@ -15,10 +20,6 @@ import (
 	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/parser"
 	"github.com/hdt3213/godis/redis/protocol"
-	"io"
-	"net"
-	"strings"
-	"sync"
 )
 
 var (

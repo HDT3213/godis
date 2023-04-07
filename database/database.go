@@ -2,6 +2,9 @@
 package database
 
 import (
+	"strings"
+	"time"
+
 	"github.com/hdt3213/godis/datastruct/dict"
 	"github.com/hdt3213/godis/datastruct/lock"
 	"github.com/hdt3213/godis/interface/database"
@@ -9,8 +12,6 @@ import (
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/timewheel"
 	"github.com/hdt3213/godis/redis/protocol"
-	"strings"
-	"time"
 )
 
 const (
@@ -32,6 +33,7 @@ type DB struct {
 	// dict.Dict will ensure concurrent-safety of its method
 	// use this mutex for complicated command only, eg. rpush, incr ...
 	locker *lock.Locks
+	// addaof is used to add command to aof
 	addAof func(CmdLine)
 }
 
@@ -297,6 +299,7 @@ func (db *DB) ForEach(cb func(key string, data *database.DataEntity, expiration 
 			expireTime, _ := rawExpireTime.(time.Time)
 			expiration = &expireTime
 		}
+
 		return cb(key, entity, expiration)
 	})
 }

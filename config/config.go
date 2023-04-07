@@ -2,7 +2,6 @@ package config
 
 import (
 	"bufio"
-	"github.com/hdt3213/godis/lib/utils"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hdt3213/godis/lib/utils"
 
 	"github.com/hdt3213/godis/lib/logger"
 )
@@ -28,6 +29,7 @@ type ServerProperties struct {
 	AppendOnly        bool   `cfg:"appendonly"`
 	AppendFilename    string `cfg:"appendfilename"`
 	AppendFsync       string `cfg:"appendfsync"`
+	AofUseRdbPreamble bool   `cfg:"aof-use-rdb-preamble"`
 	MaxClients        int    `cfg:"maxclients"`
 	RequirePass       string `cfg:"requirepass"`
 	Databases         int    `cfg:"databases"`

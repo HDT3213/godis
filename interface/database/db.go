@@ -1,8 +1,10 @@
 package database
 
 import (
-	"github.com/hdt3213/godis/interface/redis"
 	"time"
+
+	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/lib/rdb/core"
 )
 
 // CmdLine is alias for [][]byte, represents a command line
@@ -13,6 +15,7 @@ type DB interface {
 	Exec(client redis.Connection, cmdLine [][]byte) redis.Reply
 	AfterClientClose(c redis.Connection)
 	Close()
+	LoadRDB(dec *core.Decoder) error
 }
 
 // DBEngine is the embedding storage engine exposing more methods for complex application

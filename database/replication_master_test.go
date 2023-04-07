@@ -2,13 +2,6 @@ package database
 
 import (
 	"bytes"
-	"github.com/hdt3213/godis/config"
-	"github.com/hdt3213/godis/lib/utils"
-	"github.com/hdt3213/godis/redis/connection"
-	"github.com/hdt3213/godis/redis/parser"
-	"github.com/hdt3213/godis/redis/protocol"
-	"github.com/hdt3213/godis/redis/protocol/asserts"
-	rdb "github.com/hdt3213/rdb/parser"
 	"io/ioutil"
 	"os"
 	"path"
@@ -17,6 +10,14 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/hdt3213/godis/config"
+	rdb "github.com/hdt3213/godis/lib/rdb/parser"
+	"github.com/hdt3213/godis/lib/utils"
+	"github.com/hdt3213/godis/redis/connection"
+	"github.com/hdt3213/godis/redis/parser"
+	"github.com/hdt3213/godis/redis/protocol"
+	"github.com/hdt3213/godis/redis/protocol/asserts"
 )
 
 func mockServer() *Server {
@@ -103,7 +104,7 @@ func TestReplicationMasterSide(t *testing.T) {
 	}
 
 	rdbDec := rdb.NewDecoder(bytes.NewReader(rdbReply.Arg))
-	err = slave.loadRDB(rdbDec)
+	err = slave.LoadRDB(rdbDec)
 	if err != nil {
 		t.Error("import rdb failed: " + err.Error())
 		return
@@ -276,7 +277,7 @@ func TestReplicationMasterRewriteRDB(t *testing.T) {
 	}
 
 	rdbDec := rdb.NewDecoder(bytes.NewReader(rdbReply.Arg))
-	err = slave.loadRDB(rdbDec)
+	err = slave.LoadRDB(rdbDec)
 	if err != nil {
 		t.Error("import rdb failed: " + err.Error())
 		return
