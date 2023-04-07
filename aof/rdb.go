@@ -1,6 +1,10 @@
 package aof
 
 import (
+	"os"
+	"strconv"
+	"time"
+
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/datastruct/dict"
 	List "github.com/hdt3213/godis/datastruct/list"
@@ -10,21 +14,17 @@ import (
 	"github.com/hdt3213/godis/lib/logger"
 	rdb "github.com/hdt3213/rdb/encoder"
 	"github.com/hdt3213/rdb/model"
-	"io/ioutil"
-	"os"
-	"strconv"
-	"time"
 )
 
 // todo: forbid concurrent rewrite
 
-// Rewrite2RDB rewrite aof data into rdb
-func (persister *Persister) Rewrite2RDB(rdbFilename string) error {
-	ctx, err := persister.startRewrite2RDB(nil, nil)
+// GenerateRDB generates rdb file from aof file
+func (persister *Persister) GenerateRDB(rdbFilename string) error {
+	ctx, err := persister.startGenerateRDB(nil, nil)
 	if err != nil {
 		return err
 	}
-	err = persister.rewrite2RDB(ctx)
+	err = persister.generateRDB(ctx)
 	if err != nil {
 		return err
 	}
@@ -39,15 +39,16 @@ func (persister *Persister) Rewrite2RDB(rdbFilename string) error {
 	return nil
 }
 
-// Rewrite2RDBForReplication asynchronously rewrite aof data into rdb and returns a channel to receive following data
+// GenerateRDBForReplication asynchronously generates rdb file from aof file and returns a channel to receive following data
 // parameter listener would receive following updates of rdb
 // parameter hook allows you to do something during aof pausing
-func (persister *Persister) Rewrite2RDBForReplication(rdbFilename string, listener Listener, hook func()) error {
-	ctx, err := persister.startRewrite2RDB(listener, hook)
+func (persister *Persister) GenerateRDBForReplication(rdbFilename string, listener Listener, hook func()) error {
+	ctx, err := persister.startGenerateRDB(listener, hook)
 	if err != nil {
 		return err
 	}
-	err = persister.rewrite2RDB(ctx)
+
+	err = persister.generateRDB(ctx)
 	if err != nil {
 		return err
 	}
@@ -62,7 +63,7 @@ func (persister *Persister) Rewrite2RDBForReplication(rdbFilename string, listen
 	return nil
 }
 
-func (persister *Persister) startRewrite2RDB(newListener Listener, hook func()) (*RewriteCtx, error) {
+func (persister *Persister) startGenerateRDB(newListener Listener, hook func()) (*RewriteCtx, error) {
 	persister.pausingAof.Lock() // pausing aof
 	defer persister.pausingAof.Unlock()
 
@@ -76,7 +77,7 @@ func (persister *Persister) startRewrite2RDB(newListener Listener, hook func()) 
 	fileInfo, _ := os.Stat(persister.aofFilename)
 	filesize := fileInfo.Size()
 	// create tmp file
-	file, err := ioutil.TempFile("", "*.aof")
+	file, err := os.CreateTemp(config.GetTmpDir(), "*.aof")
 	if err != nil {
 		logger.Warn("tmp file create failed")
 		return nil, err
@@ -93,10 +94,12 @@ func (persister *Persister) startRewrite2RDB(newListener Listener, hook func()) 
 	}, nil
 }
 
-func (persister *Persister) rewrite2RDB(ctx *RewriteCtx) error {
+// generateRDB generates rdb file from aof file
+func (persister *Persister) generateRDB(ctx *RewriteCtx) error {
 	// load aof tmpFile
 	tmpHandler := persister.newRewriteHandler()
 	tmpHandler.LoadAof(int(ctx.fileSize))
+
 	encoder := rdb.NewEncoder(ctx.tmpFile).EnableCompress()
 	err := encoder.WriteHeader()
 	if err != nil {
@@ -108,6 +111,12 @@ func (persister *Persister) rewrite2RDB(ctx *RewriteCtx) error {
 		"aof-preamble": "0",
 		"ctime":        strconv.FormatInt(time.Now().Unix(), 10),
 	}
+
+	// change aof preamble
+	if config.Properties.AofUseRdbPreamble {
+		auxMap["aof-preamble"] = "1"
+	}
+
 	for k, v := range auxMap {
 		err := encoder.WriteAux(k, v)
 		if err != nil {

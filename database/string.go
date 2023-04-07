@@ -53,7 +53,6 @@ func execGetEX(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	bytes, err := db.getAsString(key)
 	ttl := unlimitedTTL
-
 	if err != nil {
 		return err
 	}

@@ -2,18 +2,23 @@ package aof
 
 import (
 	"context"
-	"github.com/hdt3213/godis/interface/database"
-	"github.com/hdt3213/godis/lib/logger"
-	"github.com/hdt3213/godis/lib/utils"
-	"github.com/hdt3213/godis/redis/connection"
-	"github.com/hdt3213/godis/redis/parser"
-	"github.com/hdt3213/godis/redis/protocol"
 	"io"
 	"os"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
+
+	rdb "github.com/hdt3213/rdb/core"
+
+	"github.com/hdt3213/godis/config"
+
+	"github.com/hdt3213/godis/interface/database"
+	"github.com/hdt3213/godis/lib/logger"
+	"github.com/hdt3213/godis/lib/utils"
+	"github.com/hdt3213/godis/redis/connection"
+	"github.com/hdt3213/godis/redis/parser"
+	"github.com/hdt3213/godis/redis/protocol"
 )
 
 // CmdLine is alias for [][]byte, represents a command line
@@ -47,14 +52,18 @@ type Listener interface {
 
 // Persister receive msgs from channel and write to AOF file
 type Persister struct {
-	ctx         context.Context
-	cancel      context.CancelFunc
-	db          database.DBEngine
-	tmpDBMaker  func() database.DBEngine
-	aofChan     chan *payload
-	aofFile     *os.File
+	ctx        context.Context
+	cancel     context.CancelFunc
+	db         database.DBEngine
+	tmpDBMaker func() database.DBEngine
+	// aofChan is the channel to receive aof payload(listenCmd will send payload to this channel)
+	aofChan chan *payload
+	// aofFile is the file handler of aof file
+	aofFile *os.File
+	// aofFilename is the path of aof file
 	aofFilename string
-	aofFsync    string
+	// aofFsync is the strategy of fsync
+	aofFsync string
 	// aof goroutine will send msg to main goroutine through this channel when aof tasks finished and ready to shut down
 	aofFinished chan struct{}
 	// pause aof for start/finish aof rewrite progress
@@ -73,6 +82,7 @@ func NewPersister(db database.DBEngine, filename string, load bool, fsync string
 	persister.db = db
 	persister.tmpDBMaker = tmpDBMaker
 	persister.currentDB = 0
+	// load aof file if needed
 	if load {
 		persister.LoadAof(0)
 	}
@@ -84,12 +94,14 @@ func NewPersister(db database.DBEngine, filename string, load bool, fsync string
 	persister.aofChan = make(chan *payload, aofQueueSize)
 	persister.aofFinished = make(chan struct{})
 	persister.listeners = make(map[Listener]struct{})
+	// start aof goroutine to write aof file in background and fsync periodically if needed (see fsyncEverySecond)
 	go func() {
 		persister.listenCmd()
 	}()
 	ctx, cancel := context.WithCancel(context.Background())
 	persister.ctx = ctx
 	persister.cancel = cancel
+	// fsync every second if needed
 	if persister.aofFsync == FsyncEverySec {
 		persister.fsyncEverySecond()
 	}
@@ -109,6 +121,7 @@ func (persister *Persister) SaveCmdLine(dbIndex int, cmdLine CmdLine) {
 	if persister.aofChan == nil {
 		return
 	}
+
 	if persister.aofFsync == FsyncAlways {
 		p := &payload{
 			cmdLine: cmdLine,
@@ -117,10 +130,12 @@ func (persister *Persister) SaveCmdLine(dbIndex int, cmdLine CmdLine) {
 		persister.writeAof(p)
 		return
 	}
+
 	persister.aofChan <- &payload{
 		cmdLine: cmdLine,
 		dbIndex: dbIndex,
 	}
+
 }
 
 // listenCmd listen aof channel and write into file
@@ -165,7 +180,7 @@ func (persister *Persister) writeAof(p *payload) {
 
 // LoadAof read aof file, can only be used before Persister.listenCmd started
 func (persister *Persister) LoadAof(maxBytes int) {
-	// persister.db.Exec may call persister.addAof
+	// persister.db.Exec may call persister.AddAof
 	// delete aofChan to prevent loaded commands back into aofChan
 	aofChan := persister.aofChan
 	persister.aofChan = nil
@@ -183,6 +198,17 @@ func (persister *Persister) LoadAof(maxBytes int) {
 	}
 	defer file.Close()
 
+	// load rdb preamble if needed
+	decoder := rdb.NewDecoder(file)
+	err = persister.db.LoadRDB(decoder)
+	if err != nil {
+		// no rdb preamble
+		file.Seek(0, io.SeekStart)
+	} else {
+		// has rdb preamble
+		_, _ = file.Seek(int64(decoder.GetReadCount())+1, io.SeekStart)
+		maxBytes = maxBytes - decoder.GetReadCount()
+	}
 	var reader io.Reader
 	if maxBytes > 0 {
 		reader = io.LimitReader(file, int64(maxBytes))
@@ -235,6 +261,7 @@ func (persister *Persister) Close() {
 	persister.cancel()
 }
 
+// fsyncEverySecond fsync aof file every second
 func (persister *Persister) fsyncEverySecond() {
 	ticker := time.NewTicker(time.Second)
 	go func() {
@@ -251,4 +278,35 @@ func (persister *Persister) fsyncEverySecond() {
 			}
 		}
 	}()
+}
+
+func (persister *Persister) generateAof(ctx *RewriteCtx) error {
+	// rewrite aof tmpFile
+	tmpFile := ctx.tmpFile
+	// load aof tmpFile
+	tmpAof := persister.newRewriteHandler()
+	tmpAof.LoadAof(int(ctx.fileSize))
+	for i := 0; i < config.Properties.Databases; i++ {
+		// select db
+		data := protocol.MakeMultiBulkReply(utils.ToCmdLine("SELECT", strconv.Itoa(i))).ToBytes()
+		_, err := tmpFile.Write(data)
+		if err != nil {
+			return err
+		}
+		// dump db
+		tmpAof.db.ForEach(i, func(key string, entity *database.DataEntity, expiration *time.Time) bool {
+			cmd := EntityToCmd(key, entity)
+			if cmd != nil {
+				_, _ = tmpFile.Write(cmd.ToBytes())
+			}
+			if expiration != nil {
+				cmd := MakeExpireCmd(key, *expiration)
+				if cmd != nil {
+					_, _ = tmpFile.Write(cmd.ToBytes())
+				}
+			}
+			return true
+		})
+	}
+	return nil
 }

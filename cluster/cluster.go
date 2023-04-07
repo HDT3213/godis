@@ -3,6 +3,11 @@ package cluster
 
 import (
 	"fmt"
+	"runtime/debug"
+	"strings"
+
+	"github.com/hdt3213/rdb/core"
+
 	"github.com/hdt3213/godis/config"
 	database2 "github.com/hdt3213/godis/database"
 	"github.com/hdt3213/godis/datastruct/dict"
@@ -15,8 +20,6 @@ import (
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/client"
 	"github.com/hdt3213/godis/redis/protocol"
-	"runtime/debug"
-	"strings"
 )
 
 type PeerPicker interface {
@@ -51,8 +54,7 @@ var allowFastTransaction = true
 // MakeCluster creates and starts a node of cluster
 func MakeCluster() *Cluster {
 	cluster := &Cluster{
-		self: config.Properties.Self,
-
+		self:            config.Properties.Self,
 		db:              database2.NewStandaloneServer(),
 		transactions:    dict.MakeSimple(),
 		peerPicker:      consistenthash.New(replicas, nil),
@@ -61,6 +63,7 @@ func MakeCluster() *Cluster {
 		idGenerator: idgenerator.MakeGenerator(config.Properties.Self),
 		relayImpl:   defaultRelayImpl,
 	}
+
 	contains := make(map[string]struct{})
 	nodes := make([]string, 0, len(config.Properties.Peers)+1)
 	for _, peer := range config.Properties.Peers {
@@ -177,4 +180,8 @@ func (cluster *Cluster) Exec(c redis.Connection, cmdLine [][]byte) (result redis
 // AfterClientClose does some clean after client close connection
 func (cluster *Cluster) AfterClientClose(c redis.Connection) {
 	cluster.db.AfterClientClose(c)
+}
+
+func (cluster *Cluster) LoadRDB(dec *core.Decoder) error {
+	return cluster.db.LoadRDB(dec)
 }
