@@ -57,7 +57,38 @@ var Properties *ServerProperties
 
 var EachTimeServerInfo *ServerInfo
 
+// RootDir is the root directory of the project
+var RootDir string
+
+// inferRootDir infers the root directory of the project
+func inferRootDir() {
+	pwd, err := os.Getwd()
+	if err != nil {
+		panic(err)
+	}
+
+	var infer func(string) string
+	infer = func(dir string) string {
+		if exists(dir + "/main.go") {
+			return dir
+		}
+
+		// 查看dir的父目录
+		parent := filepath.Dir(dir)
+		return infer(parent)
+	}
+
+	RootDir = infer(pwd)
+}
+
+// exists returns whether the given file or directory exists or not
+func exists(dir string) bool {
+	_, err := os.Stat(dir)
+	return err == nil || os.IsExist(err)
+}
+
 func init() {
+	inferRootDir()
 	// A few stats we don't want to reset: server startup time, and peak mem.
 	EachTimeServerInfo = &ServerInfo{
 		StartUpTime: time.Now(),
@@ -144,4 +175,8 @@ func SetupConfig(configFilename string) {
 		return
 	}
 	Properties.CfPath = configFilePath
+}
+
+func GetDefaultTmpDir()  string {
+	return RootDir + "/tmp"
 }

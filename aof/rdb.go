@@ -13,8 +13,8 @@ import (
 	SortedSet "github.com/hdt3213/godis/datastruct/sortedset"
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/lib/logger"
-	rdb "github.com/hdt3213/godis/lib/rdb/encoder"
-	"github.com/hdt3213/godis/lib/rdb/model"
+	rdb "github.com/hdt3213/rdb/encoder"
+	"github.com/hdt3213/rdb/model"
 )
 
 // todo: forbid concurrent rewrite
@@ -78,7 +78,7 @@ func (persister *Persister) startGenerateRDB(newListener Listener, hook func()) 
 	fileInfo, _ := os.Stat(persister.aofFilename)
 	filesize := fileInfo.Size()
 	// create tmp file
-	file, err := ioutil.TempFile("", "*.aof")
+	file, err := ioutil.TempFile(config.GetDefaultTmpDir(), "*.aof")
 	if err != nil {
 		logger.Warn("tmp file create failed")
 		return nil, err

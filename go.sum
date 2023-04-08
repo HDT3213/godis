@@ -1,2 +1,6 @@
+github.com/emirpasic/gods v1.18.1 h1:FXtiHYKDGKCW2KzwZKx0iC0PQmdlorYgdFG9jPXJ1Bc=
+github.com/emirpasic/gods v1.18.1/go.mod h1:8tpGGwCnJ5H4r6BWwaV6OrWmMoPhUl5jm/FMNAnJvWQ=
+github.com/hdt3213/rdb v1.0.7 h1:dn9nL3mrFKaoyd9IP/XPxpR8/o68+4YeqoLXOQdgr4s=
+github.com/hdt3213/rdb v1.0.7/go.mod h1:dLJXf6wM7ZExH+PuEzbzUubTtkH61ilfAtPSSQgfs4w=
 github.com/shopspring/decimal v1.2.0 h1:abSATXmQEYyShuxI4/vyW3tV1MrKAJzCZ/0zLUXYbsQ=
 github.com/shopspring/decimal v1.2.0/go.mod h1:DKyhrW/HYNuLGql+MJL6WCR6knT2jwCFRcu2hWCYk4o=

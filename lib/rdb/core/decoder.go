@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/hdt3213/godis/lib/rdb/model"
+	"github.com/hdt3213/rdb/model"
 )
 
 // Decoder is an instance of rdb parsing process

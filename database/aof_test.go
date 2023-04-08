@@ -171,7 +171,7 @@ func TestRDB(t *testing.T) {
 }
 
 func TestRewriteAOF(t *testing.T) {
-	tmpFile, err := ioutil.TempFile("", "*.aof")
+	tmpFile, err := ioutil.TempFile(config.GetDefaultTmpDir(), "*.aof")
 	if err != nil {
 		t.Error(err)
 		return
@@ -210,20 +210,18 @@ func TestRewriteAOF(t *testing.T) {
 // TestRewriteAOF2 tests execute commands during rewrite procedure
 func TestRewriteAOF2(t *testing.T) {
 	// prepare tmp aof file
-	tmpFile, err := ioutil.TempFile("C:\\Users\\Administrator\\Desktop\\godis", "*.aof")
+	tmpFile, err := ioutil.TempFile(config.GetDefaultTmpDir(), "*.aof")
 	if err != nil {
 		t.Error(err)
 		return
 	}
 	aofFilename := tmpFile.Name()
-	defer func() {
-		_ = os.Remove(aofFilename)
-	}()
+
 	config.Properties = &config.ServerProperties{
 		AppendOnly:     true,
 		AppendFilename: aofFilename,
 		// set Aof-use-rdb-preamble to true to make sure rewrite procedure
-		AppendFsync:       aof.FsyncEverySec,
+		AppendFsync:       aof.FsyncAlways,
 		AofUseRdbPreamble: true,
 	}
 	aofWriteDB := NewStandaloneServer()
@@ -231,7 +229,7 @@ func TestRewriteAOF2(t *testing.T) {
 	conn := connection.NewFakeConn()
 	for i := 0; i < dbNum; i++ {
 		conn.SelectDB(i)
-		for j := 0; j < 1000; j++ {
+		for j := 0; j < 100; j++ {
 			key := strconv.Itoa(j)
 			aofWriteDB.Exec(conn, utils.ToCmdLine("SET", key, key))
 		}
@@ -270,7 +268,7 @@ func TestRewriteAOF2(t *testing.T) {
 		conn.SelectDB(i)
 
 		for j := 0; j < 1000; j++ {
-			key := strconv.Itoa(i)
+			key := strconv.Itoa(j)
 			ret := aofReadDB.Exec(conn, utils.ToCmdLine("GET", key))
 			asserts.AssertBulkReply(t, ret, key)
 

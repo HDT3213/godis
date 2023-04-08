@@ -9,7 +9,7 @@ import (
 	"sync"
 	"time"
 
-	rdb "github.com/hdt3213/godis/lib/rdb/core"
+	rdb "github.com/hdt3213/rdb/core"
 
 	"github.com/hdt3213/godis/config"
 
@@ -197,15 +197,14 @@ func (persister *Persister) LoadAof(maxBytes int) {
 		return
 	}
 	defer file.Close()
+
 	// load rdb preamble if needed
-	if config.Properties.AofUseRdbPreamble {
-		decoder := rdb.NewDecoder(file)
-		err = persister.db.LoadRDB(decoder)
-		if err != nil {
-			file.Seek(0, 0)
-		} else {
-			maxBytes -= decoder.ReadCount
-		}
+	decoder := rdb.NewDecoder(file)
+	err = persister.db.LoadRDB(decoder)
+	if err != nil {
+		file.Seek(0, io.SeekStart)
+	} else {
+		maxBytes = maxBytes - decoder.GetReadCount()
 	}
 	// load aof
 	var reader io.Reader
@@ -234,6 +233,8 @@ func (persister *Persister) LoadAof(maxBytes int) {
 			continue
 		}
 		ret := persister.db.Exec(fakeConn, r.Args)
+		// debug only
+		// logger.Info(string(r.ToBytes()))
 		if protocol.IsErrorReply(ret) {
 			logger.Error("exec err", string(ret.ToBytes()))
 		}
@@ -260,7 +261,7 @@ func (persister *Persister) Close() {
 	persister.cancel()
 }
 
-// fsyncEverySecond fsync aof file every second0
+// fsyncEverySecond fsync aof file every second
 func (persister *Persister) fsyncEverySecond() {
 	ticker := time.NewTicker(time.Second)
 	go func() {

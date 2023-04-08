@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"github.com/hdt3213/godis/lib/rdb/model"
+	"github.com/hdt3213/rdb/model"
 )
 
 func TestZSetEncoding(t *testing.T) {

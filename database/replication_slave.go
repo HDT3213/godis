@@ -18,7 +18,7 @@ import (
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
-	rdb "github.com/hdt3213/godis/lib/rdb/parser"
+	rdb "github.com/hdt3213/rdb/parser"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/parser"

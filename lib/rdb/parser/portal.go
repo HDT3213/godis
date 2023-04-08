@@ -2,8 +2,8 @@
 package parser
 
 import (
-	"github.com/hdt3213/godis/lib/rdb/core"
-	"github.com/hdt3213/godis/lib/rdb/model"
+	"github.com/hdt3213/rdb/core"
+	"github.com/hdt3213/rdb/model"
 )
 
 const (

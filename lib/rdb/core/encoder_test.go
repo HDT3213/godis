@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hdt3213/godis/lib/rdb/model"
+	"github.com/hdt3213/rdb/model"
 )
 
 func TestEncode(t *testing.T) {

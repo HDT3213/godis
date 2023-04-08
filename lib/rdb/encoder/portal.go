@@ -1,6 +1,6 @@
 package encoder
 
-import "github.com/hdt3213/godis/lib/rdb/core"
+import "github.com/hdt3213/rdb/core"
 
 // Encoder is used to generate RDB file
 type Encoder = core.Encoder

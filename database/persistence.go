@@ -11,8 +11,8 @@ import (
 	List "github.com/hdt3213/godis/datastruct/list"
 	SortedSet "github.com/hdt3213/godis/datastruct/sortedset"
 	"github.com/hdt3213/godis/interface/database"
-	"github.com/hdt3213/godis/lib/rdb/core"
-	rdb "github.com/hdt3213/godis/lib/rdb/parser"
+	"github.com/hdt3213/rdb/core"
+	rdb "github.com/hdt3213/rdb/parser"
 )
 
 // loadRdbFile loads rdb file from disk

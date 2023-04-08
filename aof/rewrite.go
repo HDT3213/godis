@@ -46,10 +46,10 @@ func (persister *Persister) Rewrite() error {
 func (persister *Persister) DoRewrite(ctx *RewriteCtx) (err error) {
 	// start rewrite
 	if !config.Properties.AofUseRdbPreamble {
-		logger.Warn("generate aof preamble")
+		logger.Info("generate aof preamble")
 		err = persister.generateAof(ctx)
 	} else {
-		logger.Warn("generate rdb preamble")
+		logger.Info("generate rdb preamble")
 		err = persister.generateRDB(ctx)
 	}
 	return err
@@ -72,7 +72,7 @@ func (persister *Persister) StartRewrite() (*RewriteCtx, error) {
 	filesize := fileInfo.Size()
 
 	// create tmp file
-	file, err := ioutil.TempFile("./", "*.aof")
+	file, err := ioutil.TempFile(config.GetDefaultTmpDir(), "*.aof")
 	if err != nil {
 		logger.Warn("tmp file create failed")
 		return nil, err
@@ -117,13 +117,12 @@ func (persister *Persister) FinishRewrite(ctx *RewriteCtx) {
 		return
 	}
 	tmpFileName := tmpFile.Name()
+	_ = src.Close()
 	_ = tmpFile.Close()
 	// replace current aof file by tmp file
 	_ = persister.aofFile.Close()
-	// remove old aof file
-	if err = os.Remove(persister.aofFilename); err != nil {
-		logger.Warn(err)
-	}
+	// debug only
+	// logger.Info(tmpFileName, persister.aofFilename)
 	if err = os.Rename(tmpFileName, persister.aofFilename); err != nil {
 		logger.Warn(err)
 	}

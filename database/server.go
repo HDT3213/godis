@@ -19,7 +19,6 @@ import (
 )
 
 var godisVersion = "1.2.8" // do not modify
-var GlobalServer *Server
 
 // Server is a redis-server with full capabilities including multiple database, rdb loader, replication
 type Server struct {

@@ -6,7 +6,7 @@ import (
 	"runtime/debug"
 	"strings"
 
-	"github.com/hdt3213/godis/lib/rdb/core"
+	"github.com/hdt3213/rdb/core"
 
 	"github.com/hdt3213/godis/config"
 	database2 "github.com/hdt3213/godis/database"

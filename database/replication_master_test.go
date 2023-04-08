@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/hdt3213/godis/config"
-	rdb "github.com/hdt3213/godis/lib/rdb/parser"
+	rdb "github.com/hdt3213/rdb/parser"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/parser"

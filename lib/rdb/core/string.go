@@ -7,7 +7,7 @@ import (
 	"math"
 	"strconv"
 
-	"github.com/hdt3213/godis/lib/rdb/lzf"
+	"github.com/hdt3213/rdb/lzf"
 )
 
 const (
