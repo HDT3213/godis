@@ -802,3 +802,13 @@ func TestBitPos(t *testing.T) {
 	actual = testDB.Exec(nil, utils.ToCmdLine("BitPos", key, "-1"))
 	asserts.AssertErrReply(t, actual, "ERR bit is not an integer or out of range")
 }
+
+func TestRandomkey(t *testing.T) {
+	testDB.Flush()
+	for i := 0; i < 10; i++ {
+		key := utils.RandString(10)
+		testDB.Exec(nil, utils.ToCmdLine2("SET", key, key))
+	}
+	actual := testDB.Exec(nil, utils.ToCmdLine("Randomkey"))
+	asserts.AssertNotError(t, actual)
+}

@@ -15,6 +15,10 @@ func info(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 	return cluster.db.Exec(c, cmdLine)
 }
 
+func randomkey(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
+	return cluster.db.Exec(c, cmdLine)
+}
+
 /*----- utils -------*/
 
 func makeArgs(cmd string, args ...string) [][]byte {

@@ -827,6 +827,16 @@ func execBitPos(db *DB, args [][]byte) redis.Reply {
 	return protocol.MakeIntReply(offset)
 }
 
+// GetRandomKey Randomly return (do not delete) a key from the godis
+func getRandomKey(db *DB, args [][]byte) redis.Reply {
+	k := db.data.RandomKeys(1)
+	if len(k) == 0 {
+		return &protocol.NullBulkReply{}
+	}
+	var key []byte
+	return protocol.MakeBulkReply(strconv.AppendQuote(key, k[0]))
+}
+
 func init() {
 	RegisterCommand("Set", execSet, writeFirstKey, rollbackFirstKey, -3, flagWrite)
 	RegisterCommand("SetNx", execSetNX, writeFirstKey, rollbackFirstKey, 3, flagWrite)
@@ -852,5 +862,6 @@ func init() {
 	RegisterCommand("GetBit", execGetBit, readFirstKey, nil, 3, flagReadOnly)
 	RegisterCommand("BitCount", execBitCount, readFirstKey, nil, -2, flagReadOnly)
 	RegisterCommand("BitPos", execBitPos, readFirstKey, nil, -3, flagReadOnly)
+	RegisterCommand("Randomkey", getRandomKey, readAllKeys, nil, 1, flagReadOnly)
 
 }
