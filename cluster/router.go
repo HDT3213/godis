@@ -46,6 +46,7 @@ func makeRouter() map[string]CmdFunc {
 	routerMap["incrbyfloat"] = defaultFunc
 	routerMap["decr"] = defaultFunc
 	routerMap["decrby"] = defaultFunc
+	routerMap["randomkey"] = randomkey
 
 	routerMap["lpush"] = defaultFunc
 	routerMap["lpushx"] = defaultFunc
