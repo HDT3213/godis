@@ -9,6 +9,7 @@ import (
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/timewheel"
 	"github.com/hdt3213/godis/redis/protocol"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -99,6 +100,11 @@ func (db *DB) Exec(c redis.Connection, cmdLine [][]byte) redis.Reply {
 			return protocol.MakeArgNumErrReply(cmdName)
 		}
 		return Watch(db, c, cmdLine[1:])
+	} else if cmdName == "randomkey" {
+		if len(cmdLine) != 1 {
+			return protocol.MakeArgNumErrReply(cmdName)
+		}
+		return db.GetRandomKey()
 	}
 	if c != nil && c.InMultiState() {
 		return EnqueueCmd(c, cmdLine)
@@ -299,4 +305,14 @@ func (db *DB) ForEach(cb func(key string, data *database.DataEntity, expiration 
 		}
 		return cb(key, entity, expiration)
 	})
+}
+
+// GetRandomKey Randomly return (do not delete) a key from the godis
+func (db *DB) GetRandomKey() redis.Reply {
+	k := db.data.RandomKeys(1)
+	if len(k) == 0 {
+		return &protocol.NullBulkReply{}
+	}
+	var key []byte
+	return protocol.MakeBulkReply(strconv.AppendQuote(key, k[0]))
 }

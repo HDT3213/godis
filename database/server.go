@@ -362,3 +362,14 @@ func (server *Server) startReplCron() {
 		}
 	}(server)
 }
+
+func (server *Server) GetRandomKey(conn redis.Connection) redis.Reply {
+	dbIndex := conn.GetDBIndex()
+	db := server.mustSelectDB(dbIndex)
+	k := db.data.RandomKeys(1)
+	if len(k) == 0 {
+		return &protocol.NullBulkReply{}
+	}
+	var key []byte
+	return protocol.MakeBulkReply(strconv.AppendQuote(key, k[0]))
+}

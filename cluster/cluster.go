@@ -135,6 +135,9 @@ func (cluster *Cluster) Exec(c redis.Connection, cmdLine [][]byte) (result redis
 	if cmdName == "info" {
 		return database2.Info(c, cmdLine)
 	}
+	if cmdName == "randomkey" {
+		return cluster.db.GetRandomKey(c)
+	}
 	if cmdName == "auth" {
 		return database2.Auth(c, cmdLine[1:])
 	}
