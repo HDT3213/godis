@@ -36,6 +36,7 @@
     - incrbyfloat
     - decr
     - decrby
+    - randomkey
 - List
     - lpush
     - lpushx
