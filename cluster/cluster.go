@@ -133,7 +133,7 @@ func (cluster *Cluster) Exec(c redis.Connection, cmdLine [][]byte) (result redis
 	}()
 	cmdName := strings.ToLower(string(cmdLine[0]))
 	if cmdName == "info" {
-		return database2.Info(c, cmdLine)
+		return database2.Info(c, cmdLine, cluster.db)
 	}
 	if cmdName == "auth" {
 		return database2.Auth(c, cmdLine[1:])
@@ -177,4 +177,8 @@ func (cluster *Cluster) Exec(c redis.Connection, cmdLine [][]byte) (result redis
 // AfterClientClose does some clean after client close connection
 func (cluster *Cluster) AfterClientClose(c redis.Connection) {
 	cluster.db.AfterClientClose(c)
+}
+
+func (cluster *Cluster) GetClusterDBSize(dbIndex int) (int, int) {
+	return cluster.db.GetDBSize(dbIndex)
 }

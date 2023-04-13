@@ -24,12 +24,12 @@ func Ping(c redis.Connection, args [][]byte) redis.Reply {
 }
 
 // Info the information of the godis server returned by the INFO command
-func Info(c redis.Connection, args [][]byte) redis.Reply {
+func Info(c redis.Connection, args [][]byte, server interface{}) redis.Reply {
 	if len(args) == 1 {
-		infoCommandList := [...]string{"server", "client", "cluster"}
+		infoCommandList := [...]string{"server", "client", "cluster", "keyspace"}
 		var allSection []byte
 		for _, s := range infoCommandList {
-			allSection = append(allSection, GenGodisInfoString(s)...)
+			allSection = append(allSection, GenGodisInfoString(s, c, server)...)
 		}
 
 		return protocol.MakeBulkReply(allSection)
@@ -37,17 +37,21 @@ func Info(c redis.Connection, args [][]byte) redis.Reply {
 		section := strings.ToLower(string(args[1]))
 		switch section {
 		case "server":
-			reply := GenGodisInfoString("server")
+			reply := GenGodisInfoString("server", c, server)
 			return protocol.MakeBulkReply(reply)
 		case "client":
-			return protocol.MakeBulkReply(GenGodisInfoString("client"))
+			return protocol.MakeBulkReply(GenGodisInfoString("client", c, server))
 		case "cluster":
-			return protocol.MakeBulkReply(GenGodisInfoString("cluster"))
-		default:
-			return protocol.MakeNullBulkReply()
+			return protocol.MakeBulkReply(GenGodisInfoString("cluster", c, server))
+		case "keyspace":
+			return protocol.MakeBulkReply(GenGodisInfoString("keyspace", c, server))
+
 		}
+	} else {
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'info' command")
 	}
-	return protocol.MakeErrReply("ERR wrong number of arguments for 'info' command")
+
+	return &protocol.NullBulkReply{}
 }
 
 // Auth validate client's password
@@ -73,8 +77,8 @@ func isAuthenticated(c redis.Connection) bool {
 	return c.GetPassword() == config.Properties.RequirePass
 }
 
-func GenGodisInfoString(section string) []byte {
-	startUpTimeFromNow := getGodisRunningTime()
+func GenGodisInfoString(section string, c redis.Connection, server interface{}) []byte {
+	startUpTimeFromNow := getGodisRuninngTime()
 	switch section {
 	case "server":
 		s := fmt.Sprintf("# Server\r\n"+
@@ -139,6 +143,21 @@ func GenGodisInfoString(section string) []byte {
 			)
 			return []byte(s)
 		}
+	case "keyspace":
+		dbCount := config.Properties.Databases
+		var serv []byte
+		if ser, ok := server.(*Server); ok {
+			for i := 0; i < dbCount; i++ {
+				keys, expiresKeys := ser.GetDBSize(i)
+				if keys != 0 {
+					ttlSampleAverage := getRandomKeyCountingTTL(ser, i, keys, 20)
+					serv = append(serv, getDbSize(i, keys, expiresKeys, ttlSampleAverage)...)
+				}
+			}
+			prefix := []byte("# Keyspace\r\n")
+			keyspaceInfo := append(prefix, serv...)
+			return keyspaceInfo
+		}
 	}
 
 	return []byte("")
@@ -153,7 +172,46 @@ func getGodisRunningMode() string {
 	}
 }
 
-// getGodisRunningTime return the running time of godis
-func getGodisRunningTime() time.Duration {
+// getGodisRuninngTime return the running time of godis
+func getGodisRuninngTime() time.Duration {
 	return time.Since(config.EachTimeServerInfo.StartUpTime) / time.Second
+}
+
+func getDbSize(dbIndex, keys, expiresKeys int, ttl int64) []byte {
+	s := fmt.Sprintf("db%d:keys=%d,expires=%d,avg_ttl=%d\r\n",
+		dbIndex, keys, expiresKeys, ttl)
+	return []byte(s)
+}
+
+// getRandomKeyCountingTTL Calculate the average expiration time of keys
+// containing expiration time by randomly sampling all keys
+func getRandomKeyCountingTTL(s *Server, dbIndex, keys, sample int) int64 {
+	var ttlCount int64
+	// if there is no data in the database, avg_ttl is 0
+	if keys == 0 {
+		return 0
+	}
+	if sample == 0 && keys > activeExpireCycleLookupsPreLoop {
+		sample = activeExpireCycleLookupsPreLoop
+	} else {
+		sample = keys
+	}
+	db, err := s.selectDB(dbIndex)
+	if err != nil {
+		return 0
+	}
+	key := db.data.RandomKeys(sample)
+	for _, k := range key {
+		t := time.Now()
+		rawExpireTime, ok := db.ttlMap.Get(k)
+		if !ok {
+			continue
+		}
+		expireTime, _ := rawExpireTime.(time.Time)
+		// if the key has already reached its expiration time during calculation, ignore it
+		if expireTime.Sub(t).Microseconds() > 0 {
+			ttlCount += expireTime.Sub(t).Microseconds()
+		}
+	}
+	return ttlCount / int64(sample)
 }

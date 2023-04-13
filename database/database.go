@@ -14,9 +14,11 @@ import (
 )
 
 const (
-	dataDictSize = 1 << 16
-	ttlDictSize  = 1 << 10
-	lockerSize   = 1024
+	dataDictSize                    = 1 << 16
+	ttlDictSize                     = 1 << 10
+	lockerSize                      = 1024
+	activeExpireCycleLookupsPreLoop = 20 // Number of samples used to calculate the average expiration time for expired keys
+
 )
 
 // DB stores data and execute user's commands

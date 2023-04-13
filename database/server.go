@@ -94,7 +94,7 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 	}
 	// info
 	if cmdName == "info" {
-		return Info(c, cmdLine)
+		return Info(c, cmdLine, server)
 	}
 	if !isAuthenticated(c) {
 		return protocol.MakeErrReply("NOAUTH Authentication required")
