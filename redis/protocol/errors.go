@@ -81,6 +81,7 @@ func (r *ProtocolErrReply) ToBytes() []byte {
 	return []byte("-ERR Protocol error: '" + r.Msg + "'\r\n")
 }
 
+//update here "ERR Protocol error: '" + r.Msg -> "ERR Protocol error '" + r.Msg + "' command"
 func (r *ProtocolErrReply) Error() string {
-	return "ERR Protocol error: '" + r.Msg
+	return "ERR Protocol error '" + r.Msg + "' command"
 }
