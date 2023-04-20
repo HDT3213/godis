@@ -524,3 +524,18 @@ func init() {
 	RegisterCommand("LSet", execLSet, writeFirstKey, undoLSet, 4, flagWrite)
 	RegisterCommand("LRange", execLRange, readFirstKey, nil, 4, flagReadOnly)
 }
+
+func init() {
+	RegisterGodisCommand("LPush", -3, []string{Write, Denyoom, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("LPushX", -3, []string{Write, Denyoom, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("RPush", -3, []string{Write, Denyoom, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("RPushX", -3, []string{Write, Denyoom, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("LPop", 2, []string{Write, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("RPop", 2, []string{Write, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("RPopLPush", 3, []string{Write, Denyoom}, 1, 1, 1, prepareRPopLPush)
+	RegisterGodisCommand("LRem", 4, []string{Write}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("LLen", 2, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("LIndex", 3, []string{Readonly}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("LSet", 4, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("LRange", 4, []string{Readonly}, 1, 1, 1, readFirstKey)
+}

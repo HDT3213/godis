@@ -493,3 +493,19 @@ func init() {
 	RegisterCommand("SDiffStore", execSDiffStore, prepareSetCalculateStore, rollbackFirstKey, -3, flagWrite)
 	RegisterCommand("SRandMember", execSRandMember, readFirstKey, nil, -2, flagReadOnly)
 }
+
+func init() {
+	RegisterGodisCommand("SAdd", -3, []string{Write, Denyoom, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("SIsMember", 3, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("SRem", -3, []string{Write, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("SPop", -2, []string{Write, Random, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("SCard", 2, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("SMembers", 2, []string{Readonly, SortForScript}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("SInter", -2, []string{Readonly, SortForScript}, 1, -1, 1, prepareSetCalculate)
+	RegisterGodisCommand("SInterStore", -3, []string{Write, Denyoom}, 1, -1, 1, prepareSetCalculateStore)
+	RegisterGodisCommand("SUnion", -2, []string{Readonly, SortForScript}, 1, -1, 1, prepareSetCalculate)
+	RegisterGodisCommand("SUnionStore", -3, []string{Write, Denyoom}, 1, -1, 1, prepareSetCalculateStore)
+	RegisterGodisCommand("SDiff", -2, []string{Readonly, SortForScript}, 1, 1, 1, prepareSetCalculate)
+	RegisterGodisCommand("SDiffStore", -3, []string{Write, Denyoom}, 1, 1, 1, prepareSetCalculateStore)
+	RegisterGodisCommand("SRandMember", -2, []string{Readonly, Random}, 1, 1, 1, readFirstKey)
+}
