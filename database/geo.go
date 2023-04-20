@@ -269,3 +269,13 @@ func init() {
 	RegisterCommand("GeoRadius", execGeoRadius, readFirstKey, nil, -6, flagReadOnly)
 	RegisterCommand("GeoRadiusByMember", execGeoRadiusByMember, readFirstKey, nil, -5, flagReadOnly)
 }
+
+func init() {
+	RegisterGodisCommand("GeoAdd", -5, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("GeoPos", -2, []string{Readonly}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("GeoDist", -4, []string{Readonly}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("GeoHash", -2, []string{Readonly}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("GeoRadius", -6, []string{Write, Movablekeys}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("GeoRadiusByMember", -5, []string{Write, Movablekeys}, 1, 1, 1, readFirstKey)
+
+}

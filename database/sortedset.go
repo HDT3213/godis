@@ -638,3 +638,21 @@ func init() {
 	RegisterCommand("ZRemRangeByScore", execZRemRangeByScore, writeFirstKey, rollbackFirstKey, 4, flagWrite)
 	RegisterCommand("ZRemRangeByRank", execZRemRangeByRank, writeFirstKey, rollbackFirstKey, 4, flagWrite)
 }
+
+func init() {
+	RegisterGodisCommand("ZAdd", -4, []string{Write, Denyoom, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("ZScore", 3, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("ZIncrBy", 4, []string{Write, Denyoom, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("ZRank", 3, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("ZCount", 4, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("ZRevRank", 3, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("ZCard", 2, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("ZRange", -4, []string{Readonly}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("ZRangeByScore", -4, []string{Readonly}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("ZRevRange", -4, []string{Readonly}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("ZRevRangeByScore", -4, []string{Readonly}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("ZPopMin", -2, []string{Write, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("ZRem", -3, []string{Write, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("ZRemRangeByScore", 4, []string{Write}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("ZRemRangeByRank", 4, []string{Write}, 1, 1, 1, writeFirstKey)
+}
