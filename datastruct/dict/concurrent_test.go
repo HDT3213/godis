@@ -230,6 +230,7 @@ func TestConcurrentRemove(t *testing.T) {
 	}
 }
 
+//change t.Error remove->forEach
 func TestConcurrentForEach(t *testing.T) {
 	d := MakeConcurrent(0)
 	size := 100
@@ -243,13 +244,13 @@ func TestConcurrentForEach(t *testing.T) {
 		intVal, _ := value.(int)
 		expectedKey := "k" + strconv.Itoa(intVal)
 		if key != expectedKey {
-			t.Error("remove test failed: expected " + expectedKey + ", actual: " + key)
+			t.Error("forEach test failed: expected " + expectedKey + ", actual: " + key)
 		}
 		i++
 		return true
 	})
 	if i != size {
-		t.Error("remove test failed: expected " + strconv.Itoa(size) + ", actual: " + strconv.Itoa(i))
+		t.Error("forEach test failed: expected " + strconv.Itoa(size) + ", actual: " + strconv.Itoa(i))
 	}
 }
 
