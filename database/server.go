@@ -129,9 +129,15 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 	} else if cmdName == "unsubscribe" {
 		return pubsub.UnSubscribe(server.hub, c, cmdLine[1:])
 	} else if cmdName == "bgrewriteaof" {
+		if !config.Properties.AppendOnly {
+			return protocol.MakeErrReply("AppendOnly is false, you can't rewrite aof file")
+		}
 		// aof.go imports router.go, router.go cannot import BGRewriteAOF from aof.go
 		return BGRewriteAOF(server, cmdLine[1:])
 	} else if cmdName == "rewriteaof" {
+		if !config.Properties.AppendOnly {
+			return protocol.MakeErrReply("AppendOnly is false, you can't rewrite aof file")
+		}
 		return RewriteAOF(server, cmdLine[1:])
 	} else if cmdName == "flushall" {
 		return server.flushAll()
