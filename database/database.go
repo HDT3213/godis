@@ -2,9 +2,12 @@
 package database
 
 import (
+	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/datastruct/dict"
 	"github.com/hdt3213/godis/datastruct/lock"
+	"github.com/hdt3213/godis/eviction"
 	"github.com/hdt3213/godis/interface/database"
+	eviction2 "github.com/hdt3213/godis/interface/eviction"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/timewheel"
@@ -28,6 +31,9 @@ type DB struct {
 	ttlMap dict.Dict
 	// key -> version(uint32)
 	versionMap dict.Dict
+	// key -> eviction(uint32)
+	evictionMap    dict.Dict
+	evictionPolicy eviction2.MaxmemoryPolicy
 
 	// dict.Dict will ensure concurrent-safety of its method
 	// use this mutex for complicated command only, eg. rpush, incr ...
@@ -53,11 +59,13 @@ type UndoFunc func(db *DB, args [][]byte) []CmdLine
 // makeDB create DB instance
 func makeDB() *DB {
 	db := &DB{
-		data:       dict.MakeConcurrent(dataDictSize),
-		ttlMap:     dict.MakeConcurrent(ttlDictSize),
-		versionMap: dict.MakeConcurrent(dataDictSize),
-		locker:     lock.Make(lockerSize),
-		addAof:     func(line CmdLine) {},
+		data:           dict.MakeConcurrent(dataDictSize),
+		ttlMap:         dict.MakeConcurrent(ttlDictSize),
+		versionMap:     dict.MakeConcurrent(dataDictSize),
+		evictionMap:    dict.MakeConcurrent(dataDictSize),
+		evictionPolicy: makeEvictionPolicy(),
+		locker:         lock.Make(lockerSize),
+		addAof:         func(line CmdLine) {},
 	}
 	return db
 }
@@ -66,11 +74,13 @@ func makeDB() *DB {
 // It is not concurrent safe
 func makeBasicDB() *DB {
 	db := &DB{
-		data:       dict.MakeSimple(),
-		ttlMap:     dict.MakeSimple(),
-		versionMap: dict.MakeSimple(),
-		locker:     lock.Make(1),
-		addAof:     func(line CmdLine) {},
+		data:           dict.MakeSimple(),
+		ttlMap:         dict.MakeSimple(),
+		versionMap:     dict.MakeSimple(),
+		evictionMap:    dict.MakeSimple(),
+		evictionPolicy: makeEvictionPolicy(),
+		locker:         lock.Make(1),
+		addAof:         func(line CmdLine) {},
 	}
 	return db
 }
@@ -121,6 +131,8 @@ func (db *DB) execNormalCommand(cmdLine [][]byte) redis.Reply {
 	write, read := prepare(cmdLine[1:])
 	db.addVersion(write...)
 	db.RWLocks(write, read)
+	db.MakeEviction(write)
+	db.UpdateMark(read)
 	defer db.RWUnLocks(write, read)
 	fun := cmd.executor
 	return fun(db, cmdLine[1:])
@@ -182,6 +194,7 @@ func (db *DB) PutIfAbsent(key string, entity *database.DataEntity) int {
 func (db *DB) Remove(key string) {
 	db.data.Remove(key)
 	db.ttlMap.Remove(key)
+	db.evictionMap.Remove(key)
 	taskKey := genExpireTask(key)
 	timewheel.Cancel(taskKey)
 }
@@ -299,4 +312,89 @@ func (db *DB) ForEach(cb func(key string, data *database.DataEntity, expiration 
 		}
 		return cb(key, entity, expiration)
 	})
+}
+
+//eviction
+func (db *DB) Eviction() {
+	keys := db.RandomDistinctKeysForEviction(config.Properties.MaxmemorySamples)
+
+	marks := make([]eviction2.KeyMark, config.Properties.MaxmemorySamples)
+	for i, key := range keys {
+		mark, _ := db.evictionMap.Get(key)
+		marks[i] = eviction2.KeyMark{
+			Key:  key,
+			Mark: mark.(int32),
+		}
+	}
+	key := db.evictionPolicy.Eviction(marks)
+	db.Remove(key)
+}
+
+//MakeEviction make a new mark about a key
+func (db *DB) MakeEviction(keys []string) {
+	if db.evictionPolicy == nil {
+		return
+	}
+	mark := db.evictionPolicy.MakeMark()
+	for _, key := range keys {
+		db.evictionMap.Put(key, mark)
+	}
+}
+
+//UpdateMark update mark about eviction
+func (db *DB) UpdateMark(keys []string) {
+	if db.evictionPolicy == nil {
+		return
+	}
+	for _, key := range keys {
+		mark, exists := db.evictionMap.Get(key)
+		if !exists {
+			continue
+		}
+		l := mark.(int32)
+		updateMark := db.evictionPolicy.UpdateMark(l)
+		db.evictionMap.Put(key, updateMark)
+	}
+}
+
+func makeEvictionPolicy() eviction2.MaxmemoryPolicy {
+	policy := config.Properties.MaxmemoryPolicy
+	if policy == "volatile-lru" {
+		return &eviction.LRUPolicy{
+			AllKeys: false,
+		}
+	} else if policy == "volatile-lfu" {
+		return &eviction.LRUPolicy{}
+	} else if policy == "allkeys-lru" {
+		return &eviction.LRUPolicy{
+			AllKeys: true,
+		}
+	} else if policy == "allkeys-lfu" {
+		return &eviction.LRUPolicy{
+			AllKeys: true,
+		}
+	}
+	return nil
+}
+
+//RandomDistinctKeysForEviction random get keys for eviction
+func (db *DB) RandomDistinctKeysForEviction(limit int) []string {
+	if db.evictionPolicy.IsAllKeys() == false {
+		keys := make([]string, limit)
+		i := 0
+		db.data.ForEach(func(key string, val interface{}) bool {
+			_, exists := db.ttlMap.Get(key)
+			if !exists {
+				return true
+			}
+			keys[i] = key
+			i++
+			if i < limit {
+				return true
+			}
+			return false
+		})
+		return keys
+	}
+	return db.data.RandomDistinctKeys(limit)
 }
