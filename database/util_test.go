@@ -7,10 +7,12 @@ import (
 
 func makeTestDB() *DB {
 	return &DB{
-		data:       dict.MakeConcurrent(dataDictSize),
-		versionMap: dict.MakeConcurrent(dataDictSize),
-		ttlMap:     dict.MakeConcurrent(ttlDictSize),
-		locker:     lock.Make(lockerSize),
-		addAof:     func(line CmdLine) {},
+		data:           dict.MakeConcurrent(dataDictSize),
+		versionMap:     dict.MakeConcurrent(dataDictSize),
+		ttlMap:         dict.MakeConcurrent(ttlDictSize),
+		evictionMap:    dict.MakeConcurrent(ttlDictSize),
+		evictionPolicy: makeEvictionPolicy(),
+		locker:         lock.Make(lockerSize),
+		addAof:         func(line CmdLine) {},
 	}
 }

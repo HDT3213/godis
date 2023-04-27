@@ -62,7 +62,7 @@ func makeDB() *DB {
 		data:           dict.MakeConcurrent(dataDictSize),
 		ttlMap:         dict.MakeConcurrent(ttlDictSize),
 		versionMap:     dict.MakeConcurrent(dataDictSize),
-		evictionMap:    dict.MakeConcurrent(dataDictSize),
+		evictionMap:    dict.MakeConcurrent(ttlDictSize),
 		evictionPolicy: makeEvictionPolicy(),
 		locker:         lock.Make(lockerSize),
 		addAof:         func(line CmdLine) {},
