@@ -53,7 +53,6 @@ func execGetEX(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	bytes, err := db.getAsString(key)
 	ttl := unlimitedTTL
-
 	if err != nil {
 		return err
 	}
@@ -863,5 +862,34 @@ func init() {
 	RegisterCommand("BitCount", execBitCount, readFirstKey, nil, -2, flagReadOnly)
 	RegisterCommand("BitPos", execBitPos, readFirstKey, nil, -3, flagReadOnly)
 	RegisterCommand("Randomkey", getRandomKey, readAllKeys, nil, 1, flagReadOnly)
+
+}
+
+func init() {
+	RegisterGodisCommand("Set", -3, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("SetNx", 3, []string{Write, Denyoom, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("SetEX", 4, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("PSetEX", 4, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("MSet", -3, []string{Write, Denyoom}, 1, -1, 2, prepareMSet)
+	RegisterGodisCommand("MGet", -2, []string{Readonly, Fast}, 1, 1, 1, prepareMSet)
+	RegisterGodisCommand("MSetNX", -3, []string{Write, Denyoom}, 1, 1, 1, prepareMSet)
+	RegisterGodisCommand("Get", 2, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("GetEX", -2, []string{Readonly, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("GetSet", 3, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("GetDel", 2, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("Incr", 2, []string{Write, Denyoom, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("IncrBy", 3, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("IncrByFloat", 3, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("Decr", 2, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("DecrBy", 3, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("StrLen", 2, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("Append", 3, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("SetRange", 4, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("GetRange", 4, []string{Readonly}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("SetBit", 4, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("GetBit", 3, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("BitCount", -2, []string{Readonly}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("BitPos", -3, []string{Readonly}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("Randomkey", 1, []string{Readonly, Random}, 1, 1, 1, readAllKeys)
 
 }

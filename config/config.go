@@ -2,7 +2,6 @@ package config
 
 import (
 	"bufio"
-	"github.com/hdt3213/godis/lib/utils"
 	"io"
 	"os"
 	"path/filepath"
@@ -10,6 +9,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/hdt3213/godis/lib/utils"
 
 	"github.com/hdt3213/godis/lib/logger"
 )
@@ -25,9 +26,11 @@ type ServerProperties struct {
 	RunID             string `cfg:"runid"` // runID always different at every exec.
 	Bind              string `cfg:"bind"`
 	Port              int    `cfg:"port"`
+	Dir               string `cfg:"dir"`
 	AppendOnly        bool   `cfg:"appendonly"`
 	AppendFilename    string `cfg:"appendfilename"`
 	AppendFsync       string `cfg:"appendfsync"`
+	AofUseRdbPreamble bool   `cfg:"aof-use-rdb-preamble"`
 	MaxClients        int    `cfg:"maxclients"`
 	RequirePass       string `cfg:"requirepass"`
 	Databases         int    `cfg:"databases"`
@@ -52,7 +55,6 @@ type ServerInfo struct {
 
 // Properties holds global config properties
 var Properties *ServerProperties
-
 var EachTimeServerInfo *ServerInfo
 
 func init() {
@@ -142,4 +144,11 @@ func SetupConfig(configFilename string) {
 		return
 	}
 	Properties.CfPath = configFilePath
+	if Properties.Dir == "" {
+		Properties.Dir = "."
+	}
+}
+
+func GetTmpDir() string {
+	return Properties.Dir + "/tmp"
 }

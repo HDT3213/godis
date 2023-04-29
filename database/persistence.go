@@ -2,6 +2,9 @@ package database
 
 import (
 	"fmt"
+	"os"
+	"sync/atomic"
+
 	"github.com/hdt3213/godis/aof"
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/datastruct/dict"
@@ -10,10 +13,9 @@ import (
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/rdb/core"
 	rdb "github.com/hdt3213/rdb/parser"
-	"os"
-	"sync/atomic"
 )
 
+// loadRdbFile loads rdb file from disk
 func (server *Server) loadRdbFile() error {
 	rdbFile, err := os.Open(config.Properties.RDBFilename)
 	if err != nil {
@@ -23,14 +25,15 @@ func (server *Server) loadRdbFile() error {
 		_ = rdbFile.Close()
 	}()
 	decoder := rdb.NewDecoder(rdbFile)
-	err = server.loadRDB(decoder)
+	err = server.LoadRDB(decoder)
 	if err != nil {
 		return fmt.Errorf("dump rdb file failed " + err.Error())
 	}
 	return nil
 }
 
-func (server *Server) loadRDB(dec *core.Decoder) error {
+// LoadRDB real implementation of loading rdb file
+func (server *Server) LoadRDB(dec *core.Decoder) error {
 	return dec.Parse(func(o rdb.RedisObject) bool {
 		db := server.mustSelectDB(o.GetDBIndex())
 		var entity *database.DataEntity
@@ -73,10 +76,12 @@ func (server *Server) loadRDB(dec *core.Decoder) error {
 			if o.GetExpiration() != nil {
 				db.Expire(o.GetKey(), *o.GetExpiration())
 			}
+			// add to aof
 			db.addAof(aof.EntityToCmd(o.GetKey(), entity).Args)
 		}
 		return true
 	})
+
 }
 
 func NewPersister(db database.DBEngine, filename string, load bool, fsync string) (*aof.Persister, error) {
