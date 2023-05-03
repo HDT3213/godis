@@ -51,6 +51,8 @@ type ServerProperties struct {
 	LfuLogFactor     int32  `cfg:"lfu-log-factor"`
 	LfuInitVal       uint8  `cfg:"lfu-init-val"`
 	MaxmemorySamples int    `cfg:"maxmemory-samples"`
+	// MB
+	Maxmemory uint64 `cfg:"maxmemory"`
 }
 
 type ServerInfo struct {

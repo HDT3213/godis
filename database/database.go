@@ -3,15 +3,16 @@ package database
 
 import (
 	"github.com/hdt3213/godis/config"
+	"github.com/hdt3213/godis/database/eviction"
 	"github.com/hdt3213/godis/datastruct/dict"
 	"github.com/hdt3213/godis/datastruct/lock"
-	"github.com/hdt3213/godis/eviction"
 	"github.com/hdt3213/godis/interface/database"
-	eviction2 "github.com/hdt3213/godis/interface/eviction"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
+	"github.com/hdt3213/godis/lib/mem"
 	"github.com/hdt3213/godis/lib/timewheel"
 	"github.com/hdt3213/godis/redis/protocol"
+	"runtime"
 	"strings"
 	"time"
 )
@@ -33,7 +34,7 @@ type DB struct {
 	versionMap dict.Dict
 	// key -> eviction(uint32)
 	evictionMap    dict.Dict
-	evictionPolicy eviction2.MaxmemoryPolicy
+	evictionPolicy eviction.MaxmemoryPolicy
 
 	// dict.Dict will ensure concurrent-safety of its method
 	// use this mutex for complicated command only, eg. rpush, incr ...
@@ -62,7 +63,7 @@ func makeDB() *DB {
 		data:           dict.MakeConcurrent(dataDictSize),
 		ttlMap:         dict.MakeConcurrent(ttlDictSize),
 		versionMap:     dict.MakeConcurrent(dataDictSize),
-		evictionMap:    dict.MakeConcurrent(ttlDictSize),
+		evictionMap:    dict.MakeConcurrent(dataDictSize),
 		evictionPolicy: makeEvictionPolicy(),
 		locker:         lock.Make(lockerSize),
 		addAof:         func(line CmdLine) {},
@@ -131,9 +132,12 @@ func (db *DB) execNormalCommand(cmdLine [][]byte) redis.Reply {
 	write, read := prepare(cmdLine[1:])
 	db.addVersion(write...)
 	db.RWLocks(write, read)
-	db.MakeEviction(write)
-	db.UpdateMark(read)
-	defer db.RWUnLocks(write, read)
+	db.initEvictionMark(write)
+	db.updateEvictionMark(read)
+	defer func() {
+		db.RWUnLocks(write, read)
+		db.Eviction()
+	}()
 	fun := cmd.executor
 	return fun(db, cmdLine[1:])
 }
@@ -316,22 +320,36 @@ func (db *DB) ForEach(cb func(key string, data *database.DataEntity, expiration 
 
 //eviction
 func (db *DB) Eviction() {
-	keys := db.RandomDistinctKeysForEviction(config.Properties.MaxmemorySamples)
-
-	marks := make([]eviction2.KeyMark, config.Properties.MaxmemorySamples)
-	for i, key := range keys {
-		mark, _ := db.evictionMap.Get(key)
-		marks[i] = eviction2.KeyMark{
-			Key:  key,
-			Mark: mark.(int32),
-		}
+	if db.evictionPolicy == nil || !mem.OutOfMemory() {
+		return
 	}
-	key := db.evictionPolicy.Eviction(marks)
-	db.Remove(key)
+	mem.Lock.Lock()
+	defer mem.Lock.Unlock()
+	for mem.OutOfMemory() {
+		var keys []string
+		if db.evictionPolicy.IsAllKeys() {
+			keys = db.data.RandomDistinctKeys(config.Properties.MaxmemorySamples)
+		} else {
+			keys = db.ttlMap.RandomDistinctKeys(config.Properties.MaxmemorySamples)
+		}
+
+		marks := make([]eviction.KeyMark, config.Properties.MaxmemorySamples)
+		for i, key := range keys {
+			mark, _ := db.evictionMap.Get(key)
+			marks[i] = eviction.KeyMark{
+				Key:  key,
+				Mark: mark.(int32),
+			}
+		}
+		key := db.evictionPolicy.Eviction(marks)
+		db.Remove(key)
+		runtime.GC()
+	}
+
 }
 
 //MakeEviction make a new mark about a key
-func (db *DB) MakeEviction(keys []string) {
+func (db *DB) initEvictionMark(keys []string) {
 	if db.evictionPolicy == nil {
 		return
 	}
@@ -342,7 +360,7 @@ func (db *DB) MakeEviction(keys []string) {
 }
 
 //UpdateMark update mark about eviction
-func (db *DB) UpdateMark(keys []string) {
+func (db *DB) updateEvictionMark(keys []string) {
 	if db.evictionPolicy == nil {
 		return
 	}
@@ -357,7 +375,7 @@ func (db *DB) UpdateMark(keys []string) {
 	}
 }
 
-func makeEvictionPolicy() eviction2.MaxmemoryPolicy {
+func makeEvictionPolicy() eviction.MaxmemoryPolicy {
 	policy := config.Properties.MaxmemoryPolicy
 	if policy == "volatile-lru" {
 		return &eviction.LRUPolicy{
@@ -375,26 +393,4 @@ func makeEvictionPolicy() eviction2.MaxmemoryPolicy {
 		}
 	}
 	return nil
-}
-
-//RandomDistinctKeysForEviction random get keys for eviction
-func (db *DB) RandomDistinctKeysForEviction(limit int) []string {
-	if db.evictionPolicy.IsAllKeys() == false {
-		keys := make([]string, limit)
-		i := 0
-		db.data.ForEach(func(key string, val interface{}) bool {
-			_, exists := db.ttlMap.Get(key)
-			if !exists {
-				return true
-			}
-			keys[i] = key
-			i++
-			if i < limit {
-				return true
-			}
-			return false
-		})
-		return keys
-	}
-	return db.data.RandomDistinctKeys(limit)
 }

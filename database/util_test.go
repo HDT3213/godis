@@ -10,7 +10,7 @@ func makeTestDB() *DB {
 		data:           dict.MakeConcurrent(dataDictSize),
 		versionMap:     dict.MakeConcurrent(dataDictSize),
 		ttlMap:         dict.MakeConcurrent(ttlDictSize),
-		evictionMap:    dict.MakeConcurrent(ttlDictSize),
+		evictionMap:    dict.MakeConcurrent(dataDictSize),
 		evictionPolicy: makeEvictionPolicy(),
 		locker:         lock.Make(lockerSize),
 		addAof:         func(line CmdLine) {},
