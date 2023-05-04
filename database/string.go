@@ -837,59 +837,53 @@ func getRandomKey(db *DB, args [][]byte) redis.Reply {
 }
 
 func init() {
-	RegisterCommand("Set", execSet, writeFirstKey, rollbackFirstKey, -3, flagWrite)
-	RegisterCommand("SetNx", execSetNX, writeFirstKey, rollbackFirstKey, 3, flagWrite)
-	RegisterCommand("SetEX", execSetEX, writeFirstKey, rollbackFirstKey, 4, flagWrite)
-	RegisterCommand("PSetEX", execPSetEX, writeFirstKey, rollbackFirstKey, 4, flagWrite)
-	RegisterCommand("MSet", execMSet, prepareMSet, undoMSet, -3, flagWrite)
-	RegisterCommand("MGet", execMGet, prepareMGet, nil, -2, flagReadOnly)
-	RegisterCommand("MSetNX", execMSetNX, prepareMSet, undoMSet, -3, flagWrite)
-	RegisterCommand("Get", execGet, readFirstKey, nil, 2, flagReadOnly)
-	RegisterCommand("GetEX", execGetEX, writeFirstKey, rollbackFirstKey, -2, flagReadOnly)
-	RegisterCommand("GetSet", execGetSet, writeFirstKey, rollbackFirstKey, 3, flagWrite)
-	RegisterCommand("GetDel", execGetDel, writeFirstKey, rollbackFirstKey, 2, flagWrite)
-	RegisterCommand("Incr", execIncr, writeFirstKey, rollbackFirstKey, 2, flagWrite)
-	RegisterCommand("IncrBy", execIncrBy, writeFirstKey, rollbackFirstKey, 3, flagWrite)
-	RegisterCommand("IncrByFloat", execIncrByFloat, writeFirstKey, rollbackFirstKey, 3, flagWrite)
-	RegisterCommand("Decr", execDecr, writeFirstKey, rollbackFirstKey, 2, flagWrite)
-	RegisterCommand("DecrBy", execDecrBy, writeFirstKey, rollbackFirstKey, 3, flagWrite)
-	RegisterCommand("StrLen", execStrLen, readFirstKey, nil, 2, flagReadOnly)
-	RegisterCommand("Append", execAppend, writeFirstKey, rollbackFirstKey, 3, flagWrite)
-	RegisterCommand("SetRange", execSetRange, writeFirstKey, rollbackFirstKey, 4, flagWrite)
-	RegisterCommand("GetRange", execGetRange, readFirstKey, nil, 4, flagReadOnly)
-	RegisterCommand("SetBit", execSetBit, writeFirstKey, rollbackFirstKey, 4, flagWrite)
-	RegisterCommand("GetBit", execGetBit, readFirstKey, nil, 3, flagReadOnly)
-	RegisterCommand("BitCount", execBitCount, readFirstKey, nil, -2, flagReadOnly)
-	RegisterCommand("BitPos", execBitPos, readFirstKey, nil, -3, flagReadOnly)
-	RegisterCommand("Randomkey", getRandomKey, readAllKeys, nil, 1, flagReadOnly)
-
-}
-
-func init() {
-	RegisterGodisCommand("Set", -3, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("SetNx", 3, []string{Write, Denyoom, Fast}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("SetEX", 4, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("PSetEX", 4, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("MSet", -3, []string{Write, Denyoom}, 1, -1, 2, prepareMSet)
-	RegisterGodisCommand("MGet", -2, []string{Readonly, Fast}, 1, 1, 1, prepareMSet)
-	RegisterGodisCommand("MSetNX", -3, []string{Write, Denyoom}, 1, 1, 1, prepareMSet)
-	RegisterGodisCommand("Get", 2, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
-	RegisterGodisCommand("GetEX", -2, []string{Readonly, Fast}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("GetSet", 3, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("GetDel", 2, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("Incr", 2, []string{Write, Denyoom, Fast}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("IncrBy", 3, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("IncrByFloat", 3, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("Decr", 2, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("DecrBy", 3, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("StrLen", 2, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
-	RegisterGodisCommand("Append", 3, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("SetRange", 4, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("GetRange", 4, []string{Readonly}, 1, 1, 1, readFirstKey)
-	RegisterGodisCommand("SetBit", 4, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("GetBit", 3, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
-	RegisterGodisCommand("BitCount", -2, []string{Readonly}, 1, 1, 1, readFirstKey)
-	RegisterGodisCommand("BitPos", -3, []string{Readonly}, 1, 1, 1, readFirstKey)
-	RegisterGodisCommand("Randomkey", 1, []string{Readonly, Random}, 1, 1, 1, readAllKeys)
-
+	registerCommand("Set", execSet, writeFirstKey, rollbackFirstKey, -3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
+	registerCommand("SetNx", execSetNX, writeFirstKey, rollbackFirstKey, 3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM, redisFlagFast}, 1, 1, 1)
+	registerCommand("SetEX", execSetEX, writeFirstKey, rollbackFirstKey, 4, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
+	registerCommand("PSetEX", execPSetEX, writeFirstKey, rollbackFirstKey, 4, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
+	registerCommand("MSet", execMSet, prepareMSet, undoMSet, -3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, -1, 2)
+	registerCommand("MGet", execMGet, prepareMGet, nil, -2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagFast}, 1, 1, 1)
+	registerCommand("MSetNX", execMSetNX, prepareMSet, undoMSet, -3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
+	registerCommand("Get", execGet, readFirstKey, nil, 2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagFast}, 1, 1, 1)
+	registerCommand("GetEX", execGetEX, writeFirstKey, rollbackFirstKey, -2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagFast}, 1, 1, 1)
+	registerCommand("GetSet", execGetSet, writeFirstKey, rollbackFirstKey, 3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
+	registerCommand("GetDel", execGetDel, writeFirstKey, rollbackFirstKey, 2, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
+	registerCommand("Incr", execIncr, writeFirstKey, rollbackFirstKey, 2, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM, redisFlagFast}, 1, 1, 1)
+	registerCommand("IncrBy", execIncrBy, writeFirstKey, rollbackFirstKey, 3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
+	registerCommand("IncrByFloat", execIncrByFloat, writeFirstKey, rollbackFirstKey, 3, flagWrite).attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
+	registerCommand("Decr", execDecr, writeFirstKey, rollbackFirstKey, 2, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
+	registerCommand("DecrBy", execDecrBy, writeFirstKey, rollbackFirstKey, 3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
+	registerCommand("StrLen", execStrLen, readFirstKey, nil, 2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagFast}, 1, 1, 1)
+	registerCommand("Append", execAppend, writeFirstKey, rollbackFirstKey, 3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
+	registerCommand("SetRange", execSetRange, writeFirstKey, rollbackFirstKey, 4, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
+	registerCommand("GetRange", execGetRange, readFirstKey, nil, 4, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly}, 1, 1, 1)
+	registerCommand("SetBit", execSetBit, writeFirstKey, rollbackFirstKey, 4, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
+	registerCommand("GetBit", execGetBit, readFirstKey, nil, 3, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagFast}, 1, 1, 1)
+	registerCommand("BitCount", execBitCount, readFirstKey, nil, -2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly}, 1, 1, 1)
+	registerCommand("BitPos", execBitPos, readFirstKey, nil, -3, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly}, 1, 1, 1)
+	registerCommand("Randomkey", getRandomKey, readAllKeys, nil, 1, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagRandom}, 1, 1, 1)
 }
