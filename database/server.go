@@ -92,12 +92,12 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 	if cmdName == "auth" {
 		return Auth(c, cmdLine[1:])
 	}
+	if !isAuthenticated(c) {
+		return protocol.MakeErrReply("NOAUTH Authentication required")
+	}
 	// info
 	if cmdName == "info" {
 		return Info(c, cmdLine)
-	}
-	if !isAuthenticated(c) {
-		return protocol.MakeErrReply("NOAUTH Authentication required")
 	}
 	if cmdName == "slaveof" {
 		if c != nil && c.InMultiState() {

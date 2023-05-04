@@ -262,20 +262,16 @@ func geoRadius0(sortedSet *sortedset.SortedSet, lat float64, lng float64, radius
 }
 
 func init() {
-	RegisterCommand("GeoAdd", execGeoAdd, writeFirstKey, undoGeoAdd, -5, flagWrite)
-	RegisterCommand("GeoPos", execGeoPos, readFirstKey, nil, -2, flagReadOnly)
-	RegisterCommand("GeoDist", execGeoDist, readFirstKey, nil, -4, flagReadOnly)
-	RegisterCommand("GeoHash", execGeoHash, readFirstKey, nil, -2, flagReadOnly)
-	RegisterCommand("GeoRadius", execGeoRadius, readFirstKey, nil, -6, flagReadOnly)
-	RegisterCommand("GeoRadiusByMember", execGeoRadiusByMember, readFirstKey, nil, -5, flagReadOnly)
-}
-
-func init() {
-	RegisterGodisCommand("GeoAdd", -5, []string{Write, Denyoom}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("GeoPos", -2, []string{Readonly}, 1, 1, 1, readFirstKey)
-	RegisterGodisCommand("GeoDist", -4, []string{Readonly}, 1, 1, 1, readFirstKey)
-	RegisterGodisCommand("GeoHash", -2, []string{Readonly}, 1, 1, 1, readFirstKey)
-	RegisterGodisCommand("GeoRadius", -6, []string{Write, Movablekeys}, 1, 1, 1, readFirstKey)
-	RegisterGodisCommand("GeoRadiusByMember", -5, []string{Write, Movablekeys}, 1, 1, 1, readFirstKey)
-
+	registerCommand("GeoAdd", execGeoAdd, writeFirstKey, undoGeoAdd, -5, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
+	registerCommand("GeoPos", execGeoPos, readFirstKey, nil, -2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly}, 1, 1, 1)
+	registerCommand("GeoDist", execGeoDist, readFirstKey, nil, -4, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly}, 1, 1, 1)
+	registerCommand("GeoHash", execGeoHash, readFirstKey, nil, -2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly}, 1, 1, 1)
+	registerCommand("GeoRadius", execGeoRadius, readFirstKey, nil, -6, flagReadOnly).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagMovableKeys}, 1, 1, 1)
+	registerCommand("GeoRadiusByMember", execGeoRadiusByMember, readFirstKey, nil, -5, flagReadOnly).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagMovableKeys}, 1, 1, 1)
 }
