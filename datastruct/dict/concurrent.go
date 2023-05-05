@@ -3,6 +3,7 @@ package dict
 import (
 	"math"
 	"math/rand"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -87,8 +88,19 @@ func (dict *ConcurrentDict) Get(key string) (val interface{}, exists bool) {
 	hashCode := fnv32(key)
 	index := dict.spread(hashCode)
 	s := dict.getShard(index)
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	val, exists = s.m[key]
+	return
+}
+
+func (dict *ConcurrentDict) GetWithLock(key string) (val interface{}, exists bool) {
+	if dict == nil {
+		panic("dict is nil")
+	}
+	hashCode := fnv32(key)
+	index := dict.spread(hashCode)
+	s := dict.getShard(index)
 	val, exists = s.m[key]
 	return
 }
@@ -121,6 +133,23 @@ func (dict *ConcurrentDict) Put(key string, val interface{}) (result int) {
 	return 1
 }
 
+func (dict *ConcurrentDict) PutWithLock(key string, val interface{}) (result int) {
+	if dict == nil {
+		panic("dict is nil")
+	}
+	hashCode := fnv32(key)
+	index := dict.spread(hashCode)
+	s := dict.getShard(index)
+
+	if _, ok := s.m[key]; ok {
+		s.m[key] = val
+		return 0
+	}
+	dict.addCount()
+	s.m[key] = val
+	return 1
+}
+
 // PutIfAbsent puts value if the key is not exists and returns the number of updated key-value
 func (dict *ConcurrentDict) PutIfAbsent(key string, val interface{}) (result int) {
 	if dict == nil {
@@ -131,6 +160,22 @@ func (dict *ConcurrentDict) PutIfAbsent(key string, val interface{}) (result int
 	s := dict.getShard(index)
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+
+	if _, ok := s.m[key]; ok {
+		return 0
+	}
+	s.m[key] = val
+	dict.addCount()
+	return 1
+}
+
+func (dict *ConcurrentDict) PutIfAbsentWithLock(key string, val interface{}) (result int) {
+	if dict == nil {
+		panic("dict is nil")
+	}
+	hashCode := fnv32(key)
+	index := dict.spread(hashCode)
+	s := dict.getShard(index)
 
 	if _, ok := s.m[key]; ok {
 		return 0
@@ -158,6 +203,21 @@ func (dict *ConcurrentDict) PutIfExists(key string, val interface{}) (result int
 	return 0
 }
 
+func (dict *ConcurrentDict) PutIfExistsWithLock(key string, val interface{}) (result int) {
+	if dict == nil {
+		panic("dict is nil")
+	}
+	hashCode := fnv32(key)
+	index := dict.spread(hashCode)
+	s := dict.getShard(index)
+
+	if _, ok := s.m[key]; ok {
+		s.m[key] = val
+		return 1
+	}
+	return 0
+}
+
 // Remove removes the key and return the number of deleted key-value
 func (dict *ConcurrentDict) Remove(key string) (result int) {
 	if dict == nil {
@@ -168,6 +228,22 @@ func (dict *ConcurrentDict) Remove(key string) (result int) {
 	s := dict.getShard(index)
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+
+	if _, ok := s.m[key]; ok {
+		delete(s.m, key)
+		dict.decreaseCount()
+		return 1
+	}
+	return 0
+}
+
+func (dict *ConcurrentDict) RemoveWithLock(key string) (result int) {
+	if dict == nil {
+		panic("dict is nil")
+	}
+	hashCode := fnv32(key)
+	index := dict.spread(hashCode)
+	s := dict.getShard(index)
 
 	if _, ok := s.m[key]; ok {
 		delete(s.m, key)
@@ -299,4 +375,63 @@ func (dict *ConcurrentDict) RandomDistinctKeys(limit int) []string {
 // Clear removes all keys in dict
 func (dict *ConcurrentDict) Clear() {
 	*dict = *MakeConcurrent(dict.shardCount)
+}
+
+func (dict *ConcurrentDict) toLockIndices(keys []string, reverse bool) []uint32 {
+	indexMap := make(map[uint32]struct{})
+	for _, key := range keys {
+		index := dict.spread(fnv32(key))
+		indexMap[index] = struct{}{}
+	}
+	indices := make([]uint32, 0, len(indexMap))
+	for index := range indexMap {
+		indices = append(indices, index)
+	}
+	sort.Slice(indices, func(i, j int) bool {
+		if !reverse {
+			return indices[i] < indices[j]
+		}
+		return indices[i] > indices[j]
+	})
+	return indices
+}
+
+// RWLocks locks write keys and read keys together. allow duplicate keys
+func (dict *ConcurrentDict) RWLocks(writeKeys []string, readKeys []string) {
+	keys := append(writeKeys, readKeys...)
+	indices := dict.toLockIndices(keys, false)
+	writeIndexSet := make(map[uint32]struct{})
+	for _, wKey := range writeKeys {
+		idx := dict.spread(fnv32(wKey))
+		writeIndexSet[idx] = struct{}{}
+	}
+	for _, index := range indices {
+		_, w := writeIndexSet[index]
+		mu := &dict.table[index].mutex
+		if w {
+			mu.Lock()
+		} else {
+			mu.RLock()
+		}
+	}
+}
+
+// RWUnLocks unlocks write keys and read keys together. allow duplicate keys
+func (dict *ConcurrentDict) RWUnLocks(writeKeys []string, readKeys []string) {
+	keys := append(writeKeys, readKeys...)
+	indices := dict.toLockIndices(keys, true)
+	writeIndexSet := make(map[uint32]struct{})
+	for _, wKey := range writeKeys {
+		idx := dict.spread(fnv32(wKey))
+		writeIndexSet[idx] = struct{}{}
+	}
+	for _, index := range indices {
+		_, w := writeIndexSet[index]
+		mu := &dict.table[index].mutex
+		if w {
+			mu.Unlock()
+		} else {
+			mu.RUnlock()
+		}
+	}
 }
