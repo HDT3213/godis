@@ -479,33 +479,30 @@ func execSRandMember(db *DB, args [][]byte) redis.Reply {
 }
 
 func init() {
-	RegisterCommand("SAdd", execSAdd, writeFirstKey, undoSetChange, -3, flagWrite)
-	RegisterCommand("SIsMember", execSIsMember, readFirstKey, nil, 3, flagReadOnly)
-	RegisterCommand("SRem", execSRem, writeFirstKey, undoSetChange, -3, flagWrite)
-	RegisterCommand("SPop", execSPop, writeFirstKey, undoSetChange, -2, flagWrite)
-	RegisterCommand("SCard", execSCard, readFirstKey, nil, 2, flagReadOnly)
-	RegisterCommand("SMembers", execSMembers, readFirstKey, nil, 2, flagReadOnly)
-	RegisterCommand("SInter", execSInter, prepareSetCalculate, nil, -2, flagReadOnly)
-	RegisterCommand("SInterStore", execSInterStore, prepareSetCalculateStore, rollbackFirstKey, -3, flagWrite)
-	RegisterCommand("SUnion", execSUnion, prepareSetCalculate, nil, -2, flagReadOnly)
-	RegisterCommand("SUnionStore", execSUnionStore, prepareSetCalculateStore, rollbackFirstKey, -3, flagWrite)
-	RegisterCommand("SDiff", execSDiff, prepareSetCalculate, nil, -2, flagReadOnly)
-	RegisterCommand("SDiffStore", execSDiffStore, prepareSetCalculateStore, rollbackFirstKey, -3, flagWrite)
-	RegisterCommand("SRandMember", execSRandMember, readFirstKey, nil, -2, flagReadOnly)
-}
-
-func init() {
-	RegisterGodisCommand("SAdd", -3, []string{Write, Denyoom, Fast}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("SIsMember", 3, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
-	RegisterGodisCommand("SRem", -3, []string{Write, Fast}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("SPop", -2, []string{Write, Random, Fast}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("SCard", 2, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
-	RegisterGodisCommand("SMembers", 2, []string{Readonly, SortForScript}, 1, 1, 1, readFirstKey)
-	RegisterGodisCommand("SInter", -2, []string{Readonly, SortForScript}, 1, -1, 1, prepareSetCalculate)
-	RegisterGodisCommand("SInterStore", -3, []string{Write, Denyoom}, 1, -1, 1, prepareSetCalculateStore)
-	RegisterGodisCommand("SUnion", -2, []string{Readonly, SortForScript}, 1, -1, 1, prepareSetCalculate)
-	RegisterGodisCommand("SUnionStore", -3, []string{Write, Denyoom}, 1, -1, 1, prepareSetCalculateStore)
-	RegisterGodisCommand("SDiff", -2, []string{Readonly, SortForScript}, 1, 1, 1, prepareSetCalculate)
-	RegisterGodisCommand("SDiffStore", -3, []string{Write, Denyoom}, 1, 1, 1, prepareSetCalculateStore)
-	RegisterGodisCommand("SRandMember", -2, []string{Readonly, Random}, 1, 1, 1, readFirstKey)
+	registerCommand("SAdd", execSAdd, writeFirstKey, undoSetChange, -3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM, redisFlagFast}, 1, 1, 1)
+	registerCommand("SIsMember", execSIsMember, readFirstKey, nil, 3, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagFast}, 1, 1, 1)
+	registerCommand("SRem", execSRem, writeFirstKey, undoSetChange, -3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagFast}, 1, 1, 1)
+	registerCommand("SPop", execSPop, writeFirstKey, undoSetChange, -2, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagRandom, redisFlagFast}, 1, 1, 1)
+	registerCommand("SCard", execSCard, readFirstKey, nil, 2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagFast}, 1, 1, 1)
+	registerCommand("SMembers", execSMembers, readFirstKey, nil, 2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagSortForScript}, 1, 1, 1)
+	registerCommand("SInter", execSInter, prepareSetCalculate, nil, -2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagSortForScript}, 1, -1, 1)
+	registerCommand("SInterStore", execSInterStore, prepareSetCalculateStore, rollbackFirstKey, -3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, -1, 1)
+	registerCommand("SUnion", execSUnion, prepareSetCalculate, nil, -2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagSortForScript}, 1, -1, 1)
+	registerCommand("SUnionStore", execSUnionStore, prepareSetCalculateStore, rollbackFirstKey, -3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, -1, 1)
+	registerCommand("SDiff", execSDiff, prepareSetCalculate, nil, -2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagSortForScript}, 1, 1, 1)
+	registerCommand("SDiffStore", execSDiffStore, prepareSetCalculateStore, rollbackFirstKey, -3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
+	registerCommand("SRandMember", execSRandMember, readFirstKey, nil, -2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagRandom}, 1, 1, 1)
 }

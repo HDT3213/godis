@@ -11,7 +11,7 @@ Server.Exec is the main entry for Server, it handles authentication, publish-sub
 
 [godis.DB.Exec](https://github.com/HDT3213/godis/blob/master/database/single_db.go) handles transaction control command (such as watch, multi, exec) itself, and invokes DB.execNormalCommand to handle normal commands. The word, normal command, is commands which read or write limited keys, can execute within transaction, and supports rollback. For example, get, set, lpush are normal commands, while flushdb, keys are not.
 
-[RegisterCommand](https://github.com/HDT3213/godis/blob/master/database/router.go) is used for registering normal command. A normal command requires three functions：
+[registerCommand](https://github.com/HDT3213/godis/blob/master/database/router.go) is used for registering normal command. A normal command requires three functions：
 
 - ExecFunc: The function that actually executes the command, such as [execHSet](https://github.com/HDT3213/godis/blob/master/database/hash.go)
 - PrepareFunc executes before ExecFunc, it analysises command line and returns read/written keys for lock
