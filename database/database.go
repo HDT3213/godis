@@ -321,13 +321,15 @@ func (db *DB) ForEach(cb func(key string, data *database.DataEntity, expiration 
 
 //eviction
 func (db *DB) Eviction() {
-	var memToFree uint64
-	if db.evictionPolicy == nil || !mem.GetMaxMemoryState(&memToFree) {
+	// is not out of max-memory,no need to lock
+	if db.evictionPolicy == nil || !mem.GetMaxMemoryState(nil) {
 		return
 	}
 	mem.Lock.Lock()
 	defer mem.Lock.Unlock()
 	var memFreed uint64 = 0
+	var memToFree uint64
+	mem.GetMaxMemoryState(memToFree)
 	for memFreed < memToFree {
 		var keys []string
 		if db.evictionPolicy.IsAllKeys() {
