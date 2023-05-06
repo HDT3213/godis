@@ -11,6 +11,7 @@ import (
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/mem"
 	"github.com/hdt3213/godis/lib/timewheel"
+	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
 	"runtime"
 	"strings"
@@ -320,12 +321,14 @@ func (db *DB) ForEach(cb func(key string, data *database.DataEntity, expiration 
 
 //eviction
 func (db *DB) Eviction() {
-	if db.evictionPolicy == nil || !mem.OutOfMemory() {
+	var memToFree uint64
+	if db.evictionPolicy == nil || !mem.GetMaxMemoryState(&memToFree) {
 		return
 	}
 	mem.Lock.Lock()
 	defer mem.Lock.Unlock()
-	for mem.OutOfMemory() {
+	var memFreed uint64 = 0
+	for memFreed < memToFree {
 		var keys []string
 		if db.evictionPolicy.IsAllKeys() {
 			keys = db.data.RandomDistinctKeys(config.Properties.MaxmemorySamples)
@@ -342,8 +345,12 @@ func (db *DB) Eviction() {
 			}
 		}
 		key := db.evictionPolicy.Eviction(marks)
+		delta := mem.UsedMemory()
 		db.Remove(key)
 		runtime.GC()
+		delta -= mem.UsedMemory()
+		memFreed += delta
+		db.addAof(utils.ToCmdLine2("DEL", key))
 	}
 
 }

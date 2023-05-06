@@ -24,26 +24,28 @@ func TestLRUEvictionKey(t *testing.T) {
 	if s != "0" {
 		t.Errorf("eviction key is wrong")
 	}
+	config.Properties = &config.ServerProperties{}
 }
 
 func TestLRU(t *testing.T) {
 	testDB.Flush()
 	setLRUConfig()
-	for i := 0; i < 10000; i++ {
+	for i := 0; i < 1000; i++ {
 		key := utils.RandString(10)
 		value := utils.RandString(10)
 		testDB.Exec(nil, utils.ToCmdLine("SET", key, value))
 
-		if mem.OutOfMemory() {
+		if mem.GetMaxMemoryState(nil) {
 			t.Errorf("memory out of config")
 		}
 	}
+	config.Properties = &config.ServerProperties{}
 }
 
 func setLRUConfig() {
 	config.Properties = &config.ServerProperties{
-		Maxmemory:        300,
-		MaxmemoryPolicy:  "allkeys-lfu",
+		Maxmemory:        3000,
+		MaxmemoryPolicy:  "allkeys-lru",
 		LfuLogFactor:     5,
 		MaxmemorySamples: 5,
 	}

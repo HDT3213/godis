@@ -55,6 +55,7 @@ func (persister *Persister) Rewrite2RDBForReplication(rdbFilename string, listen
 	if err != nil {
 		return err
 	}
+	ctx.tmpFile.Close()
 	err = os.Rename(ctx.tmpFile.Name(), rdbFilename)
 	if err != nil {
 		return err

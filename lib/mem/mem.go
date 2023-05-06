@@ -14,11 +14,15 @@ func UsedMemory() uint64 {
 	return m.Alloc / 1024 / 1024
 }
 
-func OutOfMemory() bool {
+func GetMaxMemoryState(toFree interface{}) bool {
 	if config.Properties.Maxmemory == 0 {
 		return false
 	}
 	if UsedMemory() > config.Properties.Maxmemory {
+		toFree, ok := toFree.(*uint64)
+		if ok && toFree != nil {
+			*toFree = UsedMemory() - config.Properties.Maxmemory
+		}
 		return true
 	}
 	return false
