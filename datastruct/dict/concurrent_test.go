@@ -41,20 +41,13 @@ func TestConcurrentPutWithLock(t *testing.T) {
 	count := 100
 	var wg sync.WaitGroup
 	wg.Add(count)
-	keys := make([]string, count)
-
-	for i := 0; i < count; i++ {
-		// insert
-		key := "k" + strconv.Itoa(i)
-		keys[i] = key
-	}
-	d.RWLocks(keys, nil)
-	defer d.RWUnLocks(keys, nil)
 
 	for i := 0; i < count; i++ {
 		go func(i int) {
 			// insert
 			key := "k" + strconv.Itoa(i)
+			keys := []string{key}
+			d.RWLocks(keys, nil)
 			ret := d.PutWithLock(key, i)
 			if ret != 1 { // insert 1
 				t.Error("put test failed: expected result 1, actual: " + strconv.Itoa(ret) + ", key: " + key)
@@ -70,6 +63,7 @@ func TestConcurrentPutWithLock(t *testing.T) {
 				t.Error("put test failed: expected true, actual: false, key: " + key + ", retry: " + strconv.FormatBool(ok))
 			}
 			wg.Done()
+			d.RWUnLocks(keys, nil)
 		}(i)
 	}
 	wg.Wait()
@@ -130,7 +124,7 @@ func TestConcurrentPutIfAbsentWithLock(t *testing.T) {
 		go func(i int) {
 			// insert
 			key := "k" + strconv.Itoa(i)
-			keys := make([]string, 1)
+			keys := []string{key}
 			d.RWLocks(keys, nil)
 			ret := d.PutIfAbsentWithLock(key, i)
 			if ret != 1 { // insert 1
@@ -213,7 +207,7 @@ func TestConcurrentPutIfExistsWithLock(t *testing.T) {
 		go func(i int) {
 			// insert
 			key := "k" + strconv.Itoa(i)
-			keys := make([]string, 1)
+			keys := []string{key}
 			d.RWLocks(keys, nil)
 			// insert
 			ret := d.PutIfExistsWithLock(key, i)
