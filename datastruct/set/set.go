@@ -1,6 +1,8 @@
 package set
 
-import "github.com/hdt3213/godis/datastruct/dict"
+import (
+	"github.com/hdt3213/godis/datastruct/dict"
+)
 
 // Set is a set of elements based on hash table
 type Set struct {
@@ -30,12 +32,18 @@ func (set *Set) Remove(val string) int {
 
 // Has returns true if the val exists in the set
 func (set *Set) Has(val string) bool {
+	if set == nil || set.dict == nil {
+		return false
+	}
 	_, exists := set.dict.Get(val)
 	return exists
 }
 
 // Len returns number of members in the set
 func (set *Set) Len() int {
+	if set == nil || set.dict == nil {
+		return 0
+	}
 	return set.dict.Len()
 }
 
@@ -58,62 +66,81 @@ func (set *Set) ToSlice() []string {
 
 // ForEach visits each member in the set
 func (set *Set) ForEach(consumer func(member string) bool) {
+	if set == nil || set.dict == nil {
+		return
+	}
 	set.dict.ForEach(func(key string, val interface{}) bool {
 		return consumer(key)
 	})
 }
 
-// Intersect intersects two sets
-func (set *Set) Intersect(another *Set) *Set {
-	if set == nil {
-		panic("set is nil")
-	}
-
+// ShallowCopy copies all members to another set
+func (set *Set) ShallowCopy() *Set {
 	result := Make()
-	another.ForEach(func(member string) bool {
-		if set.Has(member) {
-			result.Add(member)
-		}
+	set.ForEach(func(member string) bool {
+		result.Add(member)
 		return true
 	})
+	return result
+}
+
+// Intersect intersects two sets
+func Intersect(sets ...*Set) *Set {
+	result := Make()
+	if len(sets) == 0 {
+		return result
+	}
+
+	countMap := make(map[string]int)
+	for _, set := range sets {
+		set.ForEach(func(member string) bool {
+			countMap[member]++
+			return true
+		})
+	}
+	for k, v := range countMap {
+		if v == len(sets) {
+			result.Add(k)
+		}
+	}
 	return result
 }
 
 // Union adds two sets
-func (set *Set) Union(another *Set) *Set {
-	if set == nil {
-		panic("set is nil")
-	}
+func Union(sets ...*Set) *Set {
 	result := Make()
-	another.ForEach(func(member string) bool {
-		result.Add(member)
-		return true
-	})
-	set.ForEach(func(member string) bool {
-		result.Add(member)
-		return true
-	})
+	for _, set := range sets {
+		set.ForEach(func(member string) bool {
+			result.Add(member)
+			return true
+		})
+	}
 	return result
 }
 
 // Diff subtracts two sets
-func (set *Set) Diff(another *Set) *Set {
-	if set == nil {
-		panic("set is nil")
+func Diff(sets ...*Set) *Set {
+	if len(sets) == 0 {
+		return Make()
 	}
-
-	result := Make()
-	set.ForEach(func(member string) bool {
-		if !another.Has(member) {
-			result.Add(member)
+	result := sets[0].ShallowCopy()
+	for i := 1; i < len(sets); i++ {
+		sets[i].ForEach(func(member string) bool {
+			result.Remove(member)
+			return true
+		})
+		if result.Len() == 0 {
+			break
 		}
-		return true
-	})
+	}
 	return result
 }
 
 // RandomMembers randomly returns keys of the given number, may contain duplicated key
 func (set *Set) RandomMembers(limit int) []string {
+	if set == nil || set.dict == nil {
+		return nil
+	}
 	return set.dict.RandomKeys(limit)
 }
 

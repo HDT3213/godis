@@ -129,11 +129,11 @@ func execCopyTo(db *DB, args [][]byte) redis.Reply {
 }
 
 func init() {
-	RegisterCommand("DumpKey", execDumpKey, writeAllKeys, undoDel, 2, flagReadOnly)
-	RegisterCommand("ExistIn", execExistIn, readAllKeys, nil, -1, flagReadOnly)
-	RegisterCommand("RenameFrom", execRenameFrom, readFirstKey, nil, 2, flagWrite)
-	RegisterCommand("RenameTo", execRenameTo, writeFirstKey, rollbackFirstKey, 4, flagWrite)
-	RegisterCommand("RenameNxTo", execRenameTo, writeFirstKey, rollbackFirstKey, 4, flagWrite)
-	RegisterCommand("CopyFrom", execCopyFrom, readFirstKey, nil, 2, flagReadOnly)
-	RegisterCommand("CopyTo", execCopyTo, writeFirstKey, rollbackFirstKey, 5, flagWrite)
+	registerCommand("DumpKey", execDumpKey, writeAllKeys, undoDel, 2, flagReadOnly)
+	registerCommand("ExistIn", execExistIn, readAllKeys, nil, -1, flagReadOnly)
+	registerCommand("RenameFrom", execRenameFrom, readFirstKey, nil, 2, flagWrite)
+	registerCommand("RenameTo", execRenameTo, writeFirstKey, rollbackFirstKey, 4, flagWrite)
+	registerCommand("RenameNxTo", execRenameTo, writeFirstKey, rollbackFirstKey, 4, flagWrite)
+	registerCommand("CopyFrom", execCopyFrom, readFirstKey, nil, 2, flagReadOnly)
+	registerCommand("CopyTo", execCopyTo, writeFirstKey, rollbackFirstKey, 5, flagWrite)
 }

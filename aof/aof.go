@@ -248,6 +248,15 @@ func (persister *Persister) LoadAof(maxBytes int) {
 	}
 }
 
+// Fsync flushes aof file to disk
+func (persister *Persister) Fsync() {
+	persister.pausingAof.Lock()
+	if err := persister.aofFile.Sync(); err != nil {
+		logger.Errorf("fsync failed: %v", err)
+	}
+	persister.pausingAof.Unlock()
+}
+
 // Close gracefully stops aof persistence procedure
 func (persister *Persister) Close() {
 	if persister.aofFile != nil {
@@ -268,11 +277,7 @@ func (persister *Persister) fsyncEverySecond() {
 		for {
 			select {
 			case <-ticker.C:
-				persister.pausingAof.Lock()
-				if err := persister.aofFile.Sync(); err != nil {
-					logger.Errorf("fsync failed: %v", err)
-				}
-				persister.pausingAof.Unlock()
+				persister.Fsync()
 			case <-persister.ctx.Done():
 				return
 			}
