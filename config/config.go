@@ -2,6 +2,7 @@ package config
 
 import (
 	"bufio"
+	"github.com/hdt3213/godis/interface/redis"
 	"io"
 	"os"
 	"path/filepath"
@@ -18,6 +19,17 @@ import (
 var (
 	ClusterMode    = "cluster"
 	StandaloneMode = "standalone"
+)
+
+const (
+	SaveConfig             = "save"
+	AppendonlyConfig       = "appendonly"
+	DirConfig              = "dir"
+	MaxmemoryConfig        = "maxmemory"
+	Maxmemory_policyConfig = "maxmemory_policy"
+	DbfilenameConfig       = "dbfilename"
+	BindConfig             = "bind"
+	DaemonizeConfig        = "daemonize"
 )
 
 // ServerProperties defines global config properties
@@ -56,6 +68,7 @@ type ServerInfo struct {
 // Properties holds global config properties
 var Properties *ServerProperties
 var EachTimeServerInfo *ServerInfo
+var PropertiesMap map[string]interface{}
 
 func init() {
 	// A few stats we don't want to reset: server startup time, and peak mem.
@@ -70,6 +83,7 @@ func init() {
 		AppendOnly: false,
 		RunID:      utils.RandString(40),
 	}
+	PropertiesMap = make(map[string]interface{})
 }
 
 func parse(src io.Reader) *ServerProperties {
@@ -107,6 +121,7 @@ func parse(src io.Reader) *ServerProperties {
 		}
 		value, ok := rawMap[strings.ToLower(key)]
 		if ok {
+			PropertiesMap[key] = value
 			// fill config
 			switch field.Type.Kind() {
 			case reflect.String:
@@ -151,4 +166,69 @@ func SetupConfig(configFilename string) {
 
 func GetTmpDir() string {
 	return Properties.Dir + "/tmp"
+}
+
+func CopyProperties() *ServerProperties {
+	return &ServerProperties{
+		RunID:             Properties.RunID,
+		Bind:              Properties.Bind,
+		Port:              Properties.Port,
+		Dir:               Properties.Dir,
+		AppendOnly:        Properties.AppendOnly,
+		AppendFilename:    Properties.AppendFilename,
+		AppendFsync:       Properties.AppendFsync,
+		AofUseRdbPreamble: Properties.AofUseRdbPreamble,
+		MaxClients:        Properties.MaxClients,
+		RequirePass:       Properties.RequirePass,
+		Databases:         Properties.Databases,
+		RDBFilename:       Properties.RDBFilename,
+		MasterAuth:        Properties.MasterAuth,
+		SlaveAnnouncePort: Properties.SlaveAnnouncePort,
+		SlaveAnnounceIP:   Properties.SlaveAnnounceIP,
+		ReplTimeout:       Properties.ReplTimeout,
+		ClusterEnabled:    Properties.ClusterEnabled,
+		Peers:             Properties.Peers,
+		Self:              Properties.Self,
+		CfPath:            Properties.CfPath,
+	}
+}
+
+func UpdatePropertiesMap() redis.Reply {
+	t := reflect.TypeOf(Properties)
+	v := reflect.ValueOf(Properties)
+	n := t.Elem().NumField()
+	for i := 0; i < n; i++ {
+		field := t.Elem().Field(i)
+		fieldVal := v.Elem().Field(i)
+		key, ok := field.Tag.Lookup("cfg")
+		if !ok || strings.TrimLeft(key, " ") == "" {
+			key = field.Name
+		}
+		var value interface{}
+		switch fieldVal.Type().Kind() {
+		case reflect.String:
+			value = fieldVal.String()
+			break
+		case reflect.Int:
+			value = fieldVal.Int()
+		case reflect.Bool:
+			if fieldVal.Bool() {
+				value = true
+			} else {
+				value = false
+			}
+		}
+		PropertiesMap[key] = value
+	}
+	return nil
+}
+
+func IsImmutableConfig(parameter string) bool {
+	switch parameter {
+	case SaveConfig, AppendonlyConfig, DirConfig, MaxmemoryConfig, Maxmemory_policyConfig, DbfilenameConfig, BindConfig, DaemonizeConfig:
+		return false
+	default:
+		return true
+	}
+	return true
 }

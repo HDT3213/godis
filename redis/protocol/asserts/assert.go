@@ -129,6 +129,40 @@ func AssertMultiBulkReply(t *testing.T, actual redis.Reply, expected []string) {
 		}
 	}
 }
+func AssertMultiRawReply(t *testing.T, actual redis.Reply, expected []string) {
+	raw, ok := actual.(*protocol.MultiRawReply)
+	if !ok {
+		t.Errorf("expected raw protocol, actually %s, %s", actual.ToBytes(), printStack())
+		return
+	}
+	if len(raw.Replies) != len(expected) {
+		t.Errorf("expected %d elements, actually %d, %s",
+			len(expected), len(raw.Replies), printStack())
+		return
+	}
+	for i, v := range raw.Replies {
+		str := string(v.ToBytes())
+		if str != expected[i] {
+			t.Errorf("expected %s, actually %s, %s", expected[i], actual, printStack())
+		}
+	}
+}
+
+func AssertOkReply(t *testing.T, result redis.Reply) {
+	if result == nil {
+		t.Errorf("result is nil %s", printStack())
+		return
+	}
+	bytes := result.ToBytes()
+	if len(bytes) == 0 {
+		t.Errorf("result is empty %s", printStack())
+		return
+	}
+	expect := (&protocol.OkReply{}).ToBytes()
+	if !utils.BytesEquals(expect, bytes) {
+		t.Errorf("result is not null-bulk-protocol %s", printStack())
+	}
+}
 
 // AssertMultiBulkReplySize check if redis.Reply has expected length
 func AssertMultiBulkReplySize(t *testing.T, actual redis.Reply, expected int) {
