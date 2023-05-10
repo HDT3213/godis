@@ -33,6 +33,7 @@ const (
 )
 
 // ServerProperties defines global config properties
+// When update properties update the CopyProperties() method;
 type ServerProperties struct {
 	// for Public configuration
 	RunID             string `cfg:"runid"` // runID always different at every exec.
@@ -84,6 +85,31 @@ func init() {
 		RunID:      utils.RandString(40),
 	}
 	PropertiesMap = make(map[string]interface{})
+}
+
+func CopyProperties() *ServerProperties {
+	return &ServerProperties{
+		RunID:             Properties.RunID,
+		Bind:              Properties.Bind,
+		Port:              Properties.Port,
+		Dir:               Properties.Dir,
+		AppendOnly:        Properties.AppendOnly,
+		AppendFilename:    Properties.AppendFilename,
+		AppendFsync:       Properties.AppendFsync,
+		AofUseRdbPreamble: Properties.AofUseRdbPreamble,
+		MaxClients:        Properties.MaxClients,
+		RequirePass:       Properties.RequirePass,
+		Databases:         Properties.Databases,
+		RDBFilename:       Properties.RDBFilename,
+		MasterAuth:        Properties.MasterAuth,
+		SlaveAnnouncePort: Properties.SlaveAnnouncePort,
+		SlaveAnnounceIP:   Properties.SlaveAnnounceIP,
+		ReplTimeout:       Properties.ReplTimeout,
+		ClusterEnabled:    Properties.ClusterEnabled,
+		Peers:             Properties.Peers,
+		Self:              Properties.Self,
+		CfPath:            Properties.CfPath,
+	}
 }
 
 func parse(src io.Reader) *ServerProperties {
@@ -166,31 +192,6 @@ func SetupConfig(configFilename string) {
 
 func GetTmpDir() string {
 	return Properties.Dir + "/tmp"
-}
-
-func CopyProperties() *ServerProperties {
-	return &ServerProperties{
-		RunID:             Properties.RunID,
-		Bind:              Properties.Bind,
-		Port:              Properties.Port,
-		Dir:               Properties.Dir,
-		AppendOnly:        Properties.AppendOnly,
-		AppendFilename:    Properties.AppendFilename,
-		AppendFsync:       Properties.AppendFsync,
-		AofUseRdbPreamble: Properties.AofUseRdbPreamble,
-		MaxClients:        Properties.MaxClients,
-		RequirePass:       Properties.RequirePass,
-		Databases:         Properties.Databases,
-		RDBFilename:       Properties.RDBFilename,
-		MasterAuth:        Properties.MasterAuth,
-		SlaveAnnouncePort: Properties.SlaveAnnouncePort,
-		SlaveAnnounceIP:   Properties.SlaveAnnounceIP,
-		ReplTimeout:       Properties.ReplTimeout,
-		ClusterEnabled:    Properties.ClusterEnabled,
-		Peers:             Properties.Peers,
-		Self:              Properties.Self,
-		CfPath:            Properties.CfPath,
-	}
 }
 
 func UpdatePropertiesMap() redis.Reply {
