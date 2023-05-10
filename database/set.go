@@ -179,260 +179,136 @@ func execSMembers(db *DB, args [][]byte) redis.Reply {
 	return protocol.MakeMultiBulkReply(arr)
 }
 
-// execSInter intersect multiple sets
-func execSInter(db *DB, args [][]byte) redis.Reply {
-	keys := make([]string, len(args))
-	for i, arg := range args {
-		keys[i] = string(arg)
-	}
-
-	var result *HashSet.Set
-	for _, key := range keys {
-		set, errReply := db.getAsSet(key)
-		if errReply != nil {
-			return errReply
-		}
-		if set == nil {
-			return &protocol.EmptyMultiBulkReply{}
-		}
-
-		if result == nil {
-			// init
-			result = HashSet.Make(set.ToSlice()...)
-		} else {
-			result = result.Intersect(set)
-			if result.Len() == 0 {
-				// early termination
-				return &protocol.EmptyMultiBulkReply{}
-			}
-		}
-	}
-
-	arr := make([][]byte, result.Len())
+func set2reply(set *HashSet.Set) redis.Reply {
+	arr := make([][]byte, set.Len())
 	i := 0
-	result.ForEach(func(member string) bool {
+	set.ForEach(func(member string) bool {
 		arr[i] = []byte(member)
 		i++
 		return true
 	})
 	return protocol.MakeMultiBulkReply(arr)
+}
+
+// execSInter intersect multiple sets
+func execSInter(db *DB, args [][]byte) redis.Reply {
+	sets := make([]*HashSet.Set, 0, len(args))
+	for _, arg := range args {
+		key := string(arg)
+		set, errReply := db.getAsSet(key)
+		if errReply != nil {
+			return errReply
+		}
+		if set.Len() == 0 {
+			return &protocol.EmptyMultiBulkReply{}
+		}
+		sets = append(sets, set)
+	}
+	result := HashSet.Intersect(sets...)
+	return set2reply(result)
 }
 
 // execSInterStore intersects multiple sets and store the result in a key
 func execSInterStore(db *DB, args [][]byte) redis.Reply {
 	dest := string(args[0])
-	keys := make([]string, len(args)-1)
-	keyArgs := args[1:]
-	for i, arg := range keyArgs {
-		keys[i] = string(arg)
-	}
-
-	var result *HashSet.Set
-	for _, key := range keys {
+	sets := make([]*HashSet.Set, 0, len(args)-1)
+	for i := 1; i < len(args); i++ {
+		key := string(args[i])
 		set, errReply := db.getAsSet(key)
 		if errReply != nil {
 			return errReply
 		}
-		if set == nil {
-			db.Remove(dest) // clean ttl and old value
+		if set.Len() == 0 {
 			return protocol.MakeIntReply(0)
 		}
-
-		if result == nil {
-			// init
-			result = HashSet.Make(set.ToSlice()...)
-		} else {
-			result = result.Intersect(set)
-			if result.Len() == 0 {
-				// early termination
-				db.Remove(dest) // clean ttl and old value
-				return protocol.MakeIntReply(0)
-			}
-		}
+		sets = append(sets, set)
 	}
+	result := HashSet.Intersect(sets...)
 
-	set := HashSet.Make(result.ToSlice()...)
 	db.PutEntity(dest, &database.DataEntity{
-		Data: set,
+		Data: result,
 	})
 	db.addAof(utils.ToCmdLine3("sinterstore", args...))
-	return protocol.MakeIntReply(int64(set.Len()))
+	return protocol.MakeIntReply(int64(result.Len()))
 }
 
 // execSUnion adds multiple sets
 func execSUnion(db *DB, args [][]byte) redis.Reply {
-	keys := make([]string, len(args))
-	for i, arg := range args {
-		keys[i] = string(arg)
-	}
-
-	var result *HashSet.Set
-	for _, key := range keys {
+	sets := make([]*HashSet.Set, 0, len(args))
+	for _, arg := range args {
+		key := string(arg)
 		set, errReply := db.getAsSet(key)
 		if errReply != nil {
 			return errReply
 		}
-		if set == nil {
-			continue
-		}
-
-		if result == nil {
-			// init
-			result = HashSet.Make(set.ToSlice()...)
-		} else {
-			result = result.Union(set)
-		}
+		sets = append(sets, set)
 	}
-
-	if result == nil {
-		// all keys are empty set
-		return &protocol.EmptyMultiBulkReply{}
-	}
-	arr := make([][]byte, result.Len())
-	i := 0
-	result.ForEach(func(member string) bool {
-		arr[i] = []byte(member)
-		i++
-		return true
-	})
-	return protocol.MakeMultiBulkReply(arr)
+	result := HashSet.Union(sets...)
+	return set2reply(result)
 }
 
 // execSUnionStore adds multiple sets and store the result in a key
 func execSUnionStore(db *DB, args [][]byte) redis.Reply {
 	dest := string(args[0])
-	keys := make([]string, len(args)-1)
-	keyArgs := args[1:]
-	for i, arg := range keyArgs {
-		keys[i] = string(arg)
-	}
-
-	var result *HashSet.Set
-	for _, key := range keys {
+	sets := make([]*HashSet.Set, 0, len(args)-1)
+	for i := 1; i < len(args); i++ {
+		key := string(args[i])
 		set, errReply := db.getAsSet(key)
 		if errReply != nil {
 			return errReply
 		}
-		if set == nil {
-			continue
-		}
-		if result == nil {
-			// init
-			result = HashSet.Make(set.ToSlice()...)
-		} else {
-			result = result.Union(set)
-		}
+		sets = append(sets, set)
 	}
-
+	result := HashSet.Union(sets...)
 	db.Remove(dest) // clean ttl
-	if result == nil {
-		// all keys are empty set
-		return &protocol.EmptyMultiBulkReply{}
+	if result.Len() == 0 {
+		return protocol.MakeIntReply(0)
 	}
 
-	set := HashSet.Make(result.ToSlice()...)
 	db.PutEntity(dest, &database.DataEntity{
-		Data: set,
+		Data: result,
 	})
-
 	db.addAof(utils.ToCmdLine3("sunionstore", args...))
-	return protocol.MakeIntReply(int64(set.Len()))
+	return protocol.MakeIntReply(int64(result.Len()))
 }
 
 // execSDiff subtracts multiple sets
 func execSDiff(db *DB, args [][]byte) redis.Reply {
-	keys := make([]string, len(args))
-	for i, arg := range args {
-		keys[i] = string(arg)
-	}
-
-	var result *HashSet.Set
-	for i, key := range keys {
+	sets := make([]*HashSet.Set, 0, len(args))
+	for _, arg := range args {
+		key := string(arg)
 		set, errReply := db.getAsSet(key)
 		if errReply != nil {
 			return errReply
 		}
-		if set == nil {
-			if i == 0 {
-				// early termination
-				return &protocol.EmptyMultiBulkReply{}
-			}
-			continue
-		}
-		if result == nil {
-			// init
-			result = HashSet.Make(set.ToSlice()...)
-		} else {
-			result = result.Diff(set)
-			if result.Len() == 0 {
-				// early termination
-				return &protocol.EmptyMultiBulkReply{}
-			}
-		}
+		sets = append(sets, set)
 	}
-
-	if result == nil {
-		// all keys are nil
-		return &protocol.EmptyMultiBulkReply{}
-	}
-	arr := make([][]byte, result.Len())
-	i := 0
-	result.ForEach(func(member string) bool {
-		arr[i] = []byte(member)
-		i++
-		return true
-	})
-	return protocol.MakeMultiBulkReply(arr)
+	result := HashSet.Diff(sets...)
+	return set2reply(result)
 }
 
 // execSDiffStore subtracts multiple sets and store the result in a key
 func execSDiffStore(db *DB, args [][]byte) redis.Reply {
 	dest := string(args[0])
-	keys := make([]string, len(args)-1)
-	keyArgs := args[1:]
-	for i, arg := range keyArgs {
-		keys[i] = string(arg)
-	}
-
-	var result *HashSet.Set
-	for i, key := range keys {
+	sets := make([]*HashSet.Set, 0, len(args)-1)
+	for i := 1; i < len(args); i++ {
+		key := string(args[i])
 		set, errReply := db.getAsSet(key)
 		if errReply != nil {
 			return errReply
 		}
-		if set == nil {
-			if i == 0 {
-				// early termination
-				db.Remove(dest)
-				return protocol.MakeIntReply(0)
-			}
-			continue
-		}
-		if result == nil {
-			// init
-			result = HashSet.Make(set.ToSlice()...)
-		} else {
-			result = result.Diff(set)
-			if result.Len() == 0 {
-				// early termination
-				db.Remove(dest)
-				return protocol.MakeIntReply(0)
-			}
-		}
+		sets = append(sets, set)
 	}
-
-	if result == nil {
-		// all keys are nil
-		db.Remove(dest)
-		return &protocol.EmptyMultiBulkReply{}
+	result := HashSet.Diff(sets...)
+	db.Remove(dest) // clean ttl
+	if result.Len() == 0 {
+		return protocol.MakeIntReply(0)
 	}
-	set := HashSet.Make(result.ToSlice()...)
 	db.PutEntity(dest, &database.DataEntity{
-		Data: set,
+		Data: result,
 	})
-
 	db.addAof(utils.ToCmdLine3("sdiffstore", args...))
-	return protocol.MakeIntReply(int64(set.Len()))
+	return protocol.MakeIntReply(int64(result.Len()))
 }
 
 // execSRandMember gets random members from set
@@ -479,33 +355,30 @@ func execSRandMember(db *DB, args [][]byte) redis.Reply {
 }
 
 func init() {
-	RegisterCommand("SAdd", execSAdd, writeFirstKey, undoSetChange, -3, flagWrite)
-	RegisterCommand("SIsMember", execSIsMember, readFirstKey, nil, 3, flagReadOnly)
-	RegisterCommand("SRem", execSRem, writeFirstKey, undoSetChange, -3, flagWrite)
-	RegisterCommand("SPop", execSPop, writeFirstKey, undoSetChange, -2, flagWrite)
-	RegisterCommand("SCard", execSCard, readFirstKey, nil, 2, flagReadOnly)
-	RegisterCommand("SMembers", execSMembers, readFirstKey, nil, 2, flagReadOnly)
-	RegisterCommand("SInter", execSInter, prepareSetCalculate, nil, -2, flagReadOnly)
-	RegisterCommand("SInterStore", execSInterStore, prepareSetCalculateStore, rollbackFirstKey, -3, flagWrite)
-	RegisterCommand("SUnion", execSUnion, prepareSetCalculate, nil, -2, flagReadOnly)
-	RegisterCommand("SUnionStore", execSUnionStore, prepareSetCalculateStore, rollbackFirstKey, -3, flagWrite)
-	RegisterCommand("SDiff", execSDiff, prepareSetCalculate, nil, -2, flagReadOnly)
-	RegisterCommand("SDiffStore", execSDiffStore, prepareSetCalculateStore, rollbackFirstKey, -3, flagWrite)
-	RegisterCommand("SRandMember", execSRandMember, readFirstKey, nil, -2, flagReadOnly)
-}
-
-func init() {
-	RegisterGodisCommand("SAdd", -3, []string{Write, Denyoom, Fast}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("SIsMember", 3, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
-	RegisterGodisCommand("SRem", -3, []string{Write, Fast}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("SPop", -2, []string{Write, Random, Fast}, 1, 1, 1, writeFirstKey)
-	RegisterGodisCommand("SCard", 2, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
-	RegisterGodisCommand("SMembers", 2, []string{Readonly, SortForScript}, 1, 1, 1, readFirstKey)
-	RegisterGodisCommand("SInter", -2, []string{Readonly, SortForScript}, 1, -1, 1, prepareSetCalculate)
-	RegisterGodisCommand("SInterStore", -3, []string{Write, Denyoom}, 1, -1, 1, prepareSetCalculateStore)
-	RegisterGodisCommand("SUnion", -2, []string{Readonly, SortForScript}, 1, -1, 1, prepareSetCalculate)
-	RegisterGodisCommand("SUnionStore", -3, []string{Write, Denyoom}, 1, -1, 1, prepareSetCalculateStore)
-	RegisterGodisCommand("SDiff", -2, []string{Readonly, SortForScript}, 1, 1, 1, prepareSetCalculate)
-	RegisterGodisCommand("SDiffStore", -3, []string{Write, Denyoom}, 1, 1, 1, prepareSetCalculateStore)
-	RegisterGodisCommand("SRandMember", -2, []string{Readonly, Random}, 1, 1, 1, readFirstKey)
+	registerCommand("SAdd", execSAdd, writeFirstKey, undoSetChange, -3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM, redisFlagFast}, 1, 1, 1)
+	registerCommand("SIsMember", execSIsMember, readFirstKey, nil, 3, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagFast}, 1, 1, 1)
+	registerCommand("SRem", execSRem, writeFirstKey, undoSetChange, -3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagFast}, 1, 1, 1)
+	registerCommand("SPop", execSPop, writeFirstKey, undoSetChange, -2, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagRandom, redisFlagFast}, 1, 1, 1)
+	registerCommand("SCard", execSCard, readFirstKey, nil, 2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagFast}, 1, 1, 1)
+	registerCommand("SMembers", execSMembers, readFirstKey, nil, 2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagSortForScript}, 1, 1, 1)
+	registerCommand("SInter", execSInter, prepareSetCalculate, nil, -2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagSortForScript}, 1, -1, 1)
+	registerCommand("SInterStore", execSInterStore, prepareSetCalculateStore, rollbackFirstKey, -3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, -1, 1)
+	registerCommand("SUnion", execSUnion, prepareSetCalculate, nil, -2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagSortForScript}, 1, -1, 1)
+	registerCommand("SUnionStore", execSUnionStore, prepareSetCalculateStore, rollbackFirstKey, -3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, -1, 1)
+	registerCommand("SDiff", execSDiff, prepareSetCalculate, nil, -2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagSortForScript}, 1, 1, 1)
+	registerCommand("SDiffStore", execSDiffStore, prepareSetCalculateStore, rollbackFirstKey, -3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
+	registerCommand("SRandMember", execSRandMember, readFirstKey, nil, -2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagRandom}, 1, 1, 1)
 }

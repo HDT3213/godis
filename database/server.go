@@ -2,6 +2,7 @@ package database
 
 import (
 	"fmt"
+	"os"
 	"runtime/debug"
 	"strconv"
 	"strings"
@@ -35,12 +36,23 @@ type Server struct {
 	masterStatus *masterStatus
 }
 
+func fileExists(filename string) bool {
+	info, err := os.Stat(filename)
+	return err == nil && !info.IsDir()
+}
+
 // NewStandaloneServer creates a standalone redis server, with multi database and all other funtions
 func NewStandaloneServer() *Server {
 	server := &Server{}
 	if config.Properties.Databases == 0 {
 		config.Properties.Databases = 16
 	}
+	// creat tmp dir
+	err := os.MkdirAll(config.GetTmpDir(), os.ModePerm)
+	if err != nil {
+		panic(fmt.Errorf("create tmp dir failed: %v", err))
+	}
+	// make db set
 	server.dbSet = make([]*atomic.Value, config.Properties.Databases)
 	for i := range server.dbSet {
 		singleDB := makeDB()
@@ -53,13 +65,13 @@ func NewStandaloneServer() *Server {
 	// record aof
 	validAof := false
 	if config.Properties.AppendOnly {
+		validAof = fileExists(config.Properties.AppendFilename)
 		aofHandler, err := NewPersister(server,
 			config.Properties.AppendFilename, true, config.Properties.AppendFsync)
 		if err != nil {
 			panic(err)
 		}
 		server.bindPersister(aofHandler)
-		validAof = true
 	}
 	if config.Properties.RDBFilename != "" && !validAof {
 		// load rdb
@@ -94,12 +106,12 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 	if cmdName == "auth" {
 		return Auth(c, cmdLine[1:])
 	}
+	if !isAuthenticated(c) {
+		return protocol.MakeErrReply("NOAUTH Authentication required")
+	}
 	// info
 	if cmdName == "info" {
 		return Info(c, cmdLine)
-	}
-	if !isAuthenticated(c) {
-		return protocol.MakeErrReply("NOAUTH Authentication required")
 	}
 	if cmdName == "slaveof" {
 		if c != nil && c.InMultiState() {

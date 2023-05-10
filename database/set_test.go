@@ -106,7 +106,7 @@ func TestSInter(t *testing.T) {
 	keys := make([]string, 0)
 	start := 0
 	for i := 0; i < 4; i++ {
-		key := utils.RandString(10)
+		key := utils.RandString(10) + strconv.Itoa(i)
 		keys = append(keys, key)
 		for j := start; j < size+start; j++ {
 			member := strconv.Itoa(j)

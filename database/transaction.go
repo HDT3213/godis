@@ -23,7 +23,7 @@ func execGetVersion(db *DB, args [][]byte) redis.Reply {
 }
 
 func init() {
-	RegisterCommand("GetVer", execGetVersion, readAllKeys, nil, 2, flagReadOnly)
+	registerCommand("GetVer", execGetVersion, readAllKeys, nil, 2, flagReadOnly)
 }
 
 // invoker should lock watching keys
