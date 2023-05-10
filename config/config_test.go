@@ -47,6 +47,7 @@ func TestParse(t *testing.T) {
 func TestUpdatePropertiesMap(t *testing.T) {
 	Properties.MaxClients = 127
 	UpdatePropertiesMap()
+
 	if PropertiesMap["maxclients"] != int64(127) {
 		t.Error("update failed")
 	}
