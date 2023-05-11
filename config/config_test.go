@@ -12,7 +12,7 @@ func init() {
 		AofUseRdbPreamble: false,
 		MaxClients:        128,
 	}
-	PropertiesMap = map[string]interface{}{
+	PropertiesMap = map[string]string{
 		"appendonly":           "yes",
 		"appendfilename":       "appendonly.aof",
 		"aof-use-rdb-preamble": "no",
@@ -47,7 +47,7 @@ func TestParse(t *testing.T) {
 func TestUpdatePropertiesMap(t *testing.T) {
 	Properties.MaxClients = 127
 	UpdatePropertiesMap()
-	if PropertiesMap["maxclients"] != int64(127) {
+	if PropertiesMap["maxclients"] != "127" {
 		t.Error("update failed")
 	}
 }

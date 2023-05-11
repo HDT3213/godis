@@ -54,7 +54,7 @@ func getConfig(args [][]byte) redis.Reply {
 			}
 			isMatch := pattern.IsMatch(key)
 			if isMatch {
-				result = append(result, protocol.MakeBulkReply([]byte(key)), protocol.MakeBulkReply([]byte(value.(string))))
+				result = append(result, protocol.MakeBulkReply([]byte(key)), protocol.MakeBulkReply([]byte(value)))
 			}
 		}
 	}

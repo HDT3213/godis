@@ -17,7 +17,7 @@ func init() {
 		AppendFsync:       aof.FsyncEverySec,
 		MaxClients:        128,
 	}
-	config.PropertiesMap = map[string]interface{}{
+	config.PropertiesMap = map[string]string{
 		"appendonly":           "yes",
 		"appendfilename":       "appendonly.aof",
 		"aof-use-rdb-preamble": "no",
@@ -43,6 +43,8 @@ func TestConfigSet(t *testing.T) {
 	testMDB := NewStandaloneServer()
 	result := testMDB.Exec(nil, utils.ToCmdLine("config", "set", "appendfsync", "no"))
 	asserts.AssertOkReply(t, result)
+	result = testMDB.Exec(nil, utils.ToCmdLine("config", "get", "maxclients"))
+	asserts.AssertMultiRawReply(t, result, []string{"$10\r\nmaxclients\r\n", "$3\r\n128\r\n"})
 	result = testMDB.Exec(nil, utils.ToCmdLine("config", "set", "appendfsync", "no", "maxclients", "110"))
 	asserts.AssertOkReply(t, result)
 	result = testMDB.Exec(nil, utils.ToCmdLine("config", "set", "appendonly", "no"))

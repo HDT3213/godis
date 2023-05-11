@@ -69,7 +69,7 @@ type ServerInfo struct {
 // Properties holds global config properties
 var Properties *ServerProperties
 var EachTimeServerInfo *ServerInfo
-var PropertiesMap map[string]interface{}
+var PropertiesMap map[string]string
 
 func init() {
 	// A few stats we don't want to reset: server startup time, and peak mem.
@@ -84,7 +84,7 @@ func init() {
 		AppendOnly: false,
 		RunID:      utils.RandString(40),
 	}
-	PropertiesMap = make(map[string]interface{})
+	PropertiesMap = make(map[string]string)
 }
 
 func CopyProperties() *ServerProperties {
@@ -205,19 +205,19 @@ func UpdatePropertiesMap() redis.Reply {
 		if !ok || strings.TrimLeft(key, " ") == "" {
 			key = field.Name
 		}
-		var value interface{}
+		var value string
 		switch fieldVal.Type().Kind() {
 		case reflect.String:
 			value = fieldVal.String()
-			break
 		case reflect.Int:
-			value = fieldVal.Int()
+			value = strconv.Itoa(int(fieldVal.Int()))
 		case reflect.Bool:
 			if fieldVal.Bool() {
-				value = true
+				value = "yes"
 			} else {
-				value = false
+				value = "no"
 			}
+
 		}
 		PropertiesMap[key] = value
 	}
