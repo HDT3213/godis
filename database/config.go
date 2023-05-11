@@ -113,7 +113,6 @@ func updateConfig(properties *config.ServerProperties, parameter string, value s
 			switch fieldVal.Type().Kind() {
 			case reflect.String:
 				fieldVal.SetString(value)
-				break
 			case reflect.Int:
 				intValue, err := strconv.ParseInt(value, 10, 64)
 				if err != nil {
@@ -121,7 +120,6 @@ func updateConfig(properties *config.ServerProperties, parameter string, value s
 					return protocol.MakeErrReply(errStr)
 				}
 				fieldVal.SetInt(intValue)
-				break
 			case reflect.Bool:
 				if "yes" == value {
 					fieldVal.SetBool(true)
@@ -131,14 +129,13 @@ func updateConfig(properties *config.ServerProperties, parameter string, value s
 					errStr := fmt.Sprintf("ERR CONFIG SET failed (possibly related to argument '%s') - argument couldn't be parsed into a bool", parameter)
 					return protocol.MakeErrReply(errStr)
 				}
-				break
 			case reflect.Slice:
 				if field.Type.Elem().Kind() == reflect.String {
 					slice := strings.Split(value, ",")
 					fieldVal.Set(reflect.ValueOf(slice))
 				}
-				break
 			}
+			break
 		}
 	}
 	return nil
