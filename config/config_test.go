@@ -47,9 +47,24 @@ func TestParse(t *testing.T) {
 func TestUpdatePropertiesMap(t *testing.T) {
 	Properties.MaxClients = 127
 	UpdatePropertiesMap()
-
 	if PropertiesMap["maxclients"] != int64(127) {
 		t.Error("update failed")
 	}
+}
 
+func TestIsImmutableConfig(t *testing.T) {
+	if IsImmutableConfig("save") {
+		t.Error("save is an immutable config")
+	}
+	if !IsImmutableConfig("maxclients") {
+		t.Error("maxclients is not an immutable config")
+	}
+}
+
+func TestCopyProperties(t *testing.T) {
+	Properties.MaxClients = 127
+	p := CopyProperties()
+	if p.MaxClients != Properties.MaxClients {
+		t.Error("no copy")
+	}
 }

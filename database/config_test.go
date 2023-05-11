@@ -45,6 +45,8 @@ func TestConfigSet(t *testing.T) {
 	asserts.AssertOkReply(t, result)
 	result = testMDB.Exec(nil, utils.ToCmdLine("config", "set", "appendfsync", "no", "maxclients", "110"))
 	asserts.AssertOkReply(t, result)
+	result = testMDB.Exec(nil, utils.ToCmdLine("config", "set", "appendonly", "no"))
+	asserts.AssertErrReply(t, result, "ERR CONFIG SET failed (possibly related to argument 'appendonly') - can't set immutable config")
 	result = testMDB.Exec(nil, utils.ToCmdLine("config", "set", "appendfsync", "no", "maxclients", "panic"))
 	asserts.AssertErrReply(t, result, "ERR CONFIG SET failed (possibly related to argument 'maxclients') - argument couldn't be parsed into an integer")
 	result = testMDB.Exec(nil, utils.ToCmdLine("config", "set", "appendfsync", "no", "errorConfig", "110"))
