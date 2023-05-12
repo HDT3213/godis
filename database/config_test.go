@@ -29,6 +29,7 @@ func init() {
 func TestConfigGet(t *testing.T) {
 	testDB.Flush()
 	testMDB := NewStandaloneServer()
+
 	result := testMDB.Exec(nil, utils.ToCmdLine("config", "get", "maxclients"))
 	asserts.AssertMultiRawReply(t, result, []string{"$10\r\nmaxclients\r\n", "$3\r\n128\r\n"})
 	result = testMDB.Exec(nil, utils.ToCmdLine("config", "get", "maxcli*"))
