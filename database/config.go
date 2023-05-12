@@ -23,7 +23,7 @@ type configCmd struct {
 
 var configCmdTable = make(map[string]*configCmd)
 
-func execConfigCommand(args [][]byte) redis.Reply {
+func ExecConfigCommand(args [][]byte) redis.Reply {
 	if len(args) == 0 {
 		return getAllGodisCommandReply()
 	}

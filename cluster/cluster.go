@@ -165,6 +165,8 @@ func (cluster *Cluster) Exec(c redis.Connection, cmdLine [][]byte) (result redis
 			return protocol.MakeArgNumErrReply(cmdName)
 		}
 		return execSelect(c, cmdLine)
+	} else if cmdName == "config" {
+		return database2.ExecConfigCommand(cmdLine)
 	}
 	if c != nil && c.InMultiState() {
 		return database2.EnqueueCmd(c, cmdLine)
