@@ -9,6 +9,7 @@ import (
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/datastruct/dict"
 	List "github.com/hdt3213/godis/datastruct/list"
+	HashSet "github.com/hdt3213/godis/datastruct/set"
 	SortedSet "github.com/hdt3213/godis/datastruct/sortedset"
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/rdb/core"
@@ -61,6 +62,15 @@ func (server *Server) LoadRDB(dec *core.Decoder) error {
 			entity = &database.DataEntity{
 				Data: hash,
 			}
+		case rdb.SetType:
+			setObj := o.(*rdb.SetObject)
+			set := HashSet.Make()
+			for _, mem := range setObj.Members {
+				set.Add(string(mem))
+			}
+			entity = &database.DataEntity{
+				Data: set,
+			}
 		case rdb.ZSetType:
 			zsetObj := o.(*rdb.ZSetObject)
 			zSet := SortedSet.Make()
@@ -81,7 +91,6 @@ func (server *Server) LoadRDB(dec *core.Decoder) error {
 		}
 		return true
 	})
-
 }
 
 func NewPersister(db database.DBEngine, filename string, load bool, fsync string) (*aof.Persister, error) {

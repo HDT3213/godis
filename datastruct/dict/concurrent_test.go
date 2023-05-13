@@ -36,6 +36,39 @@ func TestConcurrentPut(t *testing.T) {
 	wg.Wait()
 }
 
+func TestConcurrentPutWithLock(t *testing.T) {
+	d := MakeConcurrent(0)
+	count := 100
+	var wg sync.WaitGroup
+	wg.Add(count)
+
+	for i := 0; i < count; i++ {
+		go func(i int) {
+			// insert
+			key := "k" + strconv.Itoa(i)
+			keys := []string{key}
+			d.RWLocks(keys, nil)
+			ret := d.PutWithLock(key, i)
+			if ret != 1 { // insert 1
+				t.Error("put test failed: expected result 1, actual: " + strconv.Itoa(ret) + ", key: " + key)
+			}
+			val, ok := d.GetWithLock(key)
+			if ok {
+				intVal, _ := val.(int)
+				if intVal != i {
+					t.Error("put test failed: expected " + strconv.Itoa(i) + ", actual: " + strconv.Itoa(intVal) + ", key: " + key)
+				}
+			} else {
+				_, ok := d.GetWithLock(key)
+				t.Error("put test failed: expected true, actual: false, key: " + key + ", retry: " + strconv.FormatBool(ok))
+			}
+			wg.Done()
+			d.RWUnLocks(keys, nil)
+		}(i)
+	}
+	wg.Wait()
+}
+
 func TestConcurrentPutIfAbsent(t *testing.T) {
 	d := MakeConcurrent(0)
 	count := 100
@@ -81,11 +114,61 @@ func TestConcurrentPutIfAbsent(t *testing.T) {
 	wg.Wait()
 }
 
+func TestConcurrentPutIfAbsentWithLock(t *testing.T) {
+	d := MakeConcurrent(0)
+	count := 100
+	var wg sync.WaitGroup
+	wg.Add(count)
+
+	for i := 0; i < count; i++ {
+		go func(i int) {
+			// insert
+			key := "k" + strconv.Itoa(i)
+			keys := []string{key}
+			d.RWLocks(keys, nil)
+			ret := d.PutIfAbsentWithLock(key, i)
+			if ret != 1 { // insert 1
+				t.Error("put test failed: expected result 1, actual: " + strconv.Itoa(ret) + ", key: " + key)
+			}
+			val, ok := d.GetWithLock(key)
+			if ok {
+				intVal, _ := val.(int)
+				if intVal != i {
+					t.Error("put test failed: expected " + strconv.Itoa(i) + ", actual: " + strconv.Itoa(intVal) +
+						", key: " + key)
+				}
+			} else {
+				_, ok := d.GetWithLock(key)
+				t.Error("put test failed: expected true, actual: false, key: " + key + ", retry: " + strconv.FormatBool(ok))
+			}
+
+			// update
+			ret = d.PutIfAbsentWithLock(key, i*10)
+			if ret != 0 { // no update
+				t.Error("put test failed: expected result 0, actual: " + strconv.Itoa(ret))
+			}
+			val, ok = d.GetWithLock(key)
+			if ok {
+				intVal, _ := val.(int)
+				if intVal != i {
+					t.Error("put test failed: expected " + strconv.Itoa(i) + ", actual: " + strconv.Itoa(intVal) + ", key: " + key)
+				}
+			} else {
+				t.Error("put test failed: expected true, actual: false, key: " + key)
+			}
+			d.RWUnLocks(keys, nil)
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
+}
+
 func TestConcurrentPutIfExists(t *testing.T) {
 	d := MakeConcurrent(0)
 	count := 100
 	var wg sync.WaitGroup
 	wg.Add(count)
+
 	for i := 0; i < count; i++ {
 		go func(i int) {
 			// insert
@@ -114,6 +197,42 @@ func TestConcurrentPutIfExists(t *testing.T) {
 	wg.Wait()
 }
 
+func TestConcurrentPutIfExistsWithLock(t *testing.T) {
+	d := MakeConcurrent(0)
+	count := 100
+	var wg sync.WaitGroup
+	wg.Add(count)
+
+	for i := 0; i < count; i++ {
+		go func(i int) {
+			// insert
+			key := "k" + strconv.Itoa(i)
+			keys := []string{key}
+			d.RWLocks(keys, nil)
+			// insert
+			ret := d.PutIfExistsWithLock(key, i)
+			if ret != 0 { // insert
+				t.Error("put test failed: expected result 0, actual: " + strconv.Itoa(ret))
+			}
+			d.PutWithLock(key, i)
+			d.PutIfExistsWithLock(key, 10*i)
+			val, ok := d.GetWithLock(key)
+			if ok {
+				intVal, _ := val.(int)
+				if intVal != 10*i {
+					t.Error("put test failed: expected " + strconv.Itoa(10*i) + ", actual: " + strconv.Itoa(intVal))
+				}
+			} else {
+				_, ok := d.GetWithLock(key)
+				t.Error("put test failed: expected true, actual: false, key: " + key + ", retry: " + strconv.FormatBool(ok))
+			}
+			d.RWUnLocks(keys, nil)
+			wg.Done()
+		}(i)
+	}
+	wg.Wait()
+}
+
 func TestConcurrentRemove(t *testing.T) {
 	d := MakeConcurrent(0)
 	totalCount := 100
@@ -123,7 +242,7 @@ func TestConcurrentRemove(t *testing.T) {
 		key := "k" + strconv.Itoa(i)
 		d.Put(key, i)
 	}
-	if d.Len()!=totalCount{
+	if d.Len() != totalCount {
 		t.Error("put test failed: expected len is 100, actual: " + strconv.Itoa(d.Len()))
 	}
 	for i := 0; i < totalCount; i++ {
@@ -143,7 +262,7 @@ func TestConcurrentRemove(t *testing.T) {
 		if ret != 1 {
 			t.Error("remove test failed: expected result 1, actual: " + strconv.Itoa(ret) + ", key:" + key)
 		}
-		if d.Len()!=totalCount-i-1{
+		if d.Len() != totalCount-i-1 {
 			t.Error("put test failed: expected len is 99, actual: " + strconv.Itoa(d.Len()))
 		}
 		_, ok = d.Get(key)
@@ -154,7 +273,7 @@ func TestConcurrentRemove(t *testing.T) {
 		if ret != 0 {
 			t.Error("remove test failed: expected result 0 actual: " + strconv.Itoa(ret))
 		}
-		if d.Len()!=totalCount-i-1{
+		if d.Len() != totalCount-i-1 {
 			t.Error("put test failed: expected len is 99, actual: " + strconv.Itoa(d.Len()))
 		}
 	}
@@ -224,6 +343,122 @@ func TestConcurrentRemove(t *testing.T) {
 			t.Error("remove test failed: expected true, actual false")
 		}
 		ret = d.Remove(key)
+		if ret != 0 {
+			t.Error("remove test failed: expected result 0 actual: " + strconv.Itoa(ret))
+		}
+	}
+}
+
+func TestConcurrentRemoveWithLock(t *testing.T) {
+	d := MakeConcurrent(0)
+	totalCount := 100
+	// remove head node
+	for i := 0; i < totalCount; i++ {
+		// insert
+		key := "k" + strconv.Itoa(i)
+		d.PutWithLock(key, i)
+	}
+	if d.Len() != totalCount {
+		t.Error("put test failed: expected len is 100, actual: " + strconv.Itoa(d.Len()))
+	}
+	for i := 0; i < totalCount; i++ {
+		key := "k" + strconv.Itoa(i)
+
+		val, ok := d.GetWithLock(key)
+		if ok {
+			intVal, _ := val.(int)
+			if intVal != i {
+				t.Error("put test failed: expected " + strconv.Itoa(i) + ", actual: " + strconv.Itoa(intVal))
+			}
+		} else {
+			t.Error("put test failed: expected true, actual: false")
+		}
+
+		ret := d.RemoveWithLock(key)
+		if ret != 1 {
+			t.Error("remove test failed: expected result 1, actual: " + strconv.Itoa(ret) + ", key:" + key)
+		}
+		if d.Len() != totalCount-i-1 {
+			t.Error("put test failed: expected len is 99, actual: " + strconv.Itoa(d.Len()))
+		}
+		_, ok = d.GetWithLock(key)
+		if ok {
+			t.Error("remove test failed: expected true, actual false")
+		}
+		ret = d.RemoveWithLock(key)
+		if ret != 0 {
+			t.Error("remove test failed: expected result 0 actual: " + strconv.Itoa(ret))
+		}
+		if d.Len() != totalCount-i-1 {
+			t.Error("put test failed: expected len is 99, actual: " + strconv.Itoa(d.Len()))
+		}
+	}
+
+	// remove tail node
+	d = MakeConcurrent(0)
+	for i := 0; i < 100; i++ {
+		// insert
+		key := "k" + strconv.Itoa(i)
+		d.PutWithLock(key, i)
+	}
+	for i := 9; i >= 0; i-- {
+		key := "k" + strconv.Itoa(i)
+
+		val, ok := d.GetWithLock(key)
+		if ok {
+			intVal, _ := val.(int)
+			if intVal != i {
+				t.Error("put test failed: expected " + strconv.Itoa(i) + ", actual: " + strconv.Itoa(intVal))
+			}
+		} else {
+			t.Error("put test failed: expected true, actual: false")
+		}
+
+		ret := d.RemoveWithLock(key)
+		if ret != 1 {
+			t.Error("remove test failed: expected result 1, actual: " + strconv.Itoa(ret))
+		}
+		_, ok = d.GetWithLock(key)
+		if ok {
+			t.Error("remove test failed: expected true, actual false")
+		}
+		ret = d.RemoveWithLock(key)
+		if ret != 0 {
+			t.Error("remove test failed: expected result 0 actual: " + strconv.Itoa(ret))
+		}
+	}
+
+	// remove middle node
+	d = MakeConcurrent(0)
+	d.Put("head", 0)
+	for i := 0; i < 10; i++ {
+		// insert
+		key := "k" + strconv.Itoa(i)
+		d.PutWithLock(key, i)
+	}
+	d.PutWithLock("tail", 0)
+	for i := 9; i >= 0; i-- {
+		key := "k" + strconv.Itoa(i)
+
+		val, ok := d.Get(key)
+		if ok {
+			intVal, _ := val.(int)
+			if intVal != i {
+				t.Error("put test failed: expected " + strconv.Itoa(i) + ", actual: " + strconv.Itoa(intVal))
+			}
+		} else {
+			t.Error("put test failed: expected true, actual: false")
+		}
+
+		ret := d.RemoveWithLock(key)
+		if ret != 1 {
+			t.Error("remove test failed: expected result 1, actual: " + strconv.Itoa(ret))
+		}
+		_, ok = d.GetWithLock(key)
+		if ok {
+			t.Error("remove test failed: expected true, actual false")
+		}
+		ret = d.RemoveWithLock(key)
 		if ret != 0 {
 			t.Error("remove test failed: expected result 0 actual: " + strconv.Itoa(ret))
 		}
