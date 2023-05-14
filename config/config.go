@@ -2,7 +2,6 @@ package config
 
 import (
 	"bufio"
-	"github.com/hdt3213/godis/interface/redis"
 	"io"
 	"os"
 	"path/filepath"
@@ -22,14 +21,18 @@ var (
 )
 
 const (
-	SaveConfig             = "save"
-	AppendonlyConfig       = "appendonly"
-	DirConfig              = "dir"
-	MaxmemoryConfig        = "maxmemory"
-	Maxmemory_policyConfig = "maxmemory_policy"
-	DbfilenameConfig       = "dbfilename"
-	BindConfig             = "bind"
-	DaemonizeConfig        = "daemonize"
+	PortConfig           = "port"           // Port number for Redis server
+	AppendfilenameConfig = "appendfilename" // Name of the append-only file
+	RequirepassConfig    = "requirepass"    // Password for Redis server
+	AppendfsyncConfig    = "appendfsync"    // Type of fsync policy used for the append-only file
+	MasterauthConfig     = "masterauth"     // Authentication password for master Redis server
+	ReplTimeoutConfig    = "repl-timeout"   // Replication timeout for Redis
+	MaxclientsConfig     = "maxclients"     // Maximum number of clients that can be connected to the Redis server
+	SaveConfig           = "save"           // Save points for Redis server
+	AppendonlyConfig     = "appendonly"     // Enable or disable the append-only file feature
+	DirConfig            = "dir"            // Directory where database files are stored
+	DbfilenameConfig     = "dbfilename"     // Name of the database file
+	BindConfig           = "bind"           // IP address and port number to bind Redis server to
 )
 
 // ServerProperties defines global config properties
@@ -69,7 +72,6 @@ type ServerInfo struct {
 // Properties holds global config properties
 var Properties *ServerProperties
 var EachTimeServerInfo *ServerInfo
-var PropertiesMap map[string]string
 
 func init() {
 	// A few stats we don't want to reset: server startup time, and peak mem.
@@ -84,7 +86,6 @@ func init() {
 		AppendOnly: false,
 		RunID:      utils.RandString(40),
 	}
-	PropertiesMap = make(map[string]string)
 }
 
 func CopyProperties() *ServerProperties {
@@ -147,7 +148,6 @@ func parse(src io.Reader) *ServerProperties {
 		}
 		value, ok := rawMap[strings.ToLower(key)]
 		if ok {
-			PropertiesMap[key] = value
 			// fill config
 			switch field.Type.Kind() {
 			case reflect.String:
@@ -194,42 +194,12 @@ func GetTmpDir() string {
 	return Properties.Dir + "/tmp"
 }
 
-func UpdatePropertiesMap() redis.Reply {
-	t := reflect.TypeOf(Properties)
-	v := reflect.ValueOf(Properties)
-	n := t.Elem().NumField()
-	for i := 0; i < n; i++ {
-		field := t.Elem().Field(i)
-		fieldVal := v.Elem().Field(i)
-		key, ok := field.Tag.Lookup("cfg")
-		if !ok || strings.TrimLeft(key, " ") == "" {
-			key = field.Name
-		}
-		var value string
-		switch fieldVal.Type().Kind() {
-		case reflect.String:
-			value = fieldVal.String()
-		case reflect.Int:
-			value = strconv.Itoa(int(fieldVal.Int()))
-		case reflect.Bool:
-			if fieldVal.Bool() {
-				value = "yes"
-			} else {
-				value = "no"
-			}
-
-		}
-		PropertiesMap[key] = value
-	}
-	return nil
-}
-
 func IsImmutableConfig(parameter string) bool {
 	switch parameter {
-	case SaveConfig, AppendonlyConfig, DirConfig, MaxmemoryConfig, Maxmemory_policyConfig, DbfilenameConfig, BindConfig, DaemonizeConfig:
-		return false
-	default:
+	case SaveConfig, AppendonlyConfig, DirConfig, PortConfig, MasterauthConfig, MaxclientsConfig, ReplTimeoutConfig, AppendfilenameConfig, AppendfsyncConfig, RequirepassConfig, DbfilenameConfig, BindConfig:
 		return true
+	default:
+		return false
 	}
-	return true
+	return false
 }

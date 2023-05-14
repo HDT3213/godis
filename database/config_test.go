@@ -17,13 +17,6 @@ func init() {
 		AppendFsync:       aof.FsyncEverySec,
 		MaxClients:        128,
 	}
-	config.PropertiesMap = map[string]string{
-		"appendonly":           "yes",
-		"appendfilename":       "appendonly.aof",
-		"aof-use-rdb-preamble": "no",
-		"appendfsync":          "everysec",
-		"maxclients":           "128",
-	}
 }
 
 func TestConfigGet(t *testing.T) {
@@ -31,13 +24,13 @@ func TestConfigGet(t *testing.T) {
 	testMDB := NewStandaloneServer()
 
 	result := testMDB.Exec(nil, utils.ToCmdLine("config", "get", "maxclients"))
-	asserts.AssertMultiRawReply(t, result, []string{"$10\r\nmaxclients\r\n", "$3\r\n128\r\n"})
+	asserts.AssertMultiBulkReply(t, result, []string{"maxclients", "128"})
 	result = testMDB.Exec(nil, utils.ToCmdLine("config", "get", "maxcli*"))
-	asserts.AssertMultiRawReply(t, result, []string{"$10\r\nmaxclients\r\n", "$3\r\n128\r\n"})
+	asserts.AssertMultiBulkReply(t, result, []string{"maxclients", "128"})
 	result = testMDB.Exec(nil, utils.ToCmdLine("config", "get", "none"))
-	asserts.AssertMultiRawReply(t, result, []string{})
+	asserts.AssertMultiBulkReply(t, result, []string{})
 	result = testMDB.Exec(nil, utils.ToCmdLine("config", "get", "maxclients", "appendonly"))
-	asserts.AssertMultiRawReply(t, result, []string{"$10\r\nmaxclients\r\n", "$3\r\n128\r\n", "$10\r\nappendonly\r\n", "$3\r\nyes\r\n"})
+	asserts.AssertMultiBulkReply(t, result, []string{"maxclients", "128", "appendonly", "yes"})
 }
 func TestConfigSet(t *testing.T) {
 	testDB.Flush()

@@ -12,12 +12,6 @@ func init() {
 		AofUseRdbPreamble: false,
 		MaxClients:        128,
 	}
-	PropertiesMap = map[string]string{
-		"appendonly":           "yes",
-		"appendfilename":       "appendonly.aof",
-		"aof-use-rdb-preamble": "no",
-		"maxclients":           "128",
-	}
 }
 
 func TestParse(t *testing.T) {
@@ -41,14 +35,6 @@ func TestParse(t *testing.T) {
 	}
 	if len(p.Peers) != 2 || p.Peers[0] != "a" || p.Peers[1] != "b" {
 		t.Error("list parse failed")
-	}
-}
-
-func TestUpdatePropertiesMap(t *testing.T) {
-	Properties.MaxClients = 127
-	UpdatePropertiesMap()
-	if PropertiesMap["maxclients"] != "127" {
-		t.Error("update failed")
 	}
 }
 

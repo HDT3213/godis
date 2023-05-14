@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 func init() {
@@ -24,6 +25,10 @@ type configCmd struct {
 var configCmdTable = make(map[string]*configCmd)
 
 func ExecConfigCommand(args [][]byte) redis.Reply {
+	return execSubCommand(args)
+}
+
+func execSubCommand(args [][]byte) redis.Reply {
 	if len(args) == 0 {
 		return getAllGodisCommandReply()
 	}
@@ -44,63 +49,28 @@ func ExecConfigCommand(args [][]byte) redis.Reply {
 	}
 }
 func getConfig(args [][]byte) redis.Reply {
-	result := make([]redis.Reply, 0)
+	result := make([][]byte, 0)
+	propertiesMap := getPropertiesMap()
 	for _, arg := range args {
 		param := string(arg)
-		for key, value := range config.PropertiesMap {
+		for key, value := range propertiesMap {
 			pattern, err := wildcard.CompilePattern(param)
 			if err != nil {
 				return nil
 			}
 			isMatch := pattern.IsMatch(key)
 			if isMatch {
-				result = append(result, protocol.MakeBulkReply([]byte(key)), protocol.MakeBulkReply([]byte(value)))
+				result = append(result, []byte(key), []byte(value))
 			}
 		}
 	}
-	return protocol.MakeMultiRawReply(result)
+	return protocol.MakeMultiBulkReply(result)
 }
 
-func setConfig(args [][]byte) redis.Reply {
-	if len(args)%2 != 0 {
-		return protocol.MakeErrReply("ERR wrong number of arguments for 'config|set' command")
-	}
-	properties := config.CopyProperties()
-	updateMap := make(map[string]string)
-	for i := 0; i < len(args); i += 2 {
-		parameter := string(args[i])
-		value := string(args[i+1])
-		if _, ok := updateMap[parameter]; ok {
-			errStr := fmt.Sprintf("ERR CONFIG SET failed (possibly related to argument '%s') - duplicate parameter", parameter)
-			return protocol.MakeErrReply(errStr)
-		}
-		updateMap[parameter] = value
-	}
-	for parameter, value := range updateMap {
-		if _, ok := config.PropertiesMap[parameter]; !ok {
-			return protocol.MakeErrReply(fmt.Sprintf("ERR Unknown option or number of arguments for CONFIG SET - '%s'", parameter))
-		}
-		isImmutable := config.IsImmutableConfig(parameter)
-		if !isImmutable {
-			return protocol.MakeErrReply(fmt.Sprintf("ERR CONFIG SET failed (possibly related to argument '%s') - can't set immutable config", parameter))
-		}
-		err := updateConfig(properties, parameter, value)
-		if err != nil {
-			return err
-		}
-	}
-
-	config.Properties = properties
-	err := config.UpdatePropertiesMap()
-	if err != nil {
-		return err
-	}
-	return &protocol.OkReply{}
-}
-
-func updateConfig(properties *config.ServerProperties, parameter string, value string) redis.Reply {
-	t := reflect.TypeOf(properties)
-	v := reflect.ValueOf(properties)
+func getPropertiesMap() map[string]string {
+	PropertiesMap := map[string]string{}
+	t := reflect.TypeOf(config.Properties)
+	v := reflect.ValueOf(config.Properties)
 	n := t.Elem().NumField()
 	for i := 0; i < n; i++ {
 		field := t.Elem().Field(i)
@@ -109,7 +79,71 @@ func updateConfig(properties *config.ServerProperties, parameter string, value s
 		if !ok || strings.TrimLeft(key, " ") == "" {
 			key = field.Name
 		}
+		var value string
+		switch fieldVal.Type().Kind() {
+		case reflect.String:
+			value = fieldVal.String()
+		case reflect.Int:
+			value = strconv.Itoa(int(fieldVal.Int()))
+		case reflect.Bool:
+			if fieldVal.Bool() {
+				value = "yes"
+			} else {
+				value = "no"
+			}
+		}
+		PropertiesMap[key] = value
+	}
+	return PropertiesMap
+}
+
+func setConfig(args [][]byte) redis.Reply {
+	if len(args)%2 != 0 {
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'config|set' command")
+	}
+	properties := config.CopyProperties()
+	updateMap := make(map[string]string)
+	mu := sync.Mutex{}
+	for i := 0; i < len(args); i += 2 {
+		parameter := string(args[i])
+		value := string(args[i+1])
+		mu.Lock()
+		if _, ok := updateMap[parameter]; ok {
+			errStr := fmt.Sprintf("ERR CONFIG SET failed (possibly related to argument '%s') - duplicate parameter", parameter)
+			return protocol.MakeErrReply(errStr)
+		}
+		updateMap[parameter] = value
+		mu.Unlock()
+	}
+	for parameter, value := range updateMap {
+		err := updateConfig(properties, parameter, value)
+		if err != nil {
+			return err
+		}
+	}
+
+	config.Properties = properties
+	return &protocol.OkReply{}
+}
+
+func updateConfig(properties *config.ServerProperties, parameter string, value string) redis.Reply {
+	t := reflect.TypeOf(properties)
+	v := reflect.ValueOf(properties)
+	n := t.Elem().NumField()
+	var isExist bool
+	for i := 0; i < n; i++ {
+		field := t.Elem().Field(i)
+		fieldVal := v.Elem().Field(i)
+		key, ok := field.Tag.Lookup("cfg")
+		if !ok || strings.TrimLeft(key, " ") == "" {
+			key = field.Name
+		}
 		if key == parameter {
+			isExist = true
+			isImmutable := config.IsImmutableConfig(parameter)
+			if !isImmutable {
+				return protocol.MakeErrReply(fmt.Sprintf("ERR CONFIG SET failed (possibly related to argument '%s') - can't set immutable config", parameter))
+			}
 			switch fieldVal.Type().Kind() {
 			case reflect.String:
 				fieldVal.SetString(value)
@@ -137,6 +171,9 @@ func updateConfig(properties *config.ServerProperties, parameter string, value s
 			}
 			break
 		}
+	}
+	if !isExist {
+		return protocol.MakeErrReply(fmt.Sprintf("ERR Unknown option or number of arguments for CONFIG SET - '%s'", parameter))
 	}
 	return nil
 }
