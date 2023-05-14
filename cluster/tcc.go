@@ -250,11 +250,3 @@ func requestRollback(cluster *Cluster, c redis.Connection, txID int64, groupMap 
 		}
 	}
 }
-
-func (cluster *Cluster) relayPrepare(node string, c redis.Connection, cmdLine CmdLine) redis.Reply {
-	if node == cluster.self {
-		return execPrepare(cluster, c, cmdLine)
-	} else {
-		return cluster.relay(node, c, cmdLine)
-	}
-}

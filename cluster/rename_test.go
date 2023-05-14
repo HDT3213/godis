@@ -14,7 +14,7 @@ func TestRename(t *testing.T) {
 	// cross node rename
 	key := testNodeA.self + utils.RandString(10)
 	value := utils.RandString(10)
-	newKey := testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.PickNode
+	newKey := testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.pickNode
 	testNodeA.db.Exec(conn, utils.ToCmdLine("SET", key, value, "ex", "1000"))
 	result := Rename(testNodeA, conn, utils.ToCmdLine("RENAME", key, newKey))
 	asserts.AssertStatusReply(t, result, "OK")
@@ -42,7 +42,7 @@ func TestRename(t *testing.T) {
 	// test src prepare failed
 	*simulateATimout = true
 	key = testNodeA.self + utils.RandString(10)
-	newKey = testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.PickNode
+	newKey = testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.pickNode
 	value = utils.RandString(10)
 	testNodeA.db.Exec(conn, utils.ToCmdLine("SET", key, value, "ex", "1000"))
 	result = Rename(testNodeB, conn, utils.ToCmdLine("RENAME", key, newKey))
@@ -58,7 +58,7 @@ func TestRename(t *testing.T) {
 	// test dest prepare failed
 	*simulateBTimout = true
 	key = testNodeA.self + utils.RandString(10)
-	newKey = testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.PickNode
+	newKey = testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.pickNode
 	value = utils.RandString(10)
 	testNodeA.db.Exec(conn, utils.ToCmdLine("SET", key, value, "ex", "1000"))
 	result = Rename(testNodeA, conn, utils.ToCmdLine("RENAME", key, newKey))
@@ -81,7 +81,7 @@ func TestRenameNx(t *testing.T) {
 	// cross node rename
 	key := testNodeA.self + utils.RandString(10)
 	value := utils.RandString(10)
-	newKey := testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.PickNode
+	newKey := testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.pickNode
 	testNodeA.db.Exec(conn, utils.ToCmdLine("SET", key, value, "ex", "1000"))
 	result := RenameNx(testNodeA, conn, utils.ToCmdLine("RENAMENX", key, newKey))
 	asserts.AssertIntReply(t, result, 1)
@@ -95,7 +95,7 @@ func TestRenameNx(t *testing.T) {
 	// cross node rename, dest key exist
 	key = testNodeA.self + utils.RandString(10)
 	value = utils.RandString(10)
-	newKey = testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.PickNode
+	newKey = testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.pickNode
 	testNodeA.db.Exec(conn, utils.ToCmdLine("SET", key, value, "ex", "1000"))
 	testNodeB.db.Exec(conn, utils.ToCmdLine("SET", newKey, newKey))
 	result = RenameNx(testNodeA, conn, utils.ToCmdLine("RENAMENX", key, newKey))
@@ -124,7 +124,7 @@ func TestRenameNx(t *testing.T) {
 	// test src prepare failed
 	*simulateATimout = true
 	key = testNodeA.self + utils.RandString(10)
-	newKey = testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.PickNode
+	newKey = testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.pickNode
 	value = utils.RandString(10)
 	testNodeA.db.Exec(conn, utils.ToCmdLine("SET", key, value, "ex", "1000"))
 	result = RenameNx(testNodeB, conn, utils.ToCmdLine("RENAMENX", key, newKey))
@@ -140,7 +140,7 @@ func TestRenameNx(t *testing.T) {
 	// test dest prepare failed
 	*simulateBTimout = true
 	key = testNodeA.self + utils.RandString(10)
-	newKey = testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.PickNode
+	newKey = testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.pickNode
 	value = utils.RandString(10)
 	testNodeA.db.Exec(conn, utils.ToCmdLine("SET", key, value, "ex", "1000"))
 	result = RenameNx(testNodeA, conn, utils.ToCmdLine("RENAMENX", key, newKey))

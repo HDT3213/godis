@@ -1,6 +1,9 @@
 package cluster
 
 import (
+	"bufio"
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"github.com/hdt3213/godis/config"
@@ -10,8 +13,8 @@ import (
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/protocol"
-	"hash/crc32"
 	"math/rand"
+	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,30 +28,6 @@ type raftState int
 
 func init() {
 	rand.Seed(time.Now().UnixNano())
-}
-
-// Slot represents a hash slot,  used in cluster internal messages
-type Slot struct {
-	// ID is uint between 0 and 16383
-	ID uint32
-	// NodeID is id of the hosting node
-	// If the slot is migrating, NodeID is the id of the node importing this slot (target node)
-	NodeID string
-	// Flags stores more information of slot
-	Flags uint32
-}
-
-func getSlot(key string) uint32 {
-	return crc32.ChecksumIEEE([]byte(key)) % uint32(slotCount)
-}
-
-// Node represents a node and its slots, used in cluster internal messages
-type Node struct {
-	ID        string
-	Addr      string
-	Slots     []*Slot // ascending order by slot id
-	Flags     uint32
-	lastHeard time.Time
 }
 
 const (
@@ -98,6 +77,30 @@ func (node *Node) getState() raftState {
 	return follower
 }
 
+type logEntry struct {
+	Term  int
+	Index int
+	Event int
+	wg    *sync.WaitGroup
+	// payload
+	SlotIDs []uint32
+	NodeID  string
+	Addr    string
+}
+
+func (e *logEntry) marshal() []byte {
+	bin, _ := json.Marshal(e)
+	return bin
+}
+
+func (e *logEntry) unmarshal(bin []byte) error {
+	err := json.Unmarshal(bin, e)
+	if err != nil {
+		return fmt.Errorf("illegal message: %v", err)
+	}
+	return nil
+}
+
 type Raft struct {
 	cluster        *Cluster
 	mu             sync.RWMutex
@@ -106,7 +109,8 @@ type Raft struct {
 	leaderId       string
 	nodes          map[string]*Node
 	log            []*logEntry // log index begin from 0
-	beginIndex     int         // beginIndex + 1 == log[0].Index
+	baseIndex      int         // baseIndex + 1 == log[0].Index, it can be considered as the previous log index
+	baseTerm       int         // baseTerm is the term of the previous log entry
 	state          raftState
 	term           int
 	votedFor       string
@@ -115,10 +119,18 @@ type Raft struct {
 	proposedIndex  int // index of the last proposed logEntry
 	heartbeatChan  chan *heartbeat
 	persistFile    string
+	electionAlarm  time.Time
 
 	// for leader
 	nodeIndexMap map[string]*nodeStatus
 	nodeLock     *lock.Locks
+}
+
+func newRaft(cluster *Cluster, persistFilename string) *Raft {
+	return &Raft{
+		cluster:     cluster,
+		persistFile: persistFilename,
+	}
 }
 
 type heartbeat struct {
@@ -132,48 +144,79 @@ type nodeStatus struct {
 	receivedIndex int // received log index, not committed index
 }
 
-// PickNode returns the node id hosting the given slot.
-// If the slot is migrating, return the node which is importing the slot
-func (raft *Raft) PickNode(slotID uint32) *Node {
-	slot := raft.slots[int(slotID)]
-	return raft.nodes[slot.NodeID]
+func (raft *Raft) GetNodes() []*Node {
+	raft.mu.RLock()
+	defer raft.mu.RUnlock()
+	result := make([]*Node, 0, len(raft.nodes))
+	for _, v := range raft.nodes {
+		result = append(result, v)
+	}
+	return result
 }
 
-func (raft *Raft) GetTopology() map[string]*Node {
-	return raft.nodes
+func (raft *Raft) GetNode(nodeID string) *Node {
+	raft.mu.RLock()
+	defer raft.mu.RUnlock()
+	return raft.nodes[nodeID]
 }
 
 func (raft *Raft) getLogEntries(beg, end int) []*logEntry {
-	if beg <= raft.beginIndex || end > raft.beginIndex+len(raft.log)+1 {
+	if beg <= raft.baseIndex || end > raft.baseIndex+len(raft.log)+1 {
 		return nil
 	}
-	i := beg - raft.beginIndex - 1
-	j := end - raft.beginIndex - 1
+	i := beg - raft.baseIndex - 1
+	j := end - raft.baseIndex - 1
 	return raft.log[i:j]
 }
 
 func (raft *Raft) getLogEntriesFrom(beg int) []*logEntry {
-	if beg <= raft.beginIndex {
+	if beg <= raft.baseIndex {
 		return nil
 	}
-	i := beg - raft.beginIndex - 1
+	i := beg - raft.baseIndex - 1
 	return raft.log[i:]
 }
 
 func (raft *Raft) getLogEntry(idx int) *logEntry {
-	if idx < raft.beginIndex || idx >= raft.beginIndex+len(raft.log) {
+	if idx < raft.baseIndex || idx >= raft.baseIndex+len(raft.log) {
 		return nil
 	}
-	return raft.log[idx-raft.beginIndex]
+	return raft.log[idx-raft.baseIndex]
 }
 
-func (raft *Raft) initLog(beginIndex int, entries []*logEntry) {
-	raft.beginIndex = beginIndex
+func (raft *Raft) initLog(baseTerm, baseIndex int, entries []*logEntry) {
+	raft.baseIndex = baseIndex
+	raft.baseTerm = baseTerm
 	raft.log = entries
 }
 
+const (
+	electionTimeoutMaxMs = 4000
+	electionTimeoutMinMs = 2800
+)
+
+func randRange(from, to int) int {
+	return rand.Intn(to-from) + from
+}
+
+// nextElectionAlarm generates normal election timeout, with randomness
+func nextElectionAlarm() time.Time {
+	return time.Now().Add(time.Duration(randRange(electionTimeoutMinMs, electionTimeoutMaxMs)) * time.Millisecond)
+}
+
+func compareLogIndex(term1, index1, term2, index2 int) int {
+	if term1 != term2 {
+		return term1 - term2
+	}
+	return index1 - index2
+}
+
+func (cluster *Cluster) asRaft() *Raft {
+	return cluster.topology.(*Raft)
+}
+
 // StartAsSeed starts cluster as seed node
-func (raft *Raft) StartAsSeed(addr string) (string, error) {
+func (raft *Raft) StartAsSeed(addr string) protocol.ErrorReply {
 	selfNodeID := config.Properties.AnnounceAddress()
 	raft.slots = make([]*Slot, slotCount)
 	// claim all slots
@@ -193,7 +236,8 @@ func (raft *Raft) StartAsSeed(addr string) (string, error) {
 	}
 	raft.nodes[selfNodeID].setState(leader)
 	raft.start(leader)
-	return selfNodeID, nil
+	raft.cluster.self = selfNodeID
+	return nil
 }
 
 func (raft *Raft) GetSlots() []*Slot {
@@ -208,6 +252,7 @@ func (raft *Raft) GetSelfNodeID() string {
 func (raft *Raft) start(state raftState) {
 	raft.state = state
 	raft.heartbeatChan = make(chan *heartbeat, 1)
+	raft.electionAlarm = nextElectionAlarm()
 	//raft.nodeIndexMap = make(map[string]*nodeStatus)
 	go func() {
 		for {
@@ -226,6 +271,7 @@ func (raft *Raft) start(state raftState) {
 const heartbeatTimeout = 3 * time.Second
 
 func (raft *Raft) followerJob() {
+	electionTimeout := time.Until(raft.electionAlarm)
 	select {
 	case hb := <-raft.heartbeatChan:
 		raft.mu.Lock()
@@ -236,15 +282,15 @@ func (raft *Raft) followerJob() {
 		raft.proposedIndex += len(hb.entries)
 		raft.applyLogEntries(raft.getLogEntries(raft.committedIndex+1, hb.commitTo+1))
 		raft.committedIndex = hb.commitTo
+		raft.electionAlarm = nextElectionAlarm()
 		raft.mu.Unlock()
-	case <-time.After(heartbeatTimeout):
+	case <-time.After(electionTimeout):
 		// change to candidate
 		logger.Info("raft leader timeout")
-		timeoutMs := rand.Intn(500) + int(float64(300)/float64(raft.proposedIndex/10+1))
-		logger.Info("sleep " + strconv.Itoa(timeoutMs) + "ms before change to candidate")
-		time.Sleep(time.Duration(timeoutMs) * time.Millisecond)
 		raft.mu.Lock()
+		raft.electionAlarm = nextElectionAlarm()
 		if raft.votedFor != "" {
+			// received request-vote and has voted during waiting timeout
 			raft.mu.Unlock()
 			logger.Info("has voted, give up being a candidate")
 			return
@@ -262,9 +308,9 @@ func (raft *Raft) candidateJob() {
 	raft.voteCount++
 	currentTerm := raft.term
 	req := &voteReq{
-		nodeID:   raft.selfNodeID,
-		logIndex: raft.proposedIndex,
-		term:     raft.term,
+		nodeID:       raft.selfNodeID,
+		lastLogIndex: raft.proposedIndex,
+		term:         raft.term,
 	}
 	raft.mu.Unlock()
 	args := append([][]byte{
@@ -273,6 +319,8 @@ func (raft *Raft) candidateJob() {
 	}, req.marshal()...)
 	conn := connection.NewFakeConn()
 	wg := sync.WaitGroup{}
+	elected := make(chan struct{}, len(raft.nodes)) // may receive many elected message during an election, only handle the first one
+	voteFinished := make(chan struct{})
 	for nodeID := range raft.nodes {
 		nodeID := nodeID
 		wg.Add(1)
@@ -320,25 +368,31 @@ func (raft *Raft) candidateJob() {
 				logger.Infof(fmt.Sprintf("get vote from %s", nodeID))
 				raft.voteCount++
 				if raft.voteCount >= len(raft.nodes)/2+1 {
-					// todo: do not wait other nodes, start leader job
 					logger.Info("elected to be the leader")
 					raft.state = leader
+					elected <- struct{}{} // notify the main goroutine to stop waiting
 					return
 				}
 			}
 		}()
 	}
+	go func() {
+		wg.Wait()
+		voteFinished <- struct{}{}
+	}()
 
-	wg.Wait()
-	raft.mu.Lock()
-	defer raft.mu.Unlock()
-	if currentTerm != raft.term || raft.state != candidate {
-		logger.Info("vote has finished, continue working in new state " + strconv.Itoa(int(raft.state)))
-		return
+	// wait vote finished or elected
+	select {
+	case <-voteFinished:
+		raft.mu.Lock()
+		if raft.term == currentTerm && raft.state == candidate {
+			logger.Info("failed to be elected, back to follower")
+			raft.state = follower
+		}
+		raft.mu.Unlock()
+	case <-elected:
+		logger.Info("win election, take leader of  term " + strconv.Itoa(currentTerm))
 	}
-	logger.Info("failed to be elected, back to follower")
-	raft.state = follower
-	raft.term = currentTerm // failed to be elected neither found newer term
 }
 
 // getNodeIndexMap ask offset of each node and init nodeIndexMap as new leader
@@ -434,7 +488,7 @@ func (raft *Raft) leaderJob() {
 					return
 				}
 			}
-			if status.receivedIndex < raft.beginIndex {
+			if status.receivedIndex < raft.baseIndex {
 				// some entries are missed due to change of leader, send full snapshot
 				cmdLine = utils.ToCmdLine(
 					"raft",
@@ -446,36 +500,30 @@ func (raft *Raft) leaderJob() {
 				cmdLine = append(cmdLine, snapshot[2:]...)
 			} else {
 				// leader has all needed entries, send normal heartbeat
+				req := &heartbeatRequest{
+					leaderId: raft.leaderId,
+					term:     raft.term,
+					commitTo: commitTo,
+				}
+				// append new entries to heartbeat payload
+				if proposalIndex > status.receivedIndex {
+					req.prevLogTerm = raft.getLogEntry(status.receivedIndex).Term
+					req.prevLogIndex = status.receivedIndex
+					req.entries = raft.getLogEntriesFrom(status.receivedIndex + 1)
+				}
 				cmdLine = utils.ToCmdLine(
 					"raft",
 					"heartbeat",
-					raft.selfNodeID,
-					strconv.Itoa(raft.term),
-					strconv.Itoa(commitTo),
 				)
-				// append new entries to heartbeat payload
-				if proposalIndex > status.receivedIndex {
-					prevLogTerm := raft.getLogEntry(status.receivedIndex).Term
-					entries := raft.getLogEntriesFrom(status.receivedIndex + 1)
-					cmdLine = append(cmdLine,
-						[]byte(strconv.Itoa(prevLogTerm)),
-						[]byte(strconv.Itoa(status.receivedIndex)),
-					)
-					for _, entry := range entries {
-						cmdLine = append(cmdLine, entry.marshal())
-					}
-				}
+				cmdLine = append(cmdLine, req.marshal()...)
 			}
 
 			conn := connection.NewFakeConn()
 			resp := raft.cluster.relay2(node.ID, conn, cmdLine)
-			if err, ok := resp.(protocol.ErrorReply); ok {
-				logger.Errorf("heartbeat to %s failed: %v", node.ID, err)
-				return
-			}
-			if arrReply, ok := resp.(*protocol.MultiBulkReply); ok {
-				term, _ := strconv.Atoi(string(arrReply.Args[0]))
-				recvedIndex, _ := strconv.Atoi(string(arrReply.Args[1]))
+			switch respPayload := resp.(type) {
+			case *protocol.MultiBulkReply:
+				term, _ := strconv.Atoi(string(respPayload.Args[0]))
+				recvedIndex, _ := strconv.Atoi(string(respPayload.Args[1]))
 				if term > raft.term {
 					// todo: rejoin as follower
 					return
@@ -483,6 +531,25 @@ func (raft *Raft) leaderJob() {
 				raft.mu.Lock()
 				raft.nodeIndexMap[node.ID].receivedIndex = recvedIndex
 				raft.mu.Unlock()
+			case protocol.ErrorReply:
+				if respPayload.Error() == prevLogMismatch {
+					cmdLine = utils.ToCmdLine(
+						"raft",
+						"load-snapshot",
+						raft.selfNodeID,
+					)
+					cmdLine = append(cmdLine, []byte(node.ID), []byte{byte(follower)})
+					cmdLine = append(cmdLine, snapshot[2:]...)
+					resp := raft.cluster.relay2(node.ID, conn, cmdLine)
+					if err, ok := resp.(protocol.ErrorReply); ok {
+						logger.Errorf("heartbeat to %s failed: %v", node.ID, err)
+						return
+					}
+				} else {
+					logger.Errorf("heartbeat to %s failed: %v", node.ID, respPayload.Error())
+					return
+				}
+
 			}
 		}()
 	}
@@ -531,33 +598,41 @@ func execRaft(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 }
 
 type voteReq struct {
-	nodeID   string
-	logIndex int
-	term     int
+	nodeID       string
+	term         int
+	lastLogIndex int
+	lastLogTerm  int
 }
 
 func (req *voteReq) marshal() [][]byte {
-	indexBin := []byte(strconv.Itoa(int(req.logIndex)))
+	lastLogIndexBin := []byte(strconv.Itoa(req.lastLogIndex))
+	lastLogTermBin := []byte(strconv.Itoa(req.lastLogTerm))
 	termBin := []byte(strconv.Itoa(req.term))
 	return [][]byte{
 		[]byte(req.nodeID),
-		indexBin,
 		termBin,
+		lastLogIndexBin,
+		lastLogTermBin,
 	}
 }
 
 func (req *voteReq) unmarshal(bin [][]byte) error {
 	req.nodeID = string(bin[0])
-	index, err := strconv.Atoi(string(bin[1]))
-	if err != nil {
-		return fmt.Errorf("illegal index %s", string(bin[1]))
-	}
-	req.logIndex = int(index)
-	term, err := strconv.Atoi(string(bin[2]))
+	term, err := strconv.Atoi(string(bin[1]))
 	if err != nil {
 		return fmt.Errorf("illegal term %s", string(bin[2]))
 	}
 	req.term = term
+	logIndex, err := strconv.Atoi(string(bin[2]))
+	if err != nil {
+		return fmt.Errorf("illegal index %s", string(bin[1]))
+	}
+	req.lastLogIndex = logIndex
+	logTerm, err := strconv.Atoi(string(bin[3]))
+	if err != nil {
+		return fmt.Errorf("illegal index %s", string(bin[1]))
+	}
+	req.lastLogTerm = logTerm
 	return nil
 }
 
@@ -589,7 +664,7 @@ func (resp *voteResp) marshal() [][]byte {
 // execRaftRequestVote command line: raft request-vote nodeID index term
 // Decide whether to vote when other nodes solicit votes
 func execRaftRequestVote(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
-	if len(args) != 3 {
+	if len(args) != 4 {
 		return protocol.MakeArgNumErrReply("raft request-vote")
 	}
 	req := &voteReq{}
@@ -597,91 +672,150 @@ func execRaftRequestVote(cluster *Cluster, c redis.Connection, args [][]byte) re
 	if err != nil {
 		return protocol.MakeErrReply(err.Error())
 	}
-	cluster.topology.mu.Lock()
-	defer cluster.topology.mu.Unlock()
+	raft := cluster.asRaft()
+	raft.mu.Lock()
+	defer raft.mu.Unlock()
 	logger.Info("recv request vote from " + req.nodeID + ", term: " + strconv.Itoa(req.term))
 	resp := &voteResp{}
-	if req.term < cluster.topology.term {
-		resp.term = cluster.topology.term
-		resp.voteFor = cluster.topology.leaderId // tell candidate the new leader
+	if req.term < raft.term {
+		resp.term = raft.term
+		resp.voteFor = raft.leaderId // tell candidate the new leader
 		logger.Info("deny request vote from " + req.nodeID + " for earlier term")
 		return protocol.MakeMultiBulkReply(resp.marshal())
 	}
-	if req.logIndex < cluster.topology.proposedIndex {
-		resp.term = cluster.topology.term
-		resp.voteFor = cluster.topology.votedFor
-		logger.Info("deny request vote from " + req.nodeID + " for  log progress")
-		logger.Info("request vote proposal index " + strconv.Itoa(req.logIndex) + " self index " + strconv.Itoa(cluster.topology.proposedIndex))
+	// todo: if req.term > raft.term step down as leader?
+	if compareLogIndex(req.lastLogTerm, req.lastLogIndex, raft.term, raft.proposedIndex) < 0 {
+		resp.term = raft.term
+		resp.voteFor = raft.votedFor
+		logger.Info("deny request vote from " + req.nodeID + " for log progress")
+		logger.Info("request vote proposal index " + strconv.Itoa(req.lastLogIndex) + " self index " + strconv.Itoa(raft.proposedIndex))
 		return protocol.MakeMultiBulkReply(resp.marshal())
 	}
-	if cluster.topology.votedFor != "" && cluster.topology.votedFor != cluster.topology.selfNodeID {
-		resp.term = cluster.topology.term
-		resp.voteFor = cluster.topology.votedFor
+	if raft.votedFor != "" && raft.votedFor != raft.selfNodeID {
+		resp.term = raft.term
+		resp.voteFor = raft.votedFor
 		logger.Info("deny request vote from " + req.nodeID + " for voted")
 		return protocol.MakeMultiBulkReply(resp.marshal())
 	}
-	if cluster.topology.votedFor == cluster.topology.selfNodeID &&
-		cluster.topology.voteCount == 1 {
+	if raft.votedFor == raft.selfNodeID &&
+		raft.voteCount == 1 {
 		// cancel vote for self to avoid live lock
-		cluster.topology.votedFor = ""
-		cluster.topology.voteCount = 0
+		raft.votedFor = ""
+		raft.voteCount = 0
 	}
 	logger.Info("accept request vote from " + req.nodeID)
-	cluster.topology.votedFor = req.nodeID
-	cluster.topology.term = req.term
+	raft.votedFor = req.nodeID
+	raft.term = req.term
+	raft.electionAlarm = nextElectionAlarm()
 	resp.voteFor = req.nodeID
-	resp.term = cluster.topology.term
+	resp.term = raft.term
 	return protocol.MakeMultiBulkReply(resp.marshal())
 }
 
-// execRaftHeartbeat receives heartbeat from leader
-// command line: raft heartbeat nodeID term commitTo prevTerm prevIndex [log entry]
-// returns term and received index
-func execRaftHeartbeat(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
+type heartbeatRequest struct {
+	leaderId     string
+	term         int
+	commitTo     int
+	prevLogTerm  int
+	prevLogIndex int
+	entries      []*logEntry
+}
+
+func (req *heartbeatRequest) marshal() [][]byte {
+	cmdLine := utils.ToCmdLine(
+		req.leaderId,
+		strconv.Itoa(req.term),
+		strconv.Itoa(req.commitTo),
+	)
+	if len(req.entries) > 0 {
+		cmdLine = append(cmdLine,
+			[]byte(strconv.Itoa(req.prevLogTerm)),
+			[]byte(strconv.Itoa(req.prevLogIndex)),
+		)
+		for _, entry := range req.entries {
+			cmdLine = append(cmdLine, entry.marshal())
+		}
+	}
+	return cmdLine
+}
+
+func (req *heartbeatRequest) unmarshal(args [][]byte) protocol.ErrorReply {
 	if len(args) < 6 && len(args) != 3 {
 		return protocol.MakeArgNumErrReply("raft heartbeat")
 	}
-	sender := string(args[0])
-	term, err := strconv.Atoi(string(args[1]))
+	req.leaderId = string(args[0])
+	var err error
+	req.term, err = strconv.Atoi(string(args[1]))
 	if err != nil {
 		return protocol.MakeErrReply("illegal term: " + string(args[1]))
 	}
-	//logger.Debugf("recv heartbeat from %s term %d self term %d", sender, term, cluster.topology.term)
-	commitTo, err := strconv.Atoi(string(args[2]))
+	req.commitTo, err = strconv.Atoi(string(args[2]))
 	if err != nil {
-		return protocol.MakeErrReply("illegal commitTo: " + string(args[1]))
+		return protocol.MakeErrReply("illegal commitTo: " + string(args[2]))
 	}
-	if term < cluster.topology.term {
-		return protocol.MakeIntReply(int64(cluster.topology.term))
-	} else if term > cluster.topology.term {
-		logger.Info("accept new leader " + sender)
-		cluster.topology.mu.Lock()
-		cluster.topology.term = term
-		cluster.topology.votedFor = ""
-		cluster.topology.leaderId = sender
-		cluster.topology.mu.Unlock()
-	}
-	// todo: validate prevTerm prevIndex
-	var entries []*logEntry
-	if len(args) > 5 {
+	if len(args) > 3 {
+		req.prevLogTerm, err = strconv.Atoi(string(args[3]))
+		if err != nil {
+			return protocol.MakeErrReply("illegal commitTo: " + string(args[3]))
+		}
+		req.prevLogIndex, err = strconv.Atoi(string(args[4]))
+		if err != nil {
+			return protocol.MakeErrReply("illegal commitTo: " + string(args[4]))
+		}
 		for _, bin := range args[5:] {
 			entry := &logEntry{}
 			err = entry.unmarshal(bin)
 			if err != nil {
 				return protocol.MakeErrReply(err.Error())
 			}
-			entries = append(entries, entry)
+			req.entries = append(req.entries, entry)
 		}
 	}
-	cluster.topology.heartbeatChan <- &heartbeat{
-		sender:   sender,
-		term:     term,
-		entries:  entries,
-		commitTo: commitTo,
+	return nil
+}
+
+const prevLogMismatch = "prev log mismatch"
+
+// execRaftHeartbeat receives heartbeat from leader
+// command line: raft heartbeat nodeID term commitTo prevTerm prevIndex [log entry]
+// returns term and received index
+func execRaftHeartbeat(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
+	raft := cluster.asRaft()
+	req := &heartbeatRequest{}
+	unmarshalErr := req.unmarshal(args)
+	if unmarshalErr != nil {
+		return unmarshalErr
+	}
+	if req.term < raft.term {
+		return protocol.MakeMultiBulkReply(utils.ToCmdLine(
+			strconv.Itoa(req.term),
+			strconv.Itoa(raft.proposedIndex), // new received index
+		))
+	} else if req.term > raft.term {
+		logger.Info("accept new leader " + req.leaderId)
+		raft.mu.Lock()
+		// todo: if current node is not at follower state
+		raft.term = req.term
+		raft.votedFor = ""
+		raft.leaderId = req.leaderId
+		raft.mu.Unlock()
+	}
+	raft.mu.RLock()
+	if compareLogIndex(req.prevLogTerm, req.prevLogIndex, raft.baseTerm, raft.baseIndex) != 0 {
+		raft.mu.RUnlock()
+		return protocol.MakeErrReply(prevLogMismatch)
+	}
+	raft.mu.RUnlock()
+
+	cluster.asRaft().heartbeatChan <- &heartbeat{
+		sender:   req.leaderId,
+		term:     req.term,
+		entries:  req.entries,
+		commitTo: req.commitTo,
 	}
 	return protocol.MakeMultiBulkReply(utils.ToCmdLine(
-		strconv.Itoa(term),
-		strconv.Itoa(cluster.topology.proposedIndex+len(entries)), // new received index
+		strconv.Itoa(req.term),
+		strconv.Itoa(raft.proposedIndex+len(req.entries)), // new received index
 	))
 }
 
@@ -692,21 +826,22 @@ func execRaftLoadSnapshot(cluster *Cluster, c redis.Connection, args [][]byte) r
 	if len(args) < 5 {
 		return protocol.MakeArgNumErrReply("raft load snapshot")
 	}
-	cluster.topology.mu.Lock()
-	defer cluster.topology.mu.Unlock()
-	if errReply := cluster.topology.loadSnapshot(args[1:]); errReply != nil {
+	raft := cluster.asRaft()
+	raft.mu.Lock()
+	defer raft.mu.Unlock()
+	if errReply := raft.loadSnapshot(args[1:]); errReply != nil {
 		return errReply
 	}
 	sender := string(args[0])
-	cluster.topology.heartbeatChan <- &heartbeat{
+	raft.heartbeatChan <- &heartbeat{
 		sender:   sender,
-		term:     cluster.topology.term,
+		term:     raft.term,
 		entries:  nil,
-		commitTo: cluster.topology.committedIndex,
+		commitTo: raft.committedIndex,
 	}
 	return protocol.MakeMultiBulkReply(utils.ToCmdLine(
-		strconv.Itoa(cluster.topology.term),
-		strconv.Itoa(cluster.topology.proposedIndex),
+		strconv.Itoa(raft.term),
+		strconv.Itoa(raft.proposedIndex),
 	))
 }
 
@@ -718,9 +853,10 @@ var wgPool = sync.Pool{
 
 // execRaftGetLeader returns leader id and address
 func execRaftGetLeader(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
-	cluster.topology.mu.RLock()
-	leaderNode := cluster.topology.nodes[cluster.topology.leaderId]
-	cluster.topology.mu.RUnlock()
+	raft := cluster.asRaft()
+	raft.mu.RLock()
+	leaderNode := raft.nodes[raft.leaderId]
+	raft.mu.RUnlock()
 	return protocol.MakeMultiBulkReply(utils.ToCmdLine(
 		leaderNode.ID,
 		leaderNode.Addr,
@@ -729,9 +865,150 @@ func execRaftGetLeader(cluster *Cluster, c redis.Connection, args [][]byte) redi
 
 // execRaftGetOffset returns log offset of current leader
 func execRaftGetOffset(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
-	cluster.topology.mu.RLock()
-	proposalIndex := cluster.topology.proposedIndex
-	//committedIndex := cluster.topology.committedIndex
-	cluster.topology.mu.RUnlock()
+	raft := cluster.asRaft()
+	raft.mu.RLock()
+	proposalIndex := raft.proposedIndex
+	//committedIndex := raft.committedIndex
+	raft.mu.RUnlock()
 	return protocol.MakeIntReply(int64(proposalIndex))
+}
+
+// invoker should provide with raft.mu lock
+func (raft *Raft) persist() error {
+	if raft.persistFile == "" {
+		return nil
+	}
+	tmpFile, err := os.CreateTemp(config.Properties.Dir, "tmp-cluster-conf-*.conf")
+	if err != nil {
+		return err
+	}
+	snapshot := raft.makeSnapshot()
+	buf := bytes.NewBuffer(nil)
+	for _, line := range snapshot {
+		buf.Write(line)
+		buf.WriteByte('\n')
+	}
+	_, err = tmpFile.Write(buf.Bytes())
+	if err != nil {
+		return err
+	}
+	err = os.Rename(tmpFile.Name(), raft.persistFile)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+// execRaftPropose handles requests from other nodes (follower or learner) to propose a change
+// command line: raft propose <logEntry>
+func execRaftPropose(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
+	raft := cluster.asRaft()
+	if raft.state != leader {
+		leaderNode := raft.nodes[raft.leaderId]
+		return protocol.MakeErrReply("NOT LEADER " + leaderNode.ID + " " + leaderNode.Addr)
+	}
+	if len(args) != 1 {
+		return protocol.MakeArgNumErrReply("raft propose")
+	}
+
+	e := &logEntry{}
+	err := e.unmarshal(args[0])
+	if err != nil {
+		return protocol.MakeErrReply(err.Error())
+	}
+	if errReply := raft.propose(e); errReply != nil {
+		return errReply
+	}
+	return protocol.MakeOkReply()
+}
+
+func (raft *Raft) propose(e *logEntry) protocol.ErrorReply {
+	switch e.Event {
+	case eventNewNode:
+		raft.mu.Lock()
+		_, ok := raft.nodes[e.Addr]
+		raft.mu.Unlock()
+		if ok {
+			return protocol.MakeErrReply("node exists")
+		}
+	}
+	wg := wgPool.Get().(*sync.WaitGroup)
+	defer wgPool.Put(wg)
+	e.wg = wg
+	raft.mu.Lock()
+	raft.proposedIndex++
+	raft.log = append(raft.log, e)
+	raft.nodeIndexMap[raft.selfNodeID].receivedIndex = raft.proposedIndex
+	e.Term = raft.term
+	e.Index = raft.proposedIndex
+	raft.mu.Unlock()
+	e.wg.Add(1)
+	e.wg.Wait() // wait for the raft group to reach a consensus
+	return nil
+}
+
+func (raft *Raft) Join(seed string) protocol.ErrorReply {
+	cluster := raft.cluster
+
+	/* STEP1: get leader from seed */
+	seedCli, err := cluster.getPeerClient(seed)
+	if err != nil {
+		return protocol.MakeErrReply("connect with seed failed: " + err.Error())
+	}
+	ret := seedCli.Send(utils.ToCmdLine("raft", "get-leader"))
+	if protocol.IsErrorReply(ret) {
+		return ret.(protocol.ErrorReply)
+	}
+	leaderInfo, ok := ret.(*protocol.MultiBulkReply)
+	if !ok || len(leaderInfo.Args) != 2 {
+		return protocol.MakeErrReply("ERR get-leader returns wrong reply")
+	}
+	leaderAddr := string(leaderInfo.Args[1])
+
+	/* STEP2: join raft group */
+	leaderCli, err := cluster.getPeerClient(leaderAddr)
+	if err != nil {
+		return protocol.MakeErrReply("connect with seed failed: " + err.Error())
+	}
+	ret = leaderCli.Send(utils.ToCmdLine("raft", "join", config.Properties.AnnounceAddress()))
+	if protocol.IsErrorReply(ret) {
+		return ret.(protocol.ErrorReply)
+	}
+	snapshot, ok := ret.(*protocol.MultiBulkReply)
+	if !ok || len(snapshot.Args) < 4 {
+		return protocol.MakeErrReply("ERR gcluster join returns wrong reply")
+	}
+	raft.mu.Lock()
+	defer raft.mu.Unlock()
+	if errReply := raft.loadSnapshot(snapshot.Args); errReply != nil {
+		return errReply
+	}
+	cluster.self = raft.selfNodeID
+	raft.start(follower)
+	return nil
+}
+
+func (raft *Raft) LoadConfigFile() protocol.ErrorReply {
+	f, err := os.Open(raft.persistFile)
+	if err == os.ErrNotExist {
+		return errConfigFileNotExist
+	}
+	defer func() {
+		if err := f.Close(); err != nil {
+			logger.Errorf("close cloud config file error: %v", err)
+		}
+	}()
+	scanner := bufio.NewScanner(f)
+	var snapshot [][]byte
+	for scanner.Scan() {
+		snapshot = append(snapshot, scanner.Bytes())
+	}
+	raft.mu.Lock()
+	defer raft.mu.Unlock()
+	if errReply := raft.loadSnapshot(snapshot); errReply != nil {
+		return errReply
+	}
+	raft.cluster.self = raft.selfNodeID
+	raft.start(raft.state)
+	return nil
 }

@@ -31,11 +31,7 @@ func Del(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 		peerArgs := []string{txIDStr, "DEL"}
 		peerArgs = append(peerArgs, peerKeys...)
 		var resp redis.Reply
-		if peer == cluster.self {
-			resp = execPrepare(cluster, c, makeArgs("Prepare", peerArgs...))
-		} else {
-			resp = cluster.relay(peer, c, makeArgs("Prepare", peerArgs...))
-		}
+		resp = cluster.relay2(peer, c, makeArgs("Prepare", peerArgs...))
 		if protocol.IsErrorReply(resp) {
 			errReply = resp
 			rollback = true

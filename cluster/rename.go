@@ -26,7 +26,7 @@ func Rename(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	txID := cluster.idGenerator.NextID()
 	txIDStr := strconv.FormatInt(txID, 10)
 	// prepare rename from
-	srcPrepareResp := cluster.relayPrepare(srcNode, c, makeArgs("Prepare", txIDStr, "RenameFrom", srcKey))
+	srcPrepareResp := cluster.relay2(srcNode, c, makeArgs("Prepare", txIDStr, "RenameFrom", srcKey))
 	if protocol.IsErrorReply(srcPrepareResp) {
 		// rollback src node
 		requestRollback(cluster, c, txID, map[string][]string{srcNode: {srcKey}})
@@ -38,7 +38,7 @@ func Rename(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 		return protocol.MakeErrReply("ERR invalid prepare response")
 	}
 	// prepare rename to
-	destPrepareResp := cluster.relayPrepare(destNode, c, utils.ToCmdLine3("Prepare", []byte(txIDStr),
+	destPrepareResp := cluster.relay2(destNode, c, utils.ToCmdLine3("Prepare", []byte(txIDStr),
 		[]byte("RenameTo"), []byte(destKey), srcPrepareMBR.Args[0], srcPrepareMBR.Args[1]))
 	if protocol.IsErrorReply(destPrepareResp) {
 		// rollback src node
@@ -110,7 +110,7 @@ func RenameNx(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	txID := cluster.idGenerator.NextID()
 	txIDStr := strconv.FormatInt(txID, 10)
 	// prepare rename from
-	srcPrepareResp := cluster.relayPrepare(srcNode, c, makeArgs("Prepare", txIDStr, "RenameFrom", srcKey))
+	srcPrepareResp := cluster.relay2(srcNode, c, makeArgs("Prepare", txIDStr, "RenameFrom", srcKey))
 	if protocol.IsErrorReply(srcPrepareResp) {
 		// rollback src node
 		requestRollback(cluster, c, txID, map[string][]string{srcNode: {srcKey}})
@@ -122,7 +122,7 @@ func RenameNx(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 		return protocol.MakeErrReply("ERR invalid prepare response")
 	}
 	// prepare rename to
-	destPrepareResp := cluster.relayPrepare(destNode, c, utils.ToCmdLine3("Prepare", []byte(txIDStr),
+	destPrepareResp := cluster.relay2(destNode, c, utils.ToCmdLine3("Prepare", []byte(txIDStr),
 		[]byte("RenameNxTo"), []byte(destKey), srcPrepareMBR.Args[0], srcPrepareMBR.Args[1]))
 	if protocol.IsErrorReply(destPrepareResp) {
 		// rollback src node

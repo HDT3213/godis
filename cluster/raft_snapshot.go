@@ -185,7 +185,7 @@ func (raft *Raft) loadSnapshot(snapshot [][]byte) protocol.ErrorReply {
 	raft.term = term
 	raft.committedIndex = commitIndex
 	raft.proposedIndex = commitIndex
-	raft.initLog(commitIndex, nil)
+	raft.initLog(term, commitIndex, nil)
 	raft.slots = make([]*Slot, slotCount)
 	for _, node := range nodes {
 		for _, slot := range node.Slots {

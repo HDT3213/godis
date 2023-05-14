@@ -34,7 +34,14 @@ func (cluster *Cluster) groupBy(keys []string) map[string][]string {
 	return result
 }
 
+// pickNode returns the node id hosting the given slot.
+// If the slot is migrating, return the node which is importing the slot
+func (cluster *Cluster) pickNode(slotID uint32) *Node {
+	slot := cluster.topology.GetSlots()[int(slotID)]
+	return cluster.topology.GetNode(slot.NodeID)
+}
+
 func (cluster *Cluster) pickNodeAddrByKey(key string) string {
 	slotId := getSlot(key)
-	return cluster.topology.PickNode(slotId).Addr
+	return cluster.pickNode(slotId).Addr
 }

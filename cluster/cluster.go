@@ -23,20 +23,19 @@ import (
 // Cluster represents a node of godis cluster
 // it holds part of data and coordinates other nodes to finish transactions
 type Cluster struct {
-	self string
-
+	self            string
 	nodeConnections dict.Dict // map[string]*pool.Pool
+	db              database.DBEngine
+	transactions    *dict.SimpleDict // id -> Transaction
+	topology        topology
+	slotMu          sync.RWMutex
+	slots           map[uint32]*hostSlot
+	idGenerator     *idgenerator.IDGenerator
 
-	db           database.DBEngine
-	transactions *dict.SimpleDict // id -> Transaction
-	topology     *Raft
-	slotMu       sync.RWMutex
-	slots        map[uint32]*hostSlot
-
-	idGenerator *idgenerator.IDGenerator
-	// use a variable to allow injecting stub for testing
-	relayImpl func(cluster *Cluster, node string, c redis.Connection, cmdLine CmdLine) redis.Reply
+	relayImpl relayFunc // use a variable to allow injecting stub for testing
 }
+
+type relayFunc func(cluster *Cluster, node string, c redis.Connection, cmdLine CmdLine) redis.Reply
 
 const (
 	slotStateHost = iota
@@ -83,15 +82,13 @@ func MakeCluster() *Cluster {
 		idGenerator: idgenerator.MakeGenerator(config.Properties.Self),
 		relayImpl:   defaultRelayImpl,
 	}
-	cluster.topology = &Raft{
-		cluster:     cluster,
-		persistFile: path.Join(config.Properties.Dir, config.Properties.ClusterConfigFile),
-	}
+	topologyPersistFile := path.Join(config.Properties.Dir, config.Properties.ClusterConfigFile)
+	cluster.topology = newRaft(cluster, topologyPersistFile)
 	cluster.db.SetKeyInsertedCallback(cluster.makeInsertCallback())
 	cluster.db.SetKeyDeletedCallback(cluster.makeDeleteCallback())
 	cluster.slots = make(map[uint32]*hostSlot)
 	var err error
-	if cluster.topology.persistFile != "" && fileExists(cluster.topology.persistFile) {
+	if topologyPersistFile != "" && fileExists(topologyPersistFile) {
 		err = cluster.LoadConfig()
 	} else if config.Properties.ClusterAsSeed {
 		err = cluster.startAsSeed()

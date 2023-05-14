@@ -30,7 +30,7 @@ func defaultFunc(cluster *Cluster, c redis.Connection, args [][]byte) redis.Repl
 	}
 	cluster.db.RWUnLocks(0, []string{key}, nil)
 	slotId := getSlot(key)
-	peer := cluster.topology.PickNode(slotId)
+	peer := cluster.pickNode(slotId)
 	if peer.ID == cluster.self {
 		// to self db
 		//return cluster.db.Exec(c, cmdLine)

@@ -78,7 +78,7 @@ func TestCopy(t *testing.T) {
 	// test src prepare failed
 	*simulateATimout = true
 	srcKey = testNodeA.self + utils.RandString(10)
-	destKey = testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.PickNode
+	destKey = testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.pickNode
 	value = utils.RandString(10)
 	testNodeA.db.Exec(conn, utils.ToCmdLine("SET", srcKey, value, "ex", "1000"))
 	result = Rename(testNodeB, conn, utils.ToCmdLine("RENAME", srcKey, destKey))
@@ -94,7 +94,7 @@ func TestCopy(t *testing.T) {
 	// test dest prepare failed
 	*simulateBTimout = true
 	srcKey = testNodeA.self + utils.RandString(10)
-	destKey = testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.PickNode
+	destKey = testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.pickNode
 	value = utils.RandString(10)
 	testNodeA.db.Exec(conn, utils.ToCmdLine("SET", srcKey, value, "ex", "1000"))
 	result = Rename(testNodeA, conn, utils.ToCmdLine("COPY", srcKey, destKey))

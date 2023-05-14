@@ -1,48 +1,20 @@
 package cluster
 
+// raft event handlers
+
 import (
-	"bytes"
-	"encoding/json"
 	"errors"
-	"fmt"
-	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/protocol"
-	"os"
-	"sync"
 )
 
 const (
 	eventNewNode = iota + 1
 	eventSetSlot
 )
-
-type logEntry struct {
-	Term  int
-	Index int
-	Event int
-	wg    *sync.WaitGroup
-	// payload
-	SlotIDs []uint32
-	NodeID  string
-	Addr    string
-}
-
-func (e *logEntry) marshal() []byte {
-	bin, _ := json.Marshal(e)
-	return bin
-}
-
-func (e *logEntry) unmarshal(bin []byte) error {
-	err := json.Unmarshal(bin, e)
-	if err != nil {
-		return fmt.Errorf("illegal message: %v", err)
-	}
-	return nil
-}
 
 // invoker should provide with raft.mu lock
 func (raft *Raft) applyLogEntries(entries []*logEntry) {
@@ -80,81 +52,9 @@ func (raft *Raft) applyLogEntries(entries []*logEntry) {
 		}
 	}
 	if err := raft.persist(); err != nil {
-		logger.Error("persist raft error: %v", err)
+		logger.Errorf("persist raft error: %v", err)
 	}
 
-}
-
-// invoker should provide with raft.mu lock
-func (raft *Raft) persist() error {
-	if raft.persistFile == "" {
-		return nil
-	}
-	tmpFile, err := os.CreateTemp(config.Properties.Dir, "tmp-cluster-conf-*.conf")
-	if err != nil {
-		return err
-	}
-	snapshot := raft.makeSnapshot()
-	buf := bytes.NewBuffer(nil)
-	for _, line := range snapshot {
-		buf.Write(line)
-		buf.WriteByte('\n')
-	}
-	_, err = tmpFile.Write(buf.Bytes())
-	if err != nil {
-		return err
-	}
-	err = os.Rename(tmpFile.Name(), raft.persistFile)
-	if err != nil {
-		return err
-	}
-	return nil
-}
-
-// execRaftPropose handles requests from other nodes (follower or learner) to propose a change
-// command line: raft propose <logEntry>
-func execRaftPropose(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
-	if cluster.topology.state != leader {
-		leaderNode := cluster.topology.nodes[cluster.topology.leaderId]
-		return protocol.MakeErrReply("NOT LEADER " + leaderNode.ID + " " + leaderNode.Addr)
-	}
-	if len(args) != 1 {
-		return protocol.MakeArgNumErrReply("raft propose")
-	}
-
-	e := &logEntry{}
-	err := e.unmarshal(args[0])
-	if err != nil {
-		return protocol.MakeErrReply(err.Error())
-	}
-	if errReply := cluster.topology.propose(e); errReply != nil {
-		return errReply
-	}
-	return protocol.MakeOkReply()
-}
-
-func (raft *Raft) propose(e *logEntry) protocol.ErrorReply {
-	switch e.Event {
-	case eventNewNode:
-		raft.mu.Lock()
-		_, ok := raft.nodes[e.Addr]
-		raft.mu.Unlock()
-		if ok {
-			return protocol.MakeErrReply("node exists")
-		}
-	}
-	wg := wgPool.Get().(*sync.WaitGroup)
-	defer wgPool.Put(wg)
-	e.wg = wg
-	raft.mu.Lock()
-	raft.proposedIndex++
-	raft.log = append(raft.log, e)
-	e.Term = raft.term
-	e.Index = raft.proposedIndex
-	raft.mu.Unlock()
-	e.wg.Add(1)
-	e.wg.Wait() // wait for the raft group to reach a consensus
-	return nil
 }
 
 // NewNode creates a new Node when a node request self node for joining cluster
@@ -182,7 +82,7 @@ func (raft *Raft) NewNode(addr string) (*Node, error) {
 }
 
 // SetSlot propose
-func (raft *Raft) SetSlot(slotIDs []uint32, newNodeID string) error {
+func (raft *Raft) SetSlot(slotIDs []uint32, newNodeID string) protocol.ErrorReply {
 	proposal := &logEntry{
 		Event:   eventSetSlot,
 		NodeID:  newNodeID,
@@ -203,16 +103,17 @@ func execRaftJoin(cluster *Cluster, c redis.Connection, args [][]byte) redis.Rep
 	if len(args) != 1 {
 		return protocol.MakeArgNumErrReply("raft join")
 	}
-	if cluster.topology.state != leader {
-		leaderNode := cluster.topology.nodes[cluster.topology.leaderId]
+	raft := cluster.asRaft()
+	if raft.state != leader {
+		leaderNode := raft.nodes[raft.leaderId]
 		return protocol.MakeErrReply("NOT LEADER " + leaderNode.ID + " " + leaderNode.Addr)
 	}
 	addr := string(args[0])
 	nodeID := addr
 
-	cluster.topology.mu.RLock()
-	_, exist := cluster.topology.nodes[addr]
-	cluster.topology.mu.RUnlock()
+	raft.mu.RLock()
+	_, exist := raft.nodes[addr]
+	raft.mu.RUnlock()
 	// if node has joint cluster but terminated before persisting cluster config,
 	// it may try to join at next start.
 	// In this case, we only have to send a snapshot for it
@@ -222,12 +123,12 @@ func execRaftJoin(cluster *Cluster, c redis.Connection, args [][]byte) redis.Rep
 			NodeID: nodeID,
 			Addr:   addr,
 		}
-		if err := cluster.topology.propose(proposal); err != nil {
+		if err := raft.propose(proposal); err != nil {
 			return err
 		}
 	}
-	cluster.topology.mu.RLock()
-	snapshot := cluster.topology.makeSnapshotForFollower(nodeID)
-	cluster.topology.mu.RUnlock()
+	raft.mu.RLock()
+	snapshot := raft.makeSnapshotForFollower(nodeID)
+	raft.mu.RUnlock()
 	return protocol.MakeMultiBulkReply(snapshot)
 }

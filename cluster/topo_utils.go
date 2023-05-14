@@ -81,12 +81,8 @@ func (cluster *Cluster) cleanDroppedSlot(slotID uint32) {
 
 // findSlotsForNewNode try to find slots for new node, but do not actually migrate
 func (cluster *Cluster) findSlotsForNewNode() []*Slot {
-	nodeMap := cluster.topology.GetTopology() // including the new node
-	avgSlot := slotCount / len(nodeMap)
-	nodes := make([]*Node, 0, len(nodeMap))
-	for _, node := range nodeMap {
-		nodes = append(nodes, node)
-	}
+	nodes := cluster.topology.GetNodes() // including the new node
+	avgSlot := slotCount / len(nodes)
 	sort.Slice(nodes, func(i, j int) bool {
 		return len(nodes[i].Slots) > len(nodes[j].Slots)
 	})

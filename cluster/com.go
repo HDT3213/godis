@@ -16,12 +16,12 @@ var connectionPoolConfig = pool.Config{
 	MaxActive: 16,
 }
 
-func (cluster *Cluster) getPeerClient(peer string) (*client.Client, error) {
+func (cluster *Cluster) getPeerClient(peerAddr string) (*client.Client, error) {
 	var connectionPool *pool.Pool
-	raw, ok := cluster.nodeConnections.Get(peer)
+	raw, ok := cluster.nodeConnections.Get(peerAddr)
 	if !ok {
 		factory := func() (interface{}, error) {
-			c, err := client.MakeClient(peer)
+			c, err := client.MakeClient(peerAddr)
 			if err != nil {
 				return nil, err
 			}
@@ -40,7 +40,7 @@ func (cluster *Cluster) getPeerClient(peer string) (*client.Client, error) {
 			cli.Close()
 		}
 		connectionPool = pool.New(factory, finalizer, connectionPoolConfig)
-		cluster.nodeConnections.Put(peer, connectionPool)
+		cluster.nodeConnections.Put(peerAddr, connectionPool)
 	} else {
 		connectionPool = raw.(*pool.Pool)
 	}
@@ -79,18 +79,18 @@ var defaultRelayImpl = func(cluster *Cluster, node string, c redis.Connection, c
 // If the invoker is a commander handler of cluster,
 // 	calling cluster.db.Exec instead of Cluster.Exec could avoid infinite recursion. such as cluster.Del
 // But it can not execute command implemented in `cluster` package, such as Transaction.prepare
-func (cluster *Cluster) relay(peer string, c redis.Connection, args [][]byte) redis.Reply {
+func (cluster *Cluster) relay(peerID string, c redis.Connection, args [][]byte) redis.Reply {
 	// use a variable to allow injecting stub for testing, see defaultRelayImpl
-	if peer == cluster.self {
+	if peerID == cluster.self {
 		// to self db
 		return cluster.db.Exec(c, args)
 	}
-	return cluster.relayImpl(cluster, peer, c, args)
+	return cluster.relayImpl(cluster, peerID, c, args)
 }
 
 // relay2 function relays command to peer or calls cluster.Exec
 // If relay2 invoked by a commander handler of cluster may cause infinite recursion
-// For example. if cluster.Del calls relay2("DEL") the actual stack is: cluster.Exec -> cluster.Del -> relay2 -> cluster.Exec
+// For example. if `cluster.Del` calls relay2("DEL") the actual stack is: cluster.Exec -> cluster.Del -> relay2 -> cluster.Exec
 // But it can not execute command implemented in `cluster` package, such as Transaction.prepare
 func (cluster *Cluster) relay2(peer string, c redis.Connection, args [][]byte) redis.Reply {
 	// use a variable to allow injecting stub for testing, see defaultRelayImpl
@@ -105,15 +105,15 @@ func (cluster *Cluster) relay2(peer string, c redis.Connection, args [][]byte) r
 // use routeKey to determine peer node
 func (cluster *Cluster) relayByKey(routeKey string, c redis.Connection, args [][]byte) redis.Reply {
 	slotId := getSlot(routeKey)
-	peer := cluster.topology.PickNode(slotId)
-	return cluster.relay(peer.Addr, c, args)
+	peer := cluster.pickNode(slotId)
+	return cluster.relay(peer.ID, c, args)
 }
 
 // broadcast function broadcasts command to all node in cluster
 func (cluster *Cluster) broadcast(c redis.Connection, args [][]byte) map[string]redis.Reply {
 	result := make(map[string]redis.Reply)
-	for _, node := range cluster.topology.GetTopology() {
-		reply := cluster.relay(node.Addr, c, args)
+	for _, node := range cluster.topology.GetNodes() {
+		reply := cluster.relay(node.ID, c, args)
 		result[node.Addr] = reply
 	}
 	return result

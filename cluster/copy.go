@@ -47,7 +47,7 @@ func Copy(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	txID := cluster.idGenerator.NextID()
 	txIDStr := strconv.FormatInt(txID, 10)
 	// prepare Copy from
-	srcPrepareResp := cluster.relayPrepare(srcNode, c, makeArgs("Prepare", txIDStr, "CopyFrom", srcKey))
+	srcPrepareResp := cluster.relay2(srcNode, c, makeArgs("Prepare", txIDStr, "CopyFrom", srcKey))
 	if protocol.IsErrorReply(srcPrepareResp) {
 		// rollback src node
 		requestRollback(cluster, c, txID, map[string][]string{srcNode: {srcKey}})
@@ -59,7 +59,7 @@ func Copy(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 		return protocol.MakeErrReply("ERR invalid prepare response")
 	}
 	// prepare Copy to
-	destPrepareResp := cluster.relayPrepare(destNode, c, utils.ToCmdLine3("Prepare", []byte(txIDStr),
+	destPrepareResp := cluster.relay2(destNode, c, utils.ToCmdLine3("Prepare", []byte(txIDStr),
 		[]byte("CopyTo"), []byte(destKey), srcPrepareMBR.Args[0], srcPrepareMBR.Args[1], []byte(replaceFlag)))
 	if protocol.IsErrorReply(destPrepareResp) {
 		// rollback src node

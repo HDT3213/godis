@@ -9,13 +9,13 @@ import (
 )
 
 func TestExec(t *testing.T) {
-	testCluster2 := MakeTestCluster([]string{"127.0.0.1:6379"})
+	testCluster := clusterNodes[0]
 	conn := connection.NewFakeConn()
 	for i := 0; i < 1000; i++ {
 		key := RandString(4)
 		value := RandString(4)
-		testCluster2.Exec(conn, toArgs("SET", key, value))
-		ret := testCluster2.Exec(conn, toArgs("GET", key))
+		testCluster.Exec(conn, toArgs("SET", key, value))
+		ret := testCluster.Exec(conn, toArgs("GET", key))
 		asserts.AssertBulkReply(t, ret, value)
 	}
 }
@@ -36,7 +36,7 @@ func TestAuth(t *testing.T) {
 }
 
 func TestRelay(t *testing.T) {
-	testCluster2 := MakeTestCluster([]string{"127.0.0.1:6379"})
+	testCluster2 := MakeTestCluster()
 	key := RandString(4)
 	value := RandString(4)
 	conn := connection.NewFakeConn()
@@ -47,7 +47,7 @@ func TestRelay(t *testing.T) {
 }
 
 func TestBroadcast(t *testing.T) {
-	testCluster2 := MakeTestCluster([]string{"127.0.0.1:6379"})
+	testCluster2 := MakeTestCluster()
 	key := RandString(4)
 	value := RandString(4)
 	rets := testCluster2.broadcast(connection.NewFakeConn(), toArgs("SET", key, value))

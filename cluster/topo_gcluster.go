@@ -51,8 +51,8 @@ func execGClusterSetSlot(cluster *Cluster, c redis.Connection, args [][]byte) re
 	}
 	slotId := uint32(slotId0)
 	targetNodeID := string(args[1])
-	_, ok := cluster.topology.GetTopology()[targetNodeID]
-	if !ok {
+	targetNode := cluster.topology.GetNode(targetNodeID)
+	if targetNode == nil {
 		return protocol.MakeErrReply("ERR node not found")
 	}
 	cluster.setSlotMovingOut(slotId, targetNodeID)
