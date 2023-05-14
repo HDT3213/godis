@@ -32,9 +32,9 @@ const (
 )
 
 const (
-	salveCapacityNone = 0
-	salveCapacityEOF  = 1 << iota
-	salveCapacityPsync2
+	slaveCapacityNone = 0
+	slaveCapacityEOF  = 1 << iota
+	slaveCapacityPsync2
 )
 
 // slaveClient stores slave status in the view of master
@@ -48,7 +48,7 @@ type slaveClient struct {
 	capacity     uint8
 }
 
-// aofListener 只负责更新 backlog
+// aofListener is currently only responsible for updating the backlog
 type replBacklog struct {
 	buf           []byte
 	beginOffset   int64
