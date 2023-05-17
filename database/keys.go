@@ -441,3 +441,21 @@ func init() {
 	registerCommand("Keys", execKeys, noPrepare, nil, 2, flagReadOnly).
 		attachCommandExtra([]string{redisFlagReadonly, redisFlagSortForScript}, 1, 1, 1)
 }
+
+func init() {
+	RegisterGodisCommand("Del", -2, []string{Write}, 1, -1, 1, writeAllKeys)
+	RegisterGodisCommand("Expire", 3, []string{Write, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("ExpireAt", 3, []string{Write, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("ExpireTime", 2, []string{Write, Fast}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("PExpire", 3, []string{Write, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("PExpireAt", 3, []string{Write, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("PExpireTime", 2, []string{Write, Fast}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("TTL", 2, []string{Readonly, Random, Fast}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("PTTL", 2, []string{Readonly, Random, Fast}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("Persist", 2, []string{Write, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("Exists", -2, []string{Readonly, Fast}, 1, 1, 1, readAllKeys)
+	RegisterGodisCommand("Type", 2, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("Rename", 3, []string{Write}, 1, 1, 1, prepareRename)
+	RegisterGodisCommand("RenameNx", 3, []string{Write, Fast}, 1, 1, 1, prepareRename)
+	RegisterGodisCommand("Keys", 2, []string{Readonly, SortForScript}, 1, 1, 1, nil)
+}

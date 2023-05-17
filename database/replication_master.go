@@ -108,6 +108,7 @@ func (server *Server) saveForReplication() error {
 		return fmt.Errorf("create temp rdb failed: %v", err)
 	}
 	rdbFilename := rdbFile.Name()
+	rdbFile.Close()
 	server.masterStatus.mu.Lock()
 	server.masterStatus.bgSaveState = bgSaveRunning
 	server.masterStatus.rdbFilename = rdbFilename // todo: can reuse config.Properties.RDBFilename?
@@ -152,6 +153,7 @@ func (server *Server) rewriteRDB() error {
 		return fmt.Errorf("create temp rdb failed: %v", err)
 	}
 	rdbFilename := rdbFile.Name()
+	rdbFile.Close()
 	newBacklog := &replBacklog{}
 	aofListener := &replAofListener{
 		backlog: newBacklog,

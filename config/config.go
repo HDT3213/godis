@@ -47,6 +47,15 @@ type ServerProperties struct {
 
 	// config file path
 	CfPath string `cfg:"cf,omitempty"`
+
+	//eviction
+	MaxmemoryPolicy  string `cfg:"maxmemory-policy"`
+	LfuDecayTime     int32  `cfg:"lfu-decay-time"`
+	LfuLogFactor     int32  `cfg:"lfu-log-factor"`
+	LfuInitVal       uint8  `cfg:"lfu-init-val"`
+	MaxmemorySamples int    `cfg:"maxmemory-samples"`
+	// MB
+	Maxmemory uint64 `cfg:"maxmemory"`
 }
 
 type ServerInfo struct {

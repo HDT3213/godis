@@ -531,3 +531,22 @@ func init() {
 	registerCommand("HRandField", execHRandField, readFirstKey, nil, -2, flagReadOnly).
 		attachCommandExtra([]string{redisFlagRandom, redisFlagReadonly}, 1, 1, 1)
 }
+
+func init() {
+	RegisterGodisCommand("HSet", 4, []string{Write, Denyoom, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("HSetNX", 4, []string{Write, Denyoom, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("HGet", 3, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("HExists", 3, []string{Readonly, Fast}, 1, 1, 1, readAllKeys)
+	RegisterGodisCommand("HDel", -3, []string{Write, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("HLen", 2, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("HStrlen", 3, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("HMSet", -1, []string{Write, Denyoom, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("HMGet", -3, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("HGet", -3, []string{Readonly, Fast}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("HKeys", 2, []string{Readonly, SortForScript}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("HVals", 2, []string{Readonly, SortForScript}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("HGetAll", 2, []string{Readonly, Random}, 1, 1, 1, readFirstKey)
+	RegisterGodisCommand("HIncrBy", 4, []string{Write, Denyoom, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("HIncrByFloat", 4, []string{Write, Denyoom, Fast}, 1, 1, 1, writeFirstKey)
+	RegisterGodisCommand("HRandField", -2, []string{Random, Readonly}, 1, 1, 1, readFirstKey)
+}
