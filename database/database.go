@@ -2,6 +2,11 @@
 package database
 
 import (
+	"github.com/hdt3213/godis/config"
+	"github.com/hdt3213/godis/database/eviction"
+	"github.com/hdt3213/godis/lib/mem"
+	"github.com/hdt3213/godis/lib/utils"
+	"runtime"
 	"strings"
 	"time"
 
@@ -27,6 +32,9 @@ type DB struct {
 	ttlMap *dict.ConcurrentDict
 	// key -> version(uint32)
 	versionMap *dict.ConcurrentDict
+	// key -> eviction(uint32)
+	evictionMap    *dict.ConcurrentDict
+	evictionPolicy eviction.MaxmemoryPolicy
 
 	// addaof is used to add command to aof
 	addAof func(CmdLine)
@@ -115,7 +123,12 @@ func (db *DB) execNormalCommand(cmdLine [][]byte) redis.Reply {
 	write, read := prepare(cmdLine[1:])
 	db.addVersion(write...)
 	db.RWLocks(write, read)
-	defer db.RWUnLocks(write, read)
+	db.initEvictionMark(write)
+	db.updateEvictionMark(read)
+	defer func() {
+		db.RWUnLocks(write, read)
+		db.Eviction()
+	}()
 	fun := cmd.executor
 	return fun(db, cmdLine[1:])
 }
@@ -293,4 +306,89 @@ func (db *DB) ForEach(cb func(key string, data *database.DataEntity, expiration 
 
 		return cb(key, entity, expiration)
 	})
+}
+
+//eviction
+func (db *DB) Eviction() {
+	// is not out of max-memory,no need to lock
+	if db.evictionPolicy == nil || !mem.GetMaxMemoryState(nil) {
+		return
+	}
+	mem.Lock.Lock()
+	defer mem.Lock.Unlock()
+	var memFreed uint64 = 0
+	var memToFree uint64
+	mem.GetMaxMemoryState(memToFree)
+	for memFreed < memToFree {
+		var keys []string
+		if db.evictionPolicy.IsAllKeys() {
+			keys = db.data.RandomDistinctKeys(config.Properties.MaxmemorySamples)
+		} else {
+			keys = db.ttlMap.RandomDistinctKeys(config.Properties.MaxmemorySamples)
+		}
+
+		marks := make([]eviction.KeyMark, config.Properties.MaxmemorySamples)
+		for i, key := range keys {
+			mark, _ := db.evictionMap.Get(key)
+			marks[i] = eviction.KeyMark{
+				Key:  key,
+				Mark: mark.(int32),
+			}
+		}
+		key := db.evictionPolicy.Eviction(marks)
+		delta := mem.UsedMemory()
+		db.Remove(key)
+		runtime.GC()
+		delta -= mem.UsedMemory()
+		memFreed += delta
+		db.addAof(utils.ToCmdLine2("DEL", key))
+	}
+
+}
+
+//MakeEviction make a new mark about a key
+func (db *DB) initEvictionMark(keys []string) {
+	if db.evictionPolicy == nil {
+		return
+	}
+	mark := db.evictionPolicy.MakeMark()
+	for _, key := range keys {
+		db.evictionMap.Put(key, mark)
+	}
+}
+
+//UpdateMark update mark about eviction
+func (db *DB) updateEvictionMark(keys []string) {
+	if db.evictionPolicy == nil {
+		return
+	}
+	for _, key := range keys {
+		mark, exists := db.evictionMap.Get(key)
+		if !exists {
+			continue
+		}
+		l := mark.(int32)
+		updateMark := db.evictionPolicy.UpdateMark(l)
+		db.evictionMap.Put(key, updateMark)
+	}
+}
+
+func makeEvictionPolicy() eviction.MaxmemoryPolicy {
+	policy := config.Properties.MaxmemoryPolicy
+	if policy == "volatile-lru" {
+		return &eviction.LRUPolicy{
+			AllKeys: false,
+		}
+	} else if policy == "volatile-lfu" {
+		return &eviction.LRUPolicy{}
+	} else if policy == "allkeys-lru" {
+		return &eviction.LRUPolicy{
+			AllKeys: true,
+		}
+	} else if policy == "allkeys-lfu" {
+		return &eviction.LRUPolicy{
+			AllKeys: true,
+		}
+	}
+	return nil
 }
