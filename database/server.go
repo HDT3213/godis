@@ -2,6 +2,13 @@ package database
 
 import (
 	"fmt"
+	"os"
+	"runtime/debug"
+	"strconv"
+	"strings"
+	"sync/atomic"
+	"time"
+
 	"github.com/hdt3213/godis/aof"
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/interface/database"
@@ -10,11 +17,6 @@ import (
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/pubsub"
 	"github.com/hdt3213/godis/redis/protocol"
-	"runtime/debug"
-	"strconv"
-	"strings"
-	"sync/atomic"
-	"time"
 )
 
 var godisVersion = "1.2.8" // do not modify
@@ -34,12 +36,23 @@ type Server struct {
 	masterStatus *masterStatus
 }
 
+func fileExists(filename string) bool {
+	info, err := os.Stat(filename)
+	return err == nil && !info.IsDir()
+}
+
 // NewStandaloneServer creates a standalone redis server, with multi database and all other funtions
 func NewStandaloneServer() *Server {
 	server := &Server{}
 	if config.Properties.Databases == 0 {
 		config.Properties.Databases = 16
 	}
+	// creat tmp dir
+	err := os.MkdirAll(config.GetTmpDir(), os.ModePerm)
+	if err != nil {
+		panic(fmt.Errorf("create tmp dir failed: %v", err))
+	}
+	// make db set
 	server.dbSet = make([]*atomic.Value, config.Properties.Databases)
 	for i := range server.dbSet {
 		singleDB := makeDB()
@@ -49,15 +62,16 @@ func NewStandaloneServer() *Server {
 		server.dbSet[i] = holder
 	}
 	server.hub = pubsub.MakeHub()
+	// record aof
 	validAof := false
 	if config.Properties.AppendOnly {
+		validAof = fileExists(config.Properties.AppendFilename)
 		aofHandler, err := NewPersister(server,
 			config.Properties.AppendFilename, true, config.Properties.AppendFsync)
 		if err != nil {
 			panic(err)
 		}
 		server.bindPersister(aofHandler)
-		validAof = true
 	}
 	if config.Properties.RDBFilename != "" && !validAof {
 		// load rdb
@@ -92,12 +106,12 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 	if cmdName == "auth" {
 		return Auth(c, cmdLine[1:])
 	}
+	if !isAuthenticated(c) {
+		return protocol.MakeErrReply("NOAUTH Authentication required")
+	}
 	// info
 	if cmdName == "info" {
 		return Info(c, cmdLine)
-	}
-	if !isAuthenticated(c) {
-		return protocol.MakeErrReply("NOAUTH Authentication required")
 	}
 	if cmdName == "slaveof" {
 		if c != nil && c.InMultiState() {
@@ -218,6 +232,7 @@ func (server *Server) execFlushDB(dbIndex int) redis.Reply {
 	return server.flushDB(dbIndex)
 }
 
+// flushDB flushes the selected database
 func (server *Server) flushDB(dbIndex int) redis.Reply {
 	if dbIndex >= len(server.dbSet) || dbIndex < 0 {
 		return protocol.MakeErrReply("ERR DB index is out of range")
@@ -238,6 +253,7 @@ func (server *Server) loadDB(dbIndex int, newDB *DB) redis.Reply {
 	return &protocol.OkReply{}
 }
 
+// flushAll flushes all databases.
 func (server *Server) flushAll() redis.Reply {
 	for i := range server.dbSet {
 		server.flushDB(i)
@@ -248,6 +264,7 @@ func (server *Server) flushAll() redis.Reply {
 	return &protocol.OkReply{}
 }
 
+// selectDB returns the database with the given index, or an error if the index is out of range.
 func (server *Server) selectDB(dbIndex int) (*DB, *protocol.StandardErrReply) {
 	if dbIndex >= len(server.dbSet) || dbIndex < 0 {
 		return nil, protocol.MakeErrReply("ERR DB index is out of range")
@@ -255,6 +272,7 @@ func (server *Server) selectDB(dbIndex int) (*DB, *protocol.StandardErrReply) {
 	return server.dbSet[dbIndex].Load().(*DB), nil
 }
 
+// mustSelectDB is like selectDB, but panics if an error occurs.
 func (server *Server) mustSelectDB(dbIndex int) *DB {
 	selectedDB, err := server.selectDB(dbIndex)
 	if err != nil {
@@ -325,7 +343,7 @@ func SaveRDB(db *Server, args [][]byte) redis.Reply {
 	if rdbFilename == "" {
 		rdbFilename = "dump.rdb"
 	}
-	err := db.persister.Rewrite2RDB(rdbFilename)
+	err := db.persister.GenerateRDB(rdbFilename)
 	if err != nil {
 		return protocol.MakeErrReply(err.Error())
 	}
@@ -347,7 +365,7 @@ func BGSaveRDB(db *Server, args [][]byte) redis.Reply {
 		if rdbFilename == "" {
 			rdbFilename = "dump.rdb"
 		}
-		err := db.persister.Rewrite2RDB(rdbFilename)
+		err := db.persister.GenerateRDB(rdbFilename)
 		if err != nil {
 			logger.Error(err)
 		}

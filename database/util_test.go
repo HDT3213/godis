@@ -2,7 +2,6 @@ package database
 
 import (
 	"github.com/hdt3213/godis/datastruct/dict"
-	"github.com/hdt3213/godis/datastruct/lock"
 )
 
 func makeTestDB() *DB {
@@ -10,9 +9,8 @@ func makeTestDB() *DB {
 		data:           dict.MakeConcurrent(dataDictSize),
 		versionMap:     dict.MakeConcurrent(dataDictSize),
 		ttlMap:         dict.MakeConcurrent(ttlDictSize),
-		evictionMap:    dict.MakeConcurrent(dataDictSize),
+    evictionMap:    dict.MakeConcurrent(dataDictSize),
 		evictionPolicy: makeEvictionPolicy(),
-		locker:         lock.Make(lockerSize),
 		addAof:         func(line CmdLine) {},
 	}
 }

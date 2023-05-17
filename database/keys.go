@@ -410,21 +410,36 @@ func execCopy(mdb *Server, conn redis.Connection, args [][]byte) redis.Reply {
 }
 
 func init() {
-	RegisterCommand("Del", execDel, writeAllKeys, undoDel, -2, flagWrite)
-	RegisterCommand("Expire", execExpire, writeFirstKey, undoExpire, 3, flagWrite)
-	RegisterCommand("ExpireAt", execExpireAt, writeFirstKey, undoExpire, 3, flagWrite)
-	RegisterCommand("ExpireTime", execExpireTime, readFirstKey, nil, 2, flagReadOnly)
-	RegisterCommand("PExpire", execPExpire, writeFirstKey, undoExpire, 3, flagWrite)
-	RegisterCommand("PExpireAt", execPExpireAt, writeFirstKey, undoExpire, 3, flagWrite)
-	RegisterCommand("PExpireTime", execPExpireTime, readFirstKey, nil, 2, flagReadOnly)
-	RegisterCommand("TTL", execTTL, readFirstKey, nil, 2, flagReadOnly)
-	RegisterCommand("PTTL", execPTTL, readFirstKey, nil, 2, flagReadOnly)
-	RegisterCommand("Persist", execPersist, writeFirstKey, undoExpire, 2, flagWrite)
-	RegisterCommand("Exists", execExists, readAllKeys, nil, -2, flagReadOnly)
-	RegisterCommand("Type", execType, readFirstKey, nil, 2, flagReadOnly)
-	RegisterCommand("Rename", execRename, prepareRename, undoRename, 3, flagReadOnly)
-	RegisterCommand("RenameNx", execRenameNx, prepareRename, undoRename, 3, flagReadOnly)
-	RegisterCommand("Keys", execKeys, noPrepare, nil, 2, flagReadOnly)
+	registerCommand("Del", execDel, writeAllKeys, undoDel, -2, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite}, 1, -1, 1)
+	registerCommand("Expire", execExpire, writeFirstKey, undoExpire, 3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagFast}, 1, 1, 1)
+	registerCommand("ExpireAt", execExpireAt, writeFirstKey, undoExpire, 3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagFast}, 1, 1, 1)
+	registerCommand("ExpireTime", execExpireTime, readFirstKey, nil, 2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagFast}, 1, 1, 1)
+	registerCommand("PExpire", execPExpire, writeFirstKey, undoExpire, 3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagFast}, 1, 1, 1)
+	registerCommand("PExpireAt", execPExpireAt, writeFirstKey, undoExpire, 3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagFast}, 1, 1, 1)
+	registerCommand("PExpireTime", execPExpireTime, readFirstKey, nil, 2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagFast}, 1, 1, 1)
+	registerCommand("TTL", execTTL, readFirstKey, nil, 2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagRandom, redisFlagFast}, 1, 1, 1)
+	registerCommand("PTTL", execPTTL, readFirstKey, nil, 2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagRandom, redisFlagFast}, 1, 1, 1)
+	registerCommand("Persist", execPersist, writeFirstKey, undoExpire, 2, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagFast}, 1, 1, 1)
+	registerCommand("Exists", execExists, readAllKeys, nil, -2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagFast}, 1, 1, 1)
+	registerCommand("Type", execType, readFirstKey, nil, 2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagFast}, 1, 1, 1)
+	registerCommand("Rename", execRename, prepareRename, undoRename, 3, flagReadOnly).
+		attachCommandExtra([]string{redisFlagWrite}, 1, 1, 1)
+	registerCommand("RenameNx", execRenameNx, prepareRename, undoRename, 3, flagReadOnly).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagFast}, 1, 1, 1)
+	registerCommand("Keys", execKeys, noPrepare, nil, 2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagSortForScript}, 1, 1, 1)
 }
 
 func init() {

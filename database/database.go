@@ -2,10 +2,11 @@
 package database
 
 import (
+
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/database/eviction"
+
 	"github.com/hdt3213/godis/datastruct/dict"
-	"github.com/hdt3213/godis/datastruct/lock"
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
@@ -13,33 +14,34 @@ import (
 	"github.com/hdt3213/godis/lib/timewheel"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
-	"runtime"
-	"strings"
+  
+  "strings"
 	"time"
+	"runtime"
+
 )
 
 const (
 	dataDictSize = 1 << 16
 	ttlDictSize  = 1 << 10
-	lockerSize   = 1024
 )
 
 // DB stores data and execute user's commands
 type DB struct {
 	index int
 	// key -> DataEntity
-	data dict.Dict
+	data *dict.ConcurrentDict
 	// key -> expireTime (time.Time)
-	ttlMap dict.Dict
+	ttlMap *dict.ConcurrentDict
 	// key -> version(uint32)
 	versionMap dict.Dict
 	// key -> eviction(uint32)
 	evictionMap    dict.Dict
 	evictionPolicy eviction.MaxmemoryPolicy
+	versionMap *dict.ConcurrentDict
 
-	// dict.Dict will ensure concurrent-safety of its method
-	// use this mutex for complicated command only, eg. rpush, incr ...
-	locker *lock.Locks
+
+	// addaof is used to add command to aof
 	addAof func(CmdLine)
 }
 
@@ -61,6 +63,7 @@ type UndoFunc func(db *DB, args [][]byte) []CmdLine
 // makeDB create DB instance
 func makeDB() *DB {
 	db := &DB{
+
 		data:           dict.MakeConcurrent(dataDictSize),
 		ttlMap:         dict.MakeConcurrent(ttlDictSize),
 		versionMap:     dict.MakeConcurrent(dataDictSize),
@@ -68,21 +71,20 @@ func makeDB() *DB {
 		evictionPolicy: makeEvictionPolicy(),
 		locker:         lock.Make(lockerSize),
 		addAof:         func(line CmdLine) {},
+
 	}
 	return db
 }
 
 // makeBasicDB create DB instance only with basic abilities.
-// It is not concurrent safe
 func makeBasicDB() *DB {
 	db := &DB{
-		data:           dict.MakeSimple(),
-		ttlMap:         dict.MakeSimple(),
-		versionMap:     dict.MakeSimple(),
-		evictionMap:    dict.MakeSimple(),
+		data:       dict.MakeConcurrent(dataDictSize),
+		ttlMap:     dict.MakeConcurrent(ttlDictSize),
+		versionMap: dict.MakeConcurrent(dataDictSize),
+		addAof:     func(line CmdLine) {},
+    evictionMap:    dict.MakeSimple(),
 		evictionPolicy: makeEvictionPolicy(),
-		locker:         lock.Make(1),
-		addAof:         func(line CmdLine) {},
 	}
 	return db
 }
@@ -169,7 +171,7 @@ func validateArity(arity int, cmdArgs [][]byte) bool {
 
 // GetEntity returns DataEntity bind to given key
 func (db *DB) GetEntity(key string) (*database.DataEntity, bool) {
-	raw, ok := db.data.Get(key)
+	raw, ok := db.data.GetWithLock(key)
 	if !ok {
 		return nil, false
 	}
@@ -182,22 +184,22 @@ func (db *DB) GetEntity(key string) (*database.DataEntity, bool) {
 
 // PutEntity a DataEntity into DB
 func (db *DB) PutEntity(key string, entity *database.DataEntity) int {
-	return db.data.Put(key, entity)
+	return db.data.PutWithLock(key, entity)
 }
 
 // PutIfExists edit an existing DataEntity
 func (db *DB) PutIfExists(key string, entity *database.DataEntity) int {
-	return db.data.PutIfExists(key, entity)
+	return db.data.PutIfExistsWithLock(key, entity)
 }
 
 // PutIfAbsent insert an DataEntity only if the key not exists
 func (db *DB) PutIfAbsent(key string, entity *database.DataEntity) int {
-	return db.data.PutIfAbsent(key, entity)
+	return db.data.PutIfAbsentWithLock(key, entity)
 }
 
 // Remove the given key from db
 func (db *DB) Remove(key string) {
-	db.data.Remove(key)
+	db.data.RemoveWithLock(key)
 	db.ttlMap.Remove(key)
 	db.evictionMap.Remove(key)
 	taskKey := genExpireTask(key)
@@ -208,7 +210,7 @@ func (db *DB) Remove(key string) {
 func (db *DB) Removes(keys ...string) (deleted int) {
 	deleted = 0
 	for _, key := range keys {
-		_, exists := db.data.Get(key)
+		_, exists := db.data.GetWithLock(key)
 		if exists {
 			db.Remove(key)
 			deleted++
@@ -223,19 +225,18 @@ func (db *DB) Removes(keys ...string) (deleted int) {
 func (db *DB) Flush() {
 	db.data.Clear()
 	db.ttlMap.Clear()
-	db.locker = lock.Make(lockerSize)
 }
 
 /* ---- Lock Function ----- */
 
 // RWLocks lock keys for writing and reading
 func (db *DB) RWLocks(writeKeys []string, readKeys []string) {
-	db.locker.RWLocks(writeKeys, readKeys)
+	db.data.RWLocks(writeKeys, readKeys)
 }
 
 // RWUnLocks unlock keys for writing and reading
 func (db *DB) RWUnLocks(writeKeys []string, readKeys []string) {
-	db.locker.RWUnLocks(writeKeys, readKeys)
+	db.data.RWUnLocks(writeKeys, readKeys)
 }
 
 /* ---- TTL Functions ---- */
@@ -315,6 +316,7 @@ func (db *DB) ForEach(cb func(key string, data *database.DataEntity, expiration 
 			expireTime, _ := rawExpireTime.(time.Time)
 			expiration = &expireTime
 		}
+
 		return cb(key, entity, expiration)
 	})
 }

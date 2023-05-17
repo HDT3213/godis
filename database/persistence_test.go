@@ -32,6 +32,8 @@ func TestLoadRDB(t *testing.T) {
 	asserts.AssertMultiBulkReply(t, result, []string{"1", "1"})
 	result = rdbDB.Exec(conn, utils.ToCmdLine("ZRange", "zset", "0", "1", "WITHSCORES"))
 	asserts.AssertMultiBulkReply(t, result, []string{"1", "1"})
+	result = rdbDB.Exec(conn, utils.ToCmdLine("SCard", "set"))
+	asserts.AssertIntReply(t, result, 1)
 
 	config.Properties = &config.ServerProperties{
 		AppendOnly:  false,

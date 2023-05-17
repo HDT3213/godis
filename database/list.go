@@ -511,18 +511,30 @@ func execRPushX(db *DB, args [][]byte) redis.Reply {
 }
 
 func init() {
-	RegisterCommand("LPush", execLPush, writeFirstKey, undoLPush, -3, flagWrite)
-	RegisterCommand("LPushX", execLPushX, writeFirstKey, undoLPush, -3, flagWrite)
-	RegisterCommand("RPush", execRPush, writeFirstKey, undoRPush, -3, flagWrite)
-	RegisterCommand("RPushX", execRPushX, writeFirstKey, undoRPush, -3, flagWrite)
-	RegisterCommand("LPop", execLPop, writeFirstKey, undoLPop, 2, flagWrite)
-	RegisterCommand("RPop", execRPop, writeFirstKey, undoRPop, 2, flagWrite)
-	RegisterCommand("RPopLPush", execRPopLPush, prepareRPopLPush, undoRPopLPush, 3, flagWrite)
-	RegisterCommand("LRem", execLRem, writeFirstKey, rollbackFirstKey, 4, flagWrite)
-	RegisterCommand("LLen", execLLen, readFirstKey, nil, 2, flagReadOnly)
-	RegisterCommand("LIndex", execLIndex, readFirstKey, nil, 3, flagReadOnly)
-	RegisterCommand("LSet", execLSet, writeFirstKey, undoLSet, 4, flagWrite)
-	RegisterCommand("LRange", execLRange, readFirstKey, nil, 4, flagReadOnly)
+	registerCommand("LPush", execLPush, writeFirstKey, undoLPush, -3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM, redisFlagFast}, 1, 1, 1)
+	registerCommand("LPushX", execLPushX, writeFirstKey, undoLPush, -3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM, redisFlagFast}, 1, 1, 1)
+	registerCommand("RPush", execRPush, writeFirstKey, undoRPush, -3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM, redisFlagFast}, 1, 1, 1)
+	registerCommand("RPushX", execRPushX, writeFirstKey, undoRPush, -3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM, redisFlagFast}, 1, 1, 1)
+	registerCommand("LPop", execLPop, writeFirstKey, undoLPop, 2, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagFast}, 1, 1, 1)
+	registerCommand("RPop", execRPop, writeFirstKey, undoRPop, 2, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagFast}, 1, 1, 1)
+	registerCommand("RPopLPush", execRPopLPush, prepareRPopLPush, undoRPopLPush, 3, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
+	registerCommand("LRem", execLRem, writeFirstKey, rollbackFirstKey, 4, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite}, 1, 1, 1)
+	registerCommand("LLen", execLLen, readFirstKey, nil, 2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagFast}, 1, 1, 1)
+	registerCommand("LIndex", execLIndex, readFirstKey, nil, 3, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly}, 1, 1, 1)
+	registerCommand("LSet", execLSet, writeFirstKey, undoLSet, 4, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
+	registerCommand("LRange", execLRange, readFirstKey, nil, 4, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly}, 1, 1, 1)
 }
 
 func init() {
