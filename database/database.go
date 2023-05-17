@@ -34,7 +34,7 @@ type DB struct {
 	// key -> expireTime (time.Time)
 	ttlMap *dict.ConcurrentDict
 	// key -> version(uint32)
-	versionMap dict.Dict
+	
 	// key -> eviction(uint32)
 	evictionMap    dict.Dict
 	evictionPolicy eviction.MaxmemoryPolicy
@@ -69,7 +69,6 @@ func makeDB() *DB {
 		versionMap:     dict.MakeConcurrent(dataDictSize),
 		evictionMap:    dict.MakeConcurrent(dataDictSize),
 		evictionPolicy: makeEvictionPolicy(),
-		locker:         lock.Make(lockerSize),
 		addAof:         func(line CmdLine) {},
 
 	}
