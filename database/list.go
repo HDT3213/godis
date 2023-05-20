@@ -544,7 +544,7 @@ func execLTrim(db *DB, args [][]byte) redis.Reply {
 	if end < 0 {
 		end += length
 	}
-	if start < end {
+	if start > end {
 		return protocol.MakeEmptyMultiBulkReply()
 	}
 
