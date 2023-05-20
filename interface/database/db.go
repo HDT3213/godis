@@ -28,6 +28,7 @@ type DBEngine interface {
 	RWLocks(dbIndex int, writeKeys []string, readKeys []string)
 	RWUnLocks(dbIndex int, writeKeys []string, readKeys []string)
 	GetDBSize(dbIndex int) (int, int)
+	GetAvgTTL(dbIndex, randomKeyCount int) int64
 }
 
 // DataEntity stores data bound to a key, including a string, list, hash, set and so on

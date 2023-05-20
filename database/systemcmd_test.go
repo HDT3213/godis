@@ -55,5 +55,5 @@ func TestInfo(t *testing.T) {
 	ret = testServer.Exec(c, utils.ToCmdLine("iNFO", "abc", "bde"))
 	asserts.AssertErrReply(t, ret, "ERR wrong number of arguments for 'info' command")
 	ret = testServer.Exec(c, utils.ToCmdLine("INFO", "abc"))
-	asserts.AssertNullBulk(t, ret)
+	asserts.AssertErrReply(t, ret, "Invalid section for 'info' command")
 }

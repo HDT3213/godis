@@ -24,30 +24,31 @@ func Ping(c redis.Connection, args [][]byte) redis.Reply {
 }
 
 // Info the information of the godis server returned by the INFO command
-func Info(c redis.Connection, args [][]byte) redis.Reply {
-	if len(args) == 1 {
-		infoCommandList := [...]string{"server", "client", "cluster"}
+func Info(db *Server, args [][]byte) redis.Reply {
+	if len(args) == 0 {
+		infoCommandList := [...]string{"server", "client", "cluster", "keyspace"}
 		var allSection []byte
 		for _, s := range infoCommandList {
-			allSection = append(allSection, GenGodisInfoString(s)...)
+			allSection = append(allSection, GenGodisInfoString(s, db)...)
 		}
-
 		return protocol.MakeBulkReply(allSection)
-	} else if len(args) == 2 {
-		section := strings.ToLower(string(args[1]))
+	} else if len(args) == 1 {
+		section := strings.ToLower(string(args[0]))
 		switch section {
 		case "server":
-			reply := GenGodisInfoString("server")
+			reply := GenGodisInfoString("server", db)
 			return protocol.MakeBulkReply(reply)
 		case "client":
-			return protocol.MakeBulkReply(GenGodisInfoString("client"))
+			return protocol.MakeBulkReply(GenGodisInfoString("client", db))
 		case "cluster":
-			return protocol.MakeBulkReply(GenGodisInfoString("cluster"))
+			return protocol.MakeBulkReply(GenGodisInfoString("cluster", db))
+		case "keyspace":
+			return protocol.MakeBulkReply(GenGodisInfoString("keyspace", db))
 		default:
-			return protocol.MakeNullBulkReply()
+			return protocol.MakeErrReply("Invalid section for 'info' command")
 		}
 	}
-	return protocol.MakeErrReply("ERR wrong number of arguments for 'info' command")
+	return protocol.MakeArgNumErrReply("info")
 }
 
 // Auth validate client's password
@@ -73,7 +74,7 @@ func isAuthenticated(c redis.Connection) bool {
 	return c.GetPassword() == config.Properties.RequirePass
 }
 
-func GenGodisInfoString(section string) []byte {
+func GenGodisInfoString(section string, db *Server) []byte {
 	startUpTimeFromNow := getGodisRunningTime()
 	switch section {
 	case "server":
@@ -139,8 +140,20 @@ func GenGodisInfoString(section string) []byte {
 			)
 			return []byte(s)
 		}
+	case "keyspace":
+		dbCount := config.Properties.Databases
+		var serv []byte
+		for i := 0; i < dbCount; i++ {
+			keys, expiresKeys := db.GetDBSize(i)
+			if keys != 0 {
+				ttlSampleAverage := db.GetAvgTTL(i, 20)
+				serv = append(serv, getDbSize(i, keys, expiresKeys, ttlSampleAverage)...)
+			}
+		}
+		prefix := []byte("# Keyspace\r\n")
+		keyspaceInfo := append(prefix, serv...)
+		return keyspaceInfo
 	}
-
 	return []byte("")
 }
 
@@ -156,4 +169,10 @@ func getGodisRunningMode() string {
 // getGodisRunningTime return the running time of godis
 func getGodisRunningTime() time.Duration {
 	return time.Since(config.EachTimeServerInfo.StartUpTime) / time.Second
+}
+
+func getDbSize(dbIndex, keys, expiresKeys int, ttl int64) []byte {
+	s := fmt.Sprintf("db%d:keys=%d,expires=%d,avg_ttl=%d\r\n",
+		dbIndex, keys, expiresKeys, ttl)
+	return []byte(s)
 }
