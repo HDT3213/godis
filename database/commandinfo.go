@@ -24,23 +24,21 @@ const (
 )
 
 func execCommand(args [][]byte) redis.Reply {
-	n := len(args)
-	if n > 1 {
-		subCommand := strings.ToLower(string(args[1]))
-		if subCommand == "info" {
-			return getCommands(args[2:])
-		} else if subCommand == "count" {
-			return protocol.MakeIntReply(int64(len(cmdTable)))
-		} else if subCommand == "getkeys" {
-			if n < 2 {
-				return protocol.MakeErrReply("Unknown subcommand or wrong number of arguments for '" + subCommand + "'")
-			}
-			return getKeys(args[2:])
-		} else {
-			return protocol.MakeErrReply("Unknown subcommand or wrong number of arguments for '" + subCommand + "'")
-		}
-	} else {
+	if len(args) == 0 {
 		return getAllGodisCommandReply()
+	}
+	subCommand := strings.ToLower(string(args[0]))
+	if subCommand == "info" {
+		return getCommands(args[1:])
+	} else if subCommand == "count" {
+		return protocol.MakeIntReply(int64(len(cmdTable)))
+	} else if subCommand == "getkeys" {
+		if len(args) < 2 {
+			return protocol.MakeErrReply("wrong number of arguments for 'command|" + subCommand + "'")
+		}
+		return getKeys(args[1:])
+	} else {
+		return protocol.MakeErrReply("Unknown subcommand '" + subCommand + "'")
 	}
 }
 
