@@ -111,7 +111,7 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 	}
 	// info
 	if cmdName == "info" {
-		return Info(c, cmdLine)
+		return Info(server, cmdLine[1:])
 	}
 	if cmdName == "slaveof" {
 		if c != nil && c.InMultiState() {
@@ -377,6 +377,25 @@ func BGSaveRDB(db *Server, args [][]byte) redis.Reply {
 func (server *Server) GetDBSize(dbIndex int) (int, int) {
 	db := server.mustSelectDB(dbIndex)
 	return db.data.Len(), db.ttlMap.Len()
+}
+
+func (server *Server) GetAvgTTL(dbIndex, randomKeyConut int) int64 {
+	var ttlCount int64
+	db := server.mustSelectDB(dbIndex)
+	keys := db.data.RandomKeys(randomKeyConut)
+	for _, k := range keys {
+		t := time.Now()
+		rawExpireTime, ok := db.ttlMap.Get(k)
+		if !ok {
+			continue
+		}
+		expireTime, _ := rawExpireTime.(time.Time)
+		// if the key has already reached its expiration time during calculation, ignore it
+		if expireTime.Sub(t).Microseconds() > 0 {
+			ttlCount += expireTime.Sub(t).Microseconds()
+		}
+	}
+	return ttlCount / int64(len(keys))
 }
 
 func (server *Server) startReplCron() {
