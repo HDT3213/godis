@@ -534,7 +534,7 @@ func execLTrim(db *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if list == nil {
-		return protocol.MakeIntReply(0)
+		return protocol.MakeOkReply()
 	}
 
 	length := list.Len()
