@@ -435,6 +435,15 @@ func TestLTrim(t *testing.T) {
 	if !utils.BytesEquals(actualValue3.ToBytes(), expectedValue3.ToBytes()) {
 		t.Error(fmt.Sprintf("expected %s, actually %s", string(expectedValue3.ToBytes()), string(actualValue3.ToBytes())))
 	}
+
+	// case4
+	key1 := utils.RandString(10)
+	result4 := testDB.Exec(nil, utils.ToCmdLine("ltrim", key1, "1", "0"))
+	expected4 := protocol.MakeOkReply()
+	if !utils.BytesEquals(result4.ToBytes(), expected4.ToBytes()) {
+		t.Error(fmt.Sprintf("expected %s, actually %s", string(expected4.ToBytes()), string(result4.ToBytes())))
+	}
+
 }
 
 func TestUndoLPush(t *testing.T) {
