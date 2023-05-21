@@ -526,8 +526,8 @@ func TestUndoLTrim(t *testing.T) {
 	cmdLine := utils.ToCmdLine("ltrim", key, "2", "4")
 	undoCmdLines := undoLTrim(testDB, cmdLine[1:])
 	testDB.Exec(nil, cmdLine)
-	for _, cmdLine := range undoCmdLines {
-		testDB.Exec(nil, cmdLine)
+	for _, undoCmdLine := range undoCmdLines {
+		testDB.Exec(nil, undoCmdLine)
 	}
 
 	result := testDB.Exec(nil, utils.ToCmdLine("lrange", key, "0", "-1"))
