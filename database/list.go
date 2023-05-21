@@ -548,10 +548,14 @@ func execLTrim(db *DB, args [][]byte) redis.Reply {
 		return protocol.MakeEmptyMultiBulkReply()
 	}
 
-	for i := 0; i < length; i++ {
-		if i < start || i > end {
-			list.Remove(i)
-		}
+	leftCount := start
+	rightCount := length - end - 1
+
+	for i := 0; i < leftCount && list.Len() > 0; i++ {
+		list.Remove(0)
+	}
+	for i := 0; i < rightCount && list.Len() > 0; i++ {
+		list.RemoveLast()
 	}
 
 	db.addAof(utils.ToCmdLine3("ltrim", args...))
