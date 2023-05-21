@@ -561,7 +561,7 @@ func execLTrim(db *DB, args [][]byte) redis.Reply {
 		return protocol.MakeEmptyMultiBulkReply()
 	}
 
-	return &protocol.OkReply{}
+	return protocol.MakeOkReply()
 }
 
 func undoLTrim(db *DB, args [][]byte) []CmdLine {
@@ -593,21 +593,35 @@ func undoLTrim(db *DB, args [][]byte) []CmdLine {
 		end = start - 1
 	}
 
-	lSlice := list.Range(0, start)
-	rSlice := list.Range(end+1, length)
-
-	lValues := make([][]byte, 0, len(rSlice))
-	for i := len(lSlice) - 1; i >= 0; i-- {
-		lValues = append(lValues, lSlice[i].([]byte))
+	cmdLines := make([]CmdLine, 0, start+length-end-1)
+	if start < length {
+		lSlice := list.Range(0, start)
+		lValues := make([][]byte, 0, len(lSlice))
+		for i := len(lSlice) - 1; i >= 0; i-- {
+			lValues = append(lValues, lSlice[i].([]byte))
+		}
+		if len(lValues) > 0 {
+			params := make([][]byte, 0, len(lValues)+1)
+			params = append(params, []byte(key))
+			params = append(params, lValues...)
+			cmdLines = append(cmdLines, utils.ToCmdLine3(string(lPushCmd), params...))
+		}
 	}
-	rValues := make([][]byte, 0, len(rSlice))
-	for i := 0; i < len(rSlice)-1; i++ {
-		rValues = append(rValues, rSlice[i].([]byte))
-	}
 
-	cmdLines := make([]CmdLine, 0, len(lSlice)+len(rSlice))
-	cmdLines = append(cmdLines, utils.ToCmdLine3(string(lPushCmd), lValues...))
-	cmdLines = append(cmdLines, utils.ToCmdLine3(string(rPushCmd), rValues...))
+	if end+1 < length {
+		rSlice := list.Range(end+1, length)
+		rValues := make([][]byte, 0, len(rSlice))
+		for i := 0; i < len(rSlice); i++ {
+			rValues = append(rValues, rSlice[i].([]byte))
+		}
+
+		if len(rValues) > 0 {
+			params := make([][]byte, 0, len(rValues)+1)
+			params = append(params, []byte(key))
+			params = append(params, rValues...)
+			cmdLines = append(cmdLines, utils.ToCmdLine3(string(rPushCmd), params...))
+		}
+	}
 
 	return cmdLines
 }
