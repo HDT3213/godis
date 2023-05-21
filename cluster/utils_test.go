@@ -8,29 +8,8 @@ import (
 	"github.com/hdt3213/godis/lib/idgenerator"
 	"github.com/hdt3213/godis/redis/protocol"
 	"math/rand"
-	"strings"
 	"sync"
 )
-
-var testNodeA, testNodeB *Cluster
-var simulateATimout, simulateBTimout *bool
-
-type mockPicker struct {
-	nodes []string
-}
-
-func (picker *mockPicker) AddNode(keys ...string) {
-	picker.nodes = append(picker.nodes, keys...)
-}
-
-func (picker *mockPicker) PickNode(key string) string {
-	for _, n := range picker.nodes {
-		if strings.Contains(key, n) {
-			return n
-		}
-	}
-	return picker.nodes[0]
-}
 
 // mockClusterNodes creates a fake cluster for test
 // timeoutFlags should have the same length as addresses, set timeoutFlags[i] == true could simulate addresses[i] timeout
@@ -43,7 +22,7 @@ func mockClusterNodes(addresses []string, timeoutFlags []bool) []*Cluster {
 		for i, n := range nodes {
 			if n.self == node {
 				if timeoutFlags[i] {
-					return protocol.MakeErrReply("timeout")
+					return protocol.MakeErrReply("ERR timeout")
 				}
 				return n.Exec(c, cmdLine)
 			}
@@ -89,16 +68,9 @@ func mockClusterNodes(addresses []string, timeoutFlags []bool) []*Cluster {
 	return nodes
 }
 
-var addresses = []string{"127.0.0.1:6399", "127.0.0.1:7379", "127.0.0.1:7399"}
-var timeoutFlags = []bool{false, false, false}
-var clusterNodes = mockClusterNodes(addresses, timeoutFlags)
-
-func MakeTestCluster() *Cluster {
-	if config.Properties == nil {
-		config.Properties = &config.ServerProperties{}
-	}
-	return MakeCluster()
-}
+var addresses = []string{"127.0.0.1:6399", "127.0.0.1:7379"}
+var timeoutFlags = []bool{false, false}
+var testCluster = mockClusterNodes(addresses, timeoutFlags)
 
 func toArgs(cmd ...string) [][]byte {
 	args := make([][]byte, len(cmd))

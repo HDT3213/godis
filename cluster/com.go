@@ -113,7 +113,7 @@ func (cluster *Cluster) relayByKey(routeKey string, c redis.Connection, args [][
 func (cluster *Cluster) broadcast(c redis.Connection, args [][]byte) map[string]redis.Reply {
 	result := make(map[string]redis.Reply)
 	for _, node := range cluster.topology.GetNodes() {
-		reply := cluster.relay(node.ID, c, args)
+		reply := cluster.relay2(node.ID, c, args)
 		result[node.Addr] = reply
 	}
 	return result

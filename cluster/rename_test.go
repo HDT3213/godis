@@ -8,152 +8,52 @@ import (
 )
 
 func TestRename(t *testing.T) {
+	testNodeA := testCluster[0]
 	conn := new(connection.FakeConn)
-	testNodeA.db.Exec(conn, utils.ToCmdLine("FlushALL"))
 
 	// cross node rename
-	key := testNodeA.self + utils.RandString(10)
-	value := utils.RandString(10)
-	newKey := testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.pickNode
-	testNodeA.db.Exec(conn, utils.ToCmdLine("SET", key, value, "ex", "1000"))
-	result := Rename(testNodeA, conn, utils.ToCmdLine("RENAME", key, newKey))
-	asserts.AssertStatusReply(t, result, "OK")
-	result = testNodeA.db.Exec(conn, utils.ToCmdLine("EXISTS", key))
-	asserts.AssertIntReply(t, result, 0)
-	result = testNodeB.db.Exec(conn, utils.ToCmdLine("EXISTS", newKey))
-	asserts.AssertIntReply(t, result, 1)
-	result = testNodeB.db.Exec(conn, utils.ToCmdLine("TTL", newKey))
-	asserts.AssertIntReplyGreaterThan(t, result, 0)
-
-	// same node rename
-	key = testNodeA.self + utils.RandString(10)
-	value = utils.RandString(10)
-	newKey = key + utils.RandString(2)
-	testNodeA.db.Exec(conn, utils.ToCmdLine("SET", key, value, "ex", "1000"))
-	result = Rename(testNodeA, conn, utils.ToCmdLine("RENAME", key, newKey))
-	asserts.AssertStatusReply(t, result, "OK")
-	result = testNodeA.db.Exec(conn, utils.ToCmdLine("EXISTS", key))
-	asserts.AssertIntReply(t, result, 0)
-	result = testNodeA.db.Exec(conn, utils.ToCmdLine("EXISTS", newKey))
-	asserts.AssertIntReply(t, result, 1)
-	result = testNodeA.db.Exec(conn, utils.ToCmdLine("TTL", newKey))
-	asserts.AssertIntReplyGreaterThan(t, result, 0)
-
-	// test src prepare failed
-	*simulateATimout = true
-	key = testNodeA.self + utils.RandString(10)
-	newKey = testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.pickNode
-	value = utils.RandString(10)
-	testNodeA.db.Exec(conn, utils.ToCmdLine("SET", key, value, "ex", "1000"))
-	result = Rename(testNodeB, conn, utils.ToCmdLine("RENAME", key, newKey))
-	asserts.AssertErrReply(t, result, "ERR timeout")
-	result = testNodeA.db.Exec(conn, utils.ToCmdLine("EXISTS", key))
-	asserts.AssertIntReply(t, result, 1)
-	result = testNodeA.db.Exec(conn, utils.ToCmdLine("TTL", key))
-	asserts.AssertIntReplyGreaterThan(t, result, 0)
-	result = testNodeB.db.Exec(conn, utils.ToCmdLine("EXISTS", newKey))
-	asserts.AssertIntReply(t, result, 0)
-	*simulateATimout = false
-
-	// test dest prepare failed
-	*simulateBTimout = true
-	key = testNodeA.self + utils.RandString(10)
-	newKey = testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.pickNode
-	value = utils.RandString(10)
-	testNodeA.db.Exec(conn, utils.ToCmdLine("SET", key, value, "ex", "1000"))
-	result = Rename(testNodeA, conn, utils.ToCmdLine("RENAME", key, newKey))
-	asserts.AssertErrReply(t, result, "ERR timeout")
-	result = testNodeA.db.Exec(conn, utils.ToCmdLine("EXISTS", key))
-	asserts.AssertIntReply(t, result, 1)
-	result = testNodeA.db.Exec(conn, utils.ToCmdLine("TTL", key))
-	asserts.AssertIntReplyGreaterThan(t, result, 0)
-	result = testNodeB.db.Exec(conn, utils.ToCmdLine("EXISTS", newKey))
-	asserts.AssertIntReply(t, result, 0)
-	*simulateBTimout = false
-
-	result = Rename(testNodeA, conn, utils.ToCmdLine("RENAME", key))
-	asserts.AssertErrReply(t, result, "ERR wrong number of arguments for 'rename' command")
+	for i := 0; i < 10; i++ {
+		testNodeA.Exec(conn, utils.ToCmdLine("FlushALL"))
+		key := utils.RandString(10)
+		value := utils.RandString(10)
+		newKey := utils.RandString(10)
+		testNodeA.Exec(conn, utils.ToCmdLine("SET", key, value, "ex", "100000"))
+		result := testNodeA.Exec(conn, utils.ToCmdLine("RENAME", key, newKey))
+		asserts.AssertStatusReply(t, result, "OK")
+		result = testNodeA.Exec(conn, utils.ToCmdLine("EXISTS", key))
+		asserts.AssertIntReply(t, result, 0)
+		result = testNodeA.Exec(conn, utils.ToCmdLine("EXISTS", newKey))
+		asserts.AssertIntReply(t, result, 1)
+		result = testNodeA.Exec(conn, utils.ToCmdLine("TTL", newKey))
+		asserts.AssertIntReplyGreaterThan(t, result, 0)
+	}
 }
 
 func TestRenameNx(t *testing.T) {
+	testNodeA := testCluster[0]
 	conn := new(connection.FakeConn)
-	testNodeA.db.Exec(conn, utils.ToCmdLine("FlushALL"))
+
 	// cross node rename
-	key := testNodeA.self + utils.RandString(10)
-	value := utils.RandString(10)
-	newKey := testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.pickNode
-	testNodeA.db.Exec(conn, utils.ToCmdLine("SET", key, value, "ex", "1000"))
-	result := RenameNx(testNodeA, conn, utils.ToCmdLine("RENAMENX", key, newKey))
-	asserts.AssertIntReply(t, result, 1)
-	result = testNodeA.db.Exec(conn, utils.ToCmdLine("EXISTS", key))
-	asserts.AssertIntReply(t, result, 0)
-	result = testNodeB.db.Exec(conn, utils.ToCmdLine("EXISTS", newKey))
-	asserts.AssertIntReply(t, result, 1)
-	result = testNodeB.db.Exec(conn, utils.ToCmdLine("TTL", newKey))
-	asserts.AssertIntReplyGreaterThan(t, result, 0)
+	for i := 0; i < 10; i++ {
+		testNodeA.Exec(conn, utils.ToCmdLine("FlushALL"))
+		key := utils.RandString(10)
+		value := utils.RandString(10)
+		newKey := utils.RandString(10)
+		testNodeA.Exec(conn, utils.ToCmdLine("SET", key, value, "ex", "100000"))
+		result := testNodeA.Exec(conn, utils.ToCmdLine("RENAMENX", key, newKey))
+		asserts.AssertIntReply(t, result, 1)
+		result = testNodeA.Exec(conn, utils.ToCmdLine("EXISTS", key))
+		asserts.AssertIntReply(t, result, 0)
+		result = testNodeA.Exec(conn, utils.ToCmdLine("EXISTS", newKey))
+		asserts.AssertIntReply(t, result, 1)
+		result = testNodeA.Exec(conn, utils.ToCmdLine("TTL", newKey))
+		asserts.AssertIntReplyGreaterThan(t, result, 0)
 
-	// cross node rename, dest key exist
-	key = testNodeA.self + utils.RandString(10)
-	value = utils.RandString(10)
-	newKey = testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.pickNode
-	testNodeA.db.Exec(conn, utils.ToCmdLine("SET", key, value, "ex", "1000"))
-	testNodeB.db.Exec(conn, utils.ToCmdLine("SET", newKey, newKey))
-	result = RenameNx(testNodeA, conn, utils.ToCmdLine("RENAMENX", key, newKey))
-	asserts.AssertIntReply(t, result, 0)
-	result = testNodeA.db.Exec(conn, utils.ToCmdLine("EXISTS", key))
-	asserts.AssertIntReply(t, result, 1)
-	result = testNodeA.db.Exec(conn, utils.ToCmdLine("TTL", key))
-	asserts.AssertIntReplyGreaterThan(t, result, 0)
-	result = testNodeB.db.Exec(conn, utils.ToCmdLine("GET", newKey))
-	asserts.AssertBulkReply(t, result, newKey)
-
-	// same node rename
-	key = testNodeA.self + utils.RandString(10)
-	value = utils.RandString(10)
-	newKey = key + utils.RandString(2)
-	testNodeA.db.Exec(conn, utils.ToCmdLine("SET", key, value, "ex", "1000"))
-	result = RenameNx(testNodeA, conn, utils.ToCmdLine("RENAMENX", key, newKey))
-	asserts.AssertIntReply(t, result, 1)
-	result = testNodeA.db.Exec(conn, utils.ToCmdLine("EXISTS", key))
-	asserts.AssertIntReply(t, result, 0)
-	result = testNodeA.db.Exec(conn, utils.ToCmdLine("EXISTS", newKey))
-	asserts.AssertIntReply(t, result, 1)
-	result = testNodeA.db.Exec(conn, utils.ToCmdLine("TTL", newKey))
-	asserts.AssertIntReplyGreaterThan(t, result, 0)
-
-	// test src prepare failed
-	*simulateATimout = true
-	key = testNodeA.self + utils.RandString(10)
-	newKey = testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.pickNode
-	value = utils.RandString(10)
-	testNodeA.db.Exec(conn, utils.ToCmdLine("SET", key, value, "ex", "1000"))
-	result = RenameNx(testNodeB, conn, utils.ToCmdLine("RENAMENX", key, newKey))
-	asserts.AssertErrReply(t, result, "ERR timeout")
-	result = testNodeA.db.Exec(conn, utils.ToCmdLine("EXISTS", key))
-	asserts.AssertIntReply(t, result, 1)
-	result = testNodeA.db.Exec(conn, utils.ToCmdLine("TTL", key))
-	asserts.AssertIntReplyGreaterThan(t, result, 0)
-	result = testNodeB.db.Exec(conn, utils.ToCmdLine("EXISTS", newKey))
-	asserts.AssertIntReply(t, result, 0)
-	*simulateATimout = false
-
-	// test dest prepare failed
-	*simulateBTimout = true
-	key = testNodeA.self + utils.RandString(10)
-	newKey = testNodeB.self + utils.RandString(10) // route to testNodeB, see mockPicker.pickNode
-	value = utils.RandString(10)
-	testNodeA.db.Exec(conn, utils.ToCmdLine("SET", key, value, "ex", "1000"))
-	result = RenameNx(testNodeA, conn, utils.ToCmdLine("RENAMENX", key, newKey))
-	asserts.AssertErrReply(t, result, "ERR timeout")
-	result = testNodeA.db.Exec(conn, utils.ToCmdLine("EXISTS", key))
-	asserts.AssertIntReply(t, result, 1)
-	result = testNodeA.db.Exec(conn, utils.ToCmdLine("TTL", key))
-	asserts.AssertIntReplyGreaterThan(t, result, 0)
-	result = testNodeB.db.Exec(conn, utils.ToCmdLine("EXISTS", newKey))
-	asserts.AssertIntReply(t, result, 0)
-	*simulateBTimout = false
-
-	result = RenameNx(testNodeA, conn, utils.ToCmdLine("RENAMENX", key))
-	asserts.AssertErrReply(t, result, "ERR wrong number of arguments for 'renamenx' command")
-
+		value2 := value + "ccc"
+		testNodeA.Exec(conn, utils.ToCmdLine("SET", key, value2, "ex", "100000"))
+		result = testNodeA.Exec(conn, utils.ToCmdLine("RENAMENX", key, newKey))
+		asserts.AssertIntReply(t, result, 0)
+		result = testNodeA.Exec(conn, utils.ToCmdLine("EXISTS", key))
+		asserts.AssertIntReply(t, result, 1)
+	}
 }

@@ -6,8 +6,11 @@ import (
 )
 
 // FlushDB removes all data in current database
-func FlushDB(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
-	replies := cluster.broadcast(c, args)
+func FlushDB(cluster *Cluster, c redis.Connection, cmdLine [][]byte) redis.Reply {
+	var cmdLine2 [][]byte
+	cmdLine2 = append(cmdLine2, cmdLine...)
+	cmdLine2[0] = []byte("FlushDB_") // FlushDB_ will go directly to cluster.db, avoiding infinite recursion
+	replies := cluster.broadcast(c, cmdLine2)
 	var errReply protocol.ErrorReply
 	for _, v := range replies {
 		if protocol.IsErrorReply(v) {

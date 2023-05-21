@@ -37,7 +37,8 @@ func Copy(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	}
 
 	if srcNode == destNode {
-		return cluster.relay(srcNode, c, args)
+		args[0] = []byte("Copy_") // Copy_ will go directly to cluster.DB avoiding infinite recursion
+		return cluster.relay2(srcNode, c, args)
 	}
 	groupMap := map[string][]string{
 		srcNode:  {srcKey},
@@ -61,9 +62,12 @@ func Copy(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	// prepare Copy to
 	destPrepareResp := cluster.relay2(destNode, c, utils.ToCmdLine3("Prepare", []byte(txIDStr),
 		[]byte("CopyTo"), []byte(destKey), srcPrepareMBR.Args[0], srcPrepareMBR.Args[1], []byte(replaceFlag)))
-	if protocol.IsErrorReply(destPrepareResp) {
+	if destErr, ok := destPrepareResp.(protocol.ErrorReply); ok {
 		// rollback src node
 		requestRollback(cluster, c, txID, groupMap)
+		if destErr.Error() == keyExistsErr {
+			return protocol.MakeIntReply(0)
+		}
 		return destPrepareResp
 	}
 	if _, errReply := requestCommit(cluster, c, txID, groupMap); errReply != nil {

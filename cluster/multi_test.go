@@ -9,14 +9,15 @@ import (
 )
 
 func TestMultiExecOnSelf(t *testing.T) {
+	testNodeA := testCluster[0]
 	conn := new(connection.FakeConn)
 	testNodeA.db.Exec(conn, utils.ToCmdLine("FLUSHALL"))
 	result := testNodeA.Exec(conn, toArgs("MULTI"))
 	asserts.AssertNotError(t, result)
-	key := utils.RandString(10)
+	key := "{abc}" + utils.RandString(10)
 	value := utils.RandString(10)
 	testNodeA.Exec(conn, utils.ToCmdLine("set", key, value))
-	key2 := utils.RandString(10)
+	key2 := "{abc}" + utils.RandString(10)
 	testNodeA.Exec(conn, utils.ToCmdLine("rpush", key2, value))
 	result = testNodeA.Exec(conn, utils.ToCmdLine("exec"))
 	asserts.AssertNotError(t, result)
@@ -27,8 +28,9 @@ func TestMultiExecOnSelf(t *testing.T) {
 }
 
 func TestEmptyMulti(t *testing.T) {
+	testNodeA := testCluster[0]
 	conn := new(connection.FakeConn)
-	testNodeA.db.Exec(conn, utils.ToCmdLine("FLUSHALL"))
+	testNodeA.Exec(conn, utils.ToCmdLine("FLUSHALL"))
 	result := testNodeA.Exec(conn, toArgs("MULTI"))
 	asserts.AssertNotError(t, result)
 	result = testNodeA.Exec(conn, utils.ToCmdLine("GET", "a"))
@@ -40,6 +42,7 @@ func TestEmptyMulti(t *testing.T) {
 }
 
 func TestMultiExecOnOthers(t *testing.T) {
+	testNodeA := testCluster[0]
 	conn := new(connection.FakeConn)
 	testNodeA.db.Exec(conn, utils.ToCmdLine("FLUSHALL"))
 	result := testNodeA.Exec(conn, toArgs("MULTI"))
@@ -59,54 +62,31 @@ func TestMultiExecOnOthers(t *testing.T) {
 }
 
 func TestWatch(t *testing.T) {
-	conn := new(connection.FakeConn)
-	testNodeA.db.Exec(conn, utils.ToCmdLine("FLUSHALL"))
-	key := utils.RandString(10)
-	value := utils.RandString(10)
-	testNodeA.Exec(conn, utils.ToCmdLine("watch", key))
-	testNodeA.Exec(conn, utils.ToCmdLine("set", key, value))
-	result := testNodeA.Exec(conn, toArgs("MULTI"))
-	asserts.AssertNotError(t, result)
-	key2 := utils.RandString(10)
-	value2 := utils.RandString(10)
-	testNodeA.Exec(conn, utils.ToCmdLine("set", key2, value2))
-	result = testNodeA.Exec(conn, utils.ToCmdLine("exec"))
-	asserts.AssertNotError(t, result)
-	result = testNodeA.Exec(conn, utils.ToCmdLine("get", key2))
-	asserts.AssertNullBulk(t, result)
+	testNodeA := testCluster[0]
+	for i := 0; i < 10; i++ {
+		conn := new(connection.FakeConn)
+		key := "{1}" + utils.RandString(10)
+		key2 := "{1}" + utils.RandString(10) // use hash tag to ensure same slot
+		value := utils.RandString(10)
+		testNodeA.Exec(conn, utils.ToCmdLine("FLUSHALL"))
+		testNodeA.Exec(conn, utils.ToCmdLine("watch", key))
+		testNodeA.Exec(conn, utils.ToCmdLine("set", key, value))
+		result := testNodeA.Exec(conn, toArgs("MULTI"))
+		asserts.AssertNotError(t, result)
+		value2 := utils.RandString(10)
+		testNodeA.Exec(conn, utils.ToCmdLine("set", key2, value2))
+		result = testNodeA.Exec(conn, utils.ToCmdLine("exec"))
+		asserts.AssertNotError(t, result)
+		result = testNodeA.Exec(conn, utils.ToCmdLine("get", key2))
+		asserts.AssertNullBulk(t, result)
 
-	testNodeA.Exec(conn, utils.ToCmdLine("watch", key))
-	result = testNodeA.Exec(conn, toArgs("MULTI"))
-	asserts.AssertNotError(t, result)
-	testNodeA.Exec(conn, utils.ToCmdLine("set", key2, value2))
-	result = testNodeA.Exec(conn, utils.ToCmdLine("exec"))
-	asserts.AssertNotError(t, result)
-	result = testNodeA.Exec(conn, utils.ToCmdLine("get", key2))
-	asserts.AssertBulkReply(t, result, value2)
-}
-
-func TestWatch2(t *testing.T) {
-	conn := new(connection.FakeConn)
-	testNodeA.db.Exec(conn, utils.ToCmdLine("FLUSHALL"))
-	key := utils.RandString(10)
-	value := utils.RandString(10)
-	testNodeA.Exec(conn, utils.ToCmdLine("watch", key))
-	testNodeA.Exec(conn, utils.ToCmdLine("set", key, value))
-	result := testNodeA.Exec(conn, toArgs("MULTI"))
-	asserts.AssertNotError(t, result)
-	key2 := utils.RandString(10)
-	value2 := utils.RandString(10)
-	testNodeA.Exec(conn, utils.ToCmdLine("set", key2, value2))
-	cmdLines := conn.GetQueuedCmdLine()
-	execMultiOnOtherNode(testNodeA, conn, testNodeA.self, conn.GetWatching(), cmdLines)
-	result = testNodeA.Exec(conn, utils.ToCmdLine("get", key2))
-	asserts.AssertNullBulk(t, result)
-
-	testNodeA.Exec(conn, utils.ToCmdLine("watch", key))
-	result = testNodeA.Exec(conn, toArgs("MULTI"))
-	asserts.AssertNotError(t, result)
-	testNodeA.Exec(conn, utils.ToCmdLine("set", key2, value2))
-	execMultiOnOtherNode(testNodeA, conn, testNodeA.self, conn.GetWatching(), cmdLines)
-	result = testNodeA.Exec(conn, utils.ToCmdLine("get", key2))
-	asserts.AssertBulkReply(t, result, value2)
+		testNodeA.Exec(conn, utils.ToCmdLine("watch", key))
+		result = testNodeA.Exec(conn, toArgs("MULTI"))
+		asserts.AssertNotError(t, result)
+		testNodeA.Exec(conn, utils.ToCmdLine("set", key2, value2))
+		result = testNodeA.Exec(conn, utils.ToCmdLine("exec"))
+		asserts.AssertNotError(t, result)
+		result = testNodeA.Exec(conn, utils.ToCmdLine("get", key2))
+		asserts.AssertBulkReply(t, result, value2)
+	}
 }

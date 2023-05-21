@@ -3,6 +3,7 @@ package cluster
 import (
 	"github.com/hdt3213/godis/redis/protocol"
 	"hash/crc32"
+	"strings"
 	"time"
 )
 
@@ -17,8 +18,22 @@ type Slot struct {
 	Flags uint32
 }
 
+// getPartitionKey extract hashtag
+func getPartitionKey(key string) string {
+	beg := strings.Index(key, "{")
+	if beg == -1 {
+		return key
+	}
+	end := strings.Index(key, "}")
+	if end == -1 || end == beg+1 {
+		return key
+	}
+	return key[beg+1 : end]
+}
+
 func getSlot(key string) uint32 {
-	return crc32.ChecksumIEEE([]byte(key)) % uint32(slotCount)
+	partitionKey := getPartitionKey(key)
+	return crc32.ChecksumIEEE([]byte(partitionKey)) % uint32(slotCount)
 }
 
 // Node represents a node and its slots, used in cluster internal messages
