@@ -589,10 +589,13 @@ func undoLTrim(db *DB, args [][]byte) []CmdLine {
 	if end < 0 {
 		end += length
 	}
+	if end < start {
+		end = start - 1
+	}
 
-	lSlice := list.Range(0, start-1)
-	rSlice := list.Range(end+1, length-1)
-	cmdLines := make([]CmdLine, 0, len(lSlice)+len(rSlice))
+	lSlice := list.Range(0, start)
+	rSlice := list.Range(end+1, length)
+
 	lValues := make([][]byte, 0, len(rSlice))
 	for i := len(lSlice) - 1; i >= 0; i-- {
 		lValues = append(lValues, lSlice[i].([]byte))
@@ -602,6 +605,7 @@ func undoLTrim(db *DB, args [][]byte) []CmdLine {
 		rValues = append(rValues, rSlice[i].([]byte))
 	}
 
+	cmdLines := make([]CmdLine, 0, len(lSlice)+len(rSlice))
 	cmdLines = append(cmdLines, utils.ToCmdLine3(string(lPushCmd), lValues...))
 	cmdLines = append(cmdLines, utils.ToCmdLine3(string(rPushCmd), rValues...))
 
