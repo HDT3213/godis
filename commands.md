@@ -50,6 +50,7 @@
     - lindex
     - lset
     - lrange
+    - ltrim
 - Hash
     - hset
     - hsetnx

@@ -2,11 +2,12 @@ package database
 
 import (
 	"fmt"
+	"strconv"
+	"testing"
+
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
 	"github.com/hdt3213/godis/redis/protocol/asserts"
-	"strconv"
-	"testing"
 )
 
 func TestPush(t *testing.T) {
@@ -386,6 +387,65 @@ func TestLPushX(t *testing.T) {
 	}
 }
 
+func TestLTrim(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	values := [][]byte{[]byte("a"), []byte("b"), []byte("c"), []byte("d"), []byte("e"), []byte("f")}
+	result := testDB.Exec(nil, utils.ToCmdLine("rpush", key, "a", "b", "c", "d", "e", "f"))
+	expected := protocol.MakeIntReply(int64(6))
+	if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
+		t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+	}
+
+	// case1
+	result1 := testDB.Exec(nil, utils.ToCmdLine("ltrim", key, "1", "-2"))
+	expected1 := protocol.MakeOkReply()
+	if !utils.BytesEquals(result1.ToBytes(), expected1.ToBytes()) {
+		t.Error(fmt.Sprintf("expected %s, actually %s", string(expected1.ToBytes()), string(result1.ToBytes())))
+	}
+
+	actualValue1 := testDB.Exec(nil, utils.ToCmdLine("lrange", key, "0", "-1"))
+	expectedValue1 := protocol.MakeMultiBulkReply(values[1:5])
+	if !utils.BytesEquals(actualValue1.ToBytes(), expectedValue1.ToBytes()) {
+		t.Error(fmt.Sprintf("expected %s, actually %s", string(expectedValue1.ToBytes()), string(actualValue1.ToBytes())))
+	}
+
+	// case2
+	result2 := testDB.Exec(nil, utils.ToCmdLine("ltrim", key, "-3", "-2"))
+	expected2 := protocol.MakeOkReply()
+	if !utils.BytesEquals(result2.ToBytes(), expected2.ToBytes()) {
+		t.Error(fmt.Sprintf("expected %s, actually %s", string(expected2.ToBytes()), string(result2.ToBytes())))
+	}
+
+	actualValue2 := testDB.Exec(nil, utils.ToCmdLine("lrange", key, "0", "-1"))
+	expectedValue2 := protocol.MakeMultiBulkReply(values[2:4])
+	if !utils.BytesEquals(actualValue2.ToBytes(), expectedValue2.ToBytes()) {
+		t.Error(fmt.Sprintf("expected %s, actually %s", string(expectedValue2.ToBytes()), string(actualValue2.ToBytes())))
+	}
+
+	// case3
+	result3 := testDB.Exec(nil, utils.ToCmdLine("ltrim", key, "1", "0"))
+	expected3 := protocol.MakeEmptyMultiBulkReply()
+	if !utils.BytesEquals(result3.ToBytes(), expected3.ToBytes()) {
+		t.Error(fmt.Sprintf("expected %s, actually %s", string(expected3.ToBytes()), string(result3.ToBytes())))
+	}
+
+	actualValue3 := testDB.Exec(nil, utils.ToCmdLine("lrange", key, "0", "-1"))
+	expectedValue3 := protocol.MakeEmptyMultiBulkReply()
+	if !utils.BytesEquals(actualValue3.ToBytes(), expectedValue3.ToBytes()) {
+		t.Error(fmt.Sprintf("expected %s, actually %s", string(expectedValue3.ToBytes()), string(actualValue3.ToBytes())))
+	}
+
+	// case4
+	key1 := utils.RandString(10)
+	result4 := testDB.Exec(nil, utils.ToCmdLine("ltrim", key1, "1", "0"))
+	expected4 := protocol.MakeOkReply()
+	if !utils.BytesEquals(result4.ToBytes(), expected4.ToBytes()) {
+		t.Error(fmt.Sprintf("expected %s, actually %s", string(expected4.ToBytes()), string(result4.ToBytes())))
+	}
+
+}
+
 func TestUndoLPush(t *testing.T) {
 	testDB.Flush()
 	key := utils.RandString(10)
@@ -464,4 +524,55 @@ func TestUndoRPopLPush(t *testing.T) {
 	asserts.AssertIntReply(t, result, 1)
 	result = testDB.Exec(nil, utils.ToCmdLine("llen", key2))
 	asserts.AssertIntReply(t, result, 0)
+}
+
+func TestUndoLTrim(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	values := []string{"a", "b", "c", "d", "e", "f"}
+	testDB.Exec(nil, utils.ToCmdLine("rpush", key, "a", "b", "c", "d", "e", "f"))
+
+	// case1
+	cmdLine1 := utils.ToCmdLine("ltrim", key, "2", "4")
+	undoCmdLines1 := undoLTrim(testDB, cmdLine1[1:])
+	testDB.Exec(nil, cmdLine1)
+	for _, undoCmdLine := range undoCmdLines1 {
+		testDB.Exec(nil, undoCmdLine)
+	}
+
+	result1 := testDB.Exec(nil, utils.ToCmdLine("lrange", key, "0", "-1"))
+	asserts.AssertMultiBulkReply(t, result1, values)
+
+	// case2
+	cmdLine2 := utils.ToCmdLine("ltrim", key, "2", "-1")
+	undoCmdLines2 := undoLTrim(testDB, cmdLine2[1:])
+	testDB.Exec(nil, cmdLine2)
+	for _, undoCmdLine := range undoCmdLines2 {
+		testDB.Exec(nil, undoCmdLine)
+	}
+
+	result2 := testDB.Exec(nil, utils.ToCmdLine("lrange", key, "0", "-1"))
+	asserts.AssertMultiBulkReply(t, result2, values)
+
+	// case3
+	cmdLine3 := utils.ToCmdLine("ltrim", key, "4", "3")
+	undoCmdLines3 := undoLTrim(testDB, cmdLine3[1:])
+	testDB.Exec(nil, cmdLine3)
+	for _, undoCmdLine := range undoCmdLines3 {
+		testDB.Exec(nil, undoCmdLine)
+	}
+
+	result3 := testDB.Exec(nil, utils.ToCmdLine("lrange", key, "0", "-1"))
+	asserts.AssertMultiBulkReply(t, result3, values)
+
+	// case4
+	cmdLine4 := utils.ToCmdLine("ltrim", key, "3", "-4")
+	undoCmdLines4 := undoLTrim(testDB, cmdLine4[1:])
+	testDB.Exec(nil, cmdLine4)
+	for _, undoCmdLine := range undoCmdLines4 {
+		testDB.Exec(nil, undoCmdLine)
+	}
+
+	result4 := testDB.Exec(nil, utils.ToCmdLine("lrange", key, "0", "-1"))
+	asserts.AssertMultiBulkReply(t, result4, values)
 }
