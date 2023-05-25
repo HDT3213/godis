@@ -1,12 +1,12 @@
 package database
 
 import (
-	"fmt"
+	"strconv"
+	"testing"
+
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
 	"github.com/hdt3213/godis/redis/protocol/asserts"
-	"strconv"
-	"testing"
 )
 
 func TestPush(t *testing.T) {
@@ -21,7 +21,7 @@ func TestPush(t *testing.T) {
 		values[i] = []byte(value)
 		result := testDB.Exec(nil, utils.ToCmdLine("rpush", key, value))
 		if intResult, _ := result.(*protocol.IntReply); intResult.Code != int64(i+1) {
-			t.Error(fmt.Sprintf("expected %d, actually %d", i+1, intResult.Code))
+			t.Errorf("expected %d, actually %d", i+1, intResult.Code)
 		}
 	}
 	actual := testDB.Exec(nil, utils.ToCmdLine("lrange", key, "0", "-1"))
@@ -43,7 +43,7 @@ func TestPush(t *testing.T) {
 	}
 	result := testDB.Exec(nil, utils.ToCmdLine2("rpush", args...))
 	if intResult, _ := result.(*protocol.IntReply); intResult.Code != int64(size) {
-		t.Error(fmt.Sprintf("expected %d, actually %d", size, intResult.Code))
+		t.Errorf("expected %d, actually %d", size, intResult.Code)
 	}
 	actual = testDB.Exec(nil, utils.ToCmdLine("lrange", key, "0", "-1"))
 	expected = protocol.MakeMultiBulkReply(values)
@@ -60,7 +60,7 @@ func TestPush(t *testing.T) {
 		values[size-i-1] = []byte(value)
 		result = testDB.Exec(nil, utils.ToCmdLine("lpush", key, value))
 		if intResult, _ := result.(*protocol.IntReply); intResult.Code != int64(i+1) {
-			t.Error(fmt.Sprintf("expected %d, actually %d", i+1, intResult.Code))
+			t.Errorf("expected %d, actually %d", i+1, intResult.Code)
 		}
 	}
 	actual = testDB.Exec(nil, utils.ToCmdLine("lrange", key, "0", "-1"))
@@ -83,7 +83,7 @@ func TestPush(t *testing.T) {
 	// result = execLPush(testDB, values)
 	result = testDB.Exec(nil, utils.ToCmdLine2("lpush", args...))
 	if intResult, _ := result.(*protocol.IntReply); intResult.Code != int64(size) {
-		t.Error(fmt.Sprintf("expected %d, actually %d", size, intResult.Code))
+		t.Errorf("expected %d, actually %d", size, intResult.Code)
 	}
 	actual = testDB.Exec(nil, utils.ToCmdLine("lrange", key, "0", "-1"))
 	expected = protocol.MakeMultiBulkReply(expectedValues)
@@ -110,7 +110,7 @@ func TestLRange(t *testing.T) {
 	actual := testDB.Exec(nil, utils.ToCmdLine("lrange", key, start, end))
 	expected := protocol.MakeMultiBulkReply(values[0:10])
 	if !utils.BytesEquals(actual.ToBytes(), expected.ToBytes()) {
-		t.Error(fmt.Sprintf("range error [%s, %s]", start, end))
+		t.Errorf("range error [%s, %s]", start, end)
 	}
 
 	start = "0"
@@ -118,7 +118,7 @@ func TestLRange(t *testing.T) {
 	actual = testDB.Exec(nil, utils.ToCmdLine("lrange", key, start, end))
 	expected = protocol.MakeMultiBulkReply(values)
 	if !utils.BytesEquals(actual.ToBytes(), expected.ToBytes()) {
-		t.Error(fmt.Sprintf("range error [%s, %s]", start, end))
+		t.Errorf("range error [%s, %s]", start, end)
 	}
 
 	start = "0"
@@ -126,7 +126,7 @@ func TestLRange(t *testing.T) {
 	actual = testDB.Exec(nil, utils.ToCmdLine("lrange", key, start, end))
 	expected = protocol.MakeMultiBulkReply(values[0 : size-10+1])
 	if !utils.BytesEquals(actual.ToBytes(), expected.ToBytes()) {
-		t.Error(fmt.Sprintf("range error [%s, %s]", start, end))
+		t.Errorf("range error [%s, %s]", start, end)
 	}
 
 	start = "0"
@@ -134,7 +134,7 @@ func TestLRange(t *testing.T) {
 	actual = testDB.Exec(nil, utils.ToCmdLine("lrange", key, start, end))
 	expected = protocol.MakeMultiBulkReply(values[0:0])
 	if !utils.BytesEquals(actual.ToBytes(), expected.ToBytes()) {
-		t.Error(fmt.Sprintf("range error [%s, %s]", start, end))
+		t.Errorf("range error [%s, %s]", start, end)
 	}
 
 	start = "-10"
@@ -142,7 +142,7 @@ func TestLRange(t *testing.T) {
 	actual = testDB.Exec(nil, utils.ToCmdLine("lrange", key, start, end))
 	expected = protocol.MakeMultiBulkReply(values[90:])
 	if !utils.BytesEquals(actual.ToBytes(), expected.ToBytes()) {
-		t.Error(fmt.Sprintf("range error [%s, %s]", start, end))
+		t.Errorf("range error [%s, %s]", start, end)
 	}
 }
 
@@ -160,14 +160,14 @@ func TestLIndex(t *testing.T) {
 
 	result := testDB.Exec(nil, utils.ToCmdLine("llen", key))
 	if intResult, _ := result.(*protocol.IntReply); intResult.Code != int64(size) {
-		t.Error(fmt.Sprintf("expected %d, actually %d", size, intResult.Code))
+		t.Errorf("expected %d, actually %d", size, intResult.Code)
 	}
 
 	for i := 0; i < size; i++ {
 		result = testDB.Exec(nil, utils.ToCmdLine("lindex", key, strconv.Itoa(i)))
 		expected := protocol.MakeBulkReply(values[i])
 		if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
-			t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+			t.Errorf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes()))
 		}
 	}
 
@@ -175,7 +175,7 @@ func TestLIndex(t *testing.T) {
 		result = testDB.Exec(nil, utils.ToCmdLine("lindex", key, strconv.Itoa(-i)))
 		expected := protocol.MakeBulkReply(values[size-i])
 		if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
-			t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+			t.Errorf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes()))
 		}
 	}
 }
@@ -189,29 +189,29 @@ func TestLRem(t *testing.T) {
 
 	result := testDB.Exec(nil, utils.ToCmdLine("lrem", key, "1", "a"))
 	if intResult, _ := result.(*protocol.IntReply); intResult.Code != 1 {
-		t.Error(fmt.Sprintf("expected %d, actually %d", 1, intResult.Code))
+		t.Errorf("expected %d, actually %d", 1, intResult.Code)
 	}
 	result = testDB.Exec(nil, utils.ToCmdLine("llen", key))
 	if intResult, _ := result.(*protocol.IntReply); intResult.Code != 6 {
-		t.Error(fmt.Sprintf("expected %d, actually %d", 6, intResult.Code))
+		t.Errorf("expected %d, actually %d", 6, intResult.Code)
 	}
 
 	result = testDB.Exec(nil, utils.ToCmdLine("lrem", key, "-2", "a"))
 	if intResult, _ := result.(*protocol.IntReply); intResult.Code != 2 {
-		t.Error(fmt.Sprintf("expected %d, actually %d", 2, intResult.Code))
+		t.Errorf("expected %d, actually %d", 2, intResult.Code)
 	}
 	result = testDB.Exec(nil, utils.ToCmdLine("llen", key))
 	if intResult, _ := result.(*protocol.IntReply); intResult.Code != 4 {
-		t.Error(fmt.Sprintf("expected %d, actually %d", 4, intResult.Code))
+		t.Errorf("expected %d, actually %d", 4, intResult.Code)
 	}
 
 	result = testDB.Exec(nil, utils.ToCmdLine("lrem", key, "0", "a"))
 	if intResult, _ := result.(*protocol.IntReply); intResult.Code != 2 {
-		t.Error(fmt.Sprintf("expected %d, actually %d", 2, intResult.Code))
+		t.Errorf("expected %d, actually %d", 2, intResult.Code)
 	}
 	result = testDB.Exec(nil, utils.ToCmdLine("llen", key))
 	if intResult, _ := result.(*protocol.IntReply); intResult.Code != 2 {
-		t.Error(fmt.Sprintf("expected %d, actually %d", 2, intResult.Code))
+		t.Errorf("expected %d, actually %d", 2, intResult.Code)
 	}
 }
 
@@ -228,12 +228,12 @@ func TestLSet(t *testing.T) {
 		value := utils.RandString(10)
 		result := testDB.Exec(nil, utils.ToCmdLine("lset", key, indexStr, value))
 		if _, ok := result.(*protocol.OkReply); !ok {
-			t.Error(fmt.Sprintf("expected OK, actually %s", string(result.ToBytes())))
+			t.Errorf("expected OK, actually %s", string(result.ToBytes()))
 		}
 		result = testDB.Exec(nil, utils.ToCmdLine("lindex", key, indexStr))
 		expected := protocol.MakeBulkReply([]byte(value))
 		if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
-			t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+			t.Errorf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes()))
 		}
 	}
 	// test negative index
@@ -241,12 +241,12 @@ func TestLSet(t *testing.T) {
 		value := utils.RandString(10)
 		result := testDB.Exec(nil, utils.ToCmdLine("lset", key, strconv.Itoa(-i), value))
 		if _, ok := result.(*protocol.OkReply); !ok {
-			t.Error(fmt.Sprintf("expected OK, actually %s", string(result.ToBytes())))
+			t.Errorf("expected OK, actually %s", string(result.ToBytes()))
 		}
 		result = testDB.Exec(nil, utils.ToCmdLine("lindex", key, strconv.Itoa(len(values)-i-1)))
 		expected := protocol.MakeBulkReply([]byte(value))
 		if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
-			t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+			t.Errorf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes()))
 		}
 	}
 
@@ -255,16 +255,16 @@ func TestLSet(t *testing.T) {
 	result := testDB.Exec(nil, utils.ToCmdLine("lset", key, strconv.Itoa(-len(values)-1), value))
 	expected := protocol.MakeErrReply("ERR index out of range")
 	if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
-		t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+		t.Errorf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes()))
 	}
 	result = testDB.Exec(nil, utils.ToCmdLine("lset", key, strconv.Itoa(len(values)), value))
 	if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
-		t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+		t.Errorf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes()))
 	}
 	result = testDB.Exec(nil, utils.ToCmdLine("lset", key, "a", value))
 	expected = protocol.MakeErrReply("ERR value is not an integer or out of range")
 	if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
-		t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+		t.Errorf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes()))
 	}
 }
 
@@ -279,13 +279,13 @@ func TestLPop(t *testing.T) {
 		result := testDB.Exec(nil, utils.ToCmdLine("lpop", key))
 		expected := protocol.MakeBulkReply([]byte(values[i+1]))
 		if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
-			t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+			t.Errorf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes()))
 		}
 	}
 	result := testDB.Exec(nil, utils.ToCmdLine("rpop", key))
 	expected := &protocol.NullBulkReply{}
 	if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
-		t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+		t.Errorf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes()))
 	}
 }
 
@@ -300,13 +300,13 @@ func TestRPop(t *testing.T) {
 		result := testDB.Exec(nil, utils.ToCmdLine("rpop", key))
 		expected := protocol.MakeBulkReply([]byte(values[len(values)-i-1]))
 		if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
-			t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+			t.Errorf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes()))
 		}
 	}
 	result := testDB.Exec(nil, utils.ToCmdLine("rpop", key))
 	expected := &protocol.NullBulkReply{}
 	if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
-		t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+		t.Errorf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes()))
 	}
 }
 
@@ -322,17 +322,17 @@ func TestRPopLPush(t *testing.T) {
 		result := testDB.Exec(nil, utils.ToCmdLine("rpoplpush", key1, key2))
 		expected := protocol.MakeBulkReply([]byte(values[len(values)-i-1]))
 		if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
-			t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+			t.Errorf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes()))
 		}
 		result = testDB.Exec(nil, utils.ToCmdLine("lindex", key2, "0"))
 		if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
-			t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+			t.Errorf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes()))
 		}
 	}
 	result := testDB.Exec(nil, utils.ToCmdLine("rpop", key1))
 	expected := &protocol.NullBulkReply{}
 	if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
-		t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+		t.Errorf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes()))
 	}
 }
 
@@ -342,7 +342,7 @@ func TestRPushX(t *testing.T) {
 	result := testDB.Exec(nil, utils.ToCmdLine("rpushx", key, "1"))
 	expected := protocol.MakeIntReply(int64(0))
 	if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
-		t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+		t.Errorf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes()))
 	}
 
 	testDB.Exec(nil, utils.ToCmdLine("rpush", key, "1"))
@@ -351,12 +351,12 @@ func TestRPushX(t *testing.T) {
 		result = testDB.Exec(nil, utils.ToCmdLine("rpushx", key, value))
 		expected := protocol.MakeIntReply(int64(i + 2))
 		if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
-			t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+			t.Errorf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes()))
 		}
 		result = testDB.Exec(nil, utils.ToCmdLine("lindex", key, "-1"))
 		expected2 := protocol.MakeBulkReply([]byte(value))
 		if !utils.BytesEquals(result.ToBytes(), expected2.ToBytes()) {
-			t.Error(fmt.Sprintf("expected %s, actually %s", string(expected2.ToBytes()), string(result.ToBytes())))
+			t.Errorf("expected %s, actually %s", string(expected2.ToBytes()), string(result.ToBytes()))
 		}
 	}
 }
@@ -367,7 +367,7 @@ func TestLPushX(t *testing.T) {
 	result := testDB.Exec(nil, utils.ToCmdLine("rpushx", key, "1"))
 	expected := protocol.MakeIntReply(int64(0))
 	if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
-		t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+		t.Errorf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes()))
 	}
 
 	testDB.Exec(nil, utils.ToCmdLine("lpush", key, "1"))
@@ -376,14 +376,76 @@ func TestLPushX(t *testing.T) {
 		result = testDB.Exec(nil, utils.ToCmdLine("lpushx", key, value))
 		expected := protocol.MakeIntReply(int64(i + 2))
 		if !utils.BytesEquals(result.ToBytes(), expected.ToBytes()) {
-			t.Error(fmt.Sprintf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes())))
+			t.Errorf("expected %s, actually %s", string(expected.ToBytes()), string(result.ToBytes()))
 		}
 		result = testDB.Exec(nil, utils.ToCmdLine("lindex", key, "0"))
 		expected2 := protocol.MakeBulkReply([]byte(value))
 		if !utils.BytesEquals(result.ToBytes(), expected2.ToBytes()) {
-			t.Error(fmt.Sprintf("expected %s, actually %s", string(expected2.ToBytes()), string(result.ToBytes())))
+			t.Errorf("expected %s, actually %s", string(expected2.ToBytes()), string(result.ToBytes()))
 		}
 	}
+}
+
+func TestLTrim(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	values := []string{"a", "b", "c", "d", "e", "f"}
+	result := testDB.Exec(nil, utils.ToCmdLine("rpush", key, "a", "b", "c", "d", "e", "f"))
+	asserts.AssertIntReply(t, result, 6)
+
+	// case1
+	result1 := testDB.Exec(nil, utils.ToCmdLine("ltrim", key, "1", "-2"))
+	asserts.AssertStatusReply(t, result1, "OK")
+
+	actualValue1 := testDB.Exec(nil, utils.ToCmdLine("lrange", key, "0", "-1"))
+	asserts.AssertMultiBulkReply(t, actualValue1, values[1:5])
+
+	// case2
+	result2 := testDB.Exec(nil, utils.ToCmdLine("ltrim", key, "-3", "-2"))
+	asserts.AssertStatusReply(t, result2, "OK")
+
+	actualValue2 := testDB.Exec(nil, utils.ToCmdLine("lrange", key, "0", "-1"))
+	asserts.AssertMultiBulkReply(t, actualValue2, values[2:4])
+
+	// case3
+	result3 := testDB.Exec(nil, utils.ToCmdLine("ltrim", key, "1", "0"))
+	asserts.AssertStatusReply(t, result3, "OK")
+
+	actualValue3 := testDB.Exec(nil, utils.ToCmdLine("lrange", key, "0", "-1"))
+	asserts.AssertMultiBulkReplySize(t, actualValue3, 0)
+}
+
+func TestLInsert(t *testing.T) {
+	testDB.Flush()
+	key := utils.RandString(10)
+	result := testDB.Exec(nil, utils.ToCmdLine("rpush", key, "a", "b", "c", "d", "e", "f"))
+	asserts.AssertIntReply(t, result, 6)
+
+	// case1
+	result = testDB.Exec(nil, utils.ToCmdLine("linsert", key, "before", "d", "0"))
+	asserts.AssertIntReply(t, result, 7)
+
+	values1 := testDB.Exec(nil, utils.ToCmdLine("lrange", key, "0", "-1"))
+	asserts.AssertMultiBulkReply(t, values1, []string{"a", "b", "c", "0", "d", "e", "f"})
+
+	// case2
+	result = testDB.Exec(nil, utils.ToCmdLine("linsert", key, "after", "d", "1"))
+	asserts.AssertIntReply(t, result, 8)
+
+	values2 := testDB.Exec(nil, utils.ToCmdLine("lrange", key, "0", "-1"))
+	asserts.AssertMultiBulkReply(t, values2, []string{"a", "b", "c", "0", "d", "1", "e", "f"})
+
+	// case3
+	result3 := testDB.Exec(nil, utils.ToCmdLine("linsert", key, "test", "d", "1"))
+	asserts.AssertErrReply(t, result3, "ERR syntax error")
+
+	// case4
+	result4 := testDB.Exec(nil, utils.ToCmdLine("linsert", key, "test", "d"))
+	asserts.AssertErrReply(t, result4, "ERR wrong number of arguments for 'linsert' command")
+
+	// case5
+	result5 := testDB.Exec(nil, utils.ToCmdLine("linsert", key, "before", "z", "2"))
+	asserts.AssertIntReply(t, result5, -1)
 }
 
 func TestUndoLPush(t *testing.T) {

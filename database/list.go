@@ -1,12 +1,15 @@
 package database
 
 import (
+	"fmt"
+	"strconv"
+	"strings"
+
 	List "github.com/hdt3213/godis/datastruct/list"
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
-	"strconv"
 )
 
 func (db *DB) getAsList(key string) (List.List, protocol.ErrorReply) {
@@ -510,6 +513,98 @@ func execRPushX(db *DB, args [][]byte) redis.Reply {
 	return protocol.MakeIntReply(int64(list.Len()))
 }
 
+// execLTrim removes elements from both ends a list. delete the list if all elements were trimmmed.
+func execLTrim(db *DB, args [][]byte) redis.Reply {
+	n := len(args)
+	if n != 3 {
+		return protocol.MakeErrReply(fmt.Sprintf("ERR wrong number of arguments (given %d, expected 3)", n))
+	}
+	key := string(args[0])
+	start, err := strconv.Atoi(string(args[1]))
+	if err != nil {
+		return protocol.MakeErrReply("ERR value is not an integer or out of range")
+	}
+	end, err := strconv.Atoi(string(args[2]))
+	if err != nil {
+		return protocol.MakeErrReply("ERR value is not an integer or out of range")
+	}
+
+	// get or init entity
+	list, errReply := db.getAsList(key)
+	if errReply != nil {
+		return errReply
+	}
+	if list == nil {
+		return protocol.MakeOkReply()
+	}
+
+	length := list.Len()
+	if start < 0 {
+		start += length
+	}
+	if end < 0 {
+		end += length
+	}
+
+	leftCount := start
+	rightCount := length - end - 1
+
+	for i := 0; i < leftCount && list.Len() > 0; i++ {
+		list.Remove(0)
+	}
+	for i := 0; i < rightCount && list.Len() > 0; i++ {
+		list.RemoveLast()
+	}
+
+	db.addAof(utils.ToCmdLine3("ltrim", args...))
+
+	return protocol.MakeOkReply()
+}
+
+func execLInsert(db *DB, args [][]byte) redis.Reply {
+	n := len(args)
+	if n != 4 {
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'linsert' command")
+	}
+	key := string(args[0])
+	list, errReply := db.getAsList(key)
+	if errReply != nil {
+		return errReply
+	}
+	if list == nil {
+		return protocol.MakeIntReply(0)
+	}
+
+	dir := strings.ToLower(string(args[1]))
+	if dir != "before" && dir != "after" {
+		return protocol.MakeErrReply("ERR syntax error")
+	}
+
+	pivot := string(args[2])
+	index := -1
+	list.ForEach(func(i int, v interface{}) bool {
+		if string(v.([]byte)) == pivot {
+			index = i
+			return false
+		}
+		return true
+	})
+	if index == -1 {
+		return protocol.MakeIntReply(-1)
+	}
+
+	val := args[3]
+	if dir == "before" {
+		list.Insert(index, val)
+	} else {
+		list.Insert(index+1, val)
+	}
+
+	db.addAof(utils.ToCmdLine3("linsert", args...))
+
+	return protocol.MakeIntReply(int64(list.Len()))
+}
+
 func init() {
 	registerCommand("LPush", execLPush, writeFirstKey, undoLPush, -3, flagWrite).
 		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM, redisFlagFast}, 1, 1, 1)
@@ -535,4 +630,8 @@ func init() {
 		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
 	registerCommand("LRange", execLRange, readFirstKey, nil, 4, flagReadOnly).
 		attachCommandExtra([]string{redisFlagReadonly}, 1, 1, 1)
+	registerCommand("LTrim", execLTrim, writeFirstKey, rollbackFirstKey, 4, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite}, 1, 1, 1)
+	registerCommand("LInsert", execLInsert, writeFirstKey, rollbackFirstKey, 5, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
 }
