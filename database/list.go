@@ -1,12 +1,15 @@
 package database
 
 import (
+	"fmt"
+	"strconv"
+	"strings"
+
 	List "github.com/hdt3213/godis/datastruct/list"
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
-	"strconv"
 )
 
 func (db *DB) getAsList(key string) (List.List, protocol.ErrorReply) {
@@ -510,6 +513,208 @@ func execRPushX(db *DB, args [][]byte) redis.Reply {
 	return protocol.MakeIntReply(int64(list.Len()))
 }
 
+// execLTrim removes elements from both ends a list. delete the list if all elements were trimmmed.
+func execLTrim(db *DB, args [][]byte) redis.Reply {
+	n := len(args)
+	if n != 3 {
+		return protocol.MakeErrReply(fmt.Sprintf("ERR wrong number of arguments (given %d, expected 3)", n))
+	}
+	key := string(args[0])
+	start, err := strconv.Atoi(string(args[1]))
+	if err != nil {
+		return protocol.MakeErrReply("ERR value is not an integer or out of range")
+	}
+	end, err := strconv.Atoi(string(args[2]))
+	if err != nil {
+		return protocol.MakeErrReply("ERR value is not an integer or out of range")
+	}
+
+	// get or init entity
+	list, errReply := db.getAsList(key)
+	if errReply != nil {
+		return errReply
+	}
+	if list == nil {
+		return protocol.MakeOkReply()
+	}
+
+	length := list.Len()
+	if start < 0 {
+		start += length
+	}
+	if end < 0 {
+		end += length
+	}
+
+	leftCount := start
+	rightCount := length - end - 1
+
+	for i := 0; i < leftCount && list.Len() > 0; i++ {
+		list.Remove(0)
+	}
+	for i := 0; i < rightCount && list.Len() > 0; i++ {
+		list.RemoveLast()
+	}
+
+	db.addAof(utils.ToCmdLine3("ltrim", args...))
+
+	if list.Len() == 0 {
+		return protocol.MakeEmptyMultiBulkReply()
+	}
+
+	return protocol.MakeOkReply()
+}
+
+func undoLTrim(db *DB, args [][]byte) []CmdLine {
+	key := string(args[0])
+	list, errReply := db.getAsList(key)
+	if errReply != nil {
+		return nil
+	}
+	if list == nil || list.Len() == 0 {
+		return nil
+	}
+
+	length := list.Len()
+	start, err := strconv.Atoi(string(args[1]))
+	if err != nil {
+		return nil
+	}
+	if start < 0 {
+		start += length
+	}
+	end, err := strconv.Atoi(string(args[2]))
+	if err != nil {
+		return nil
+	}
+	if end < 0 {
+		end += length
+	}
+	if end < start {
+		end = start - 1
+	}
+
+	cmdLines := make([]CmdLine, 0, start+length-end-1)
+	if start < length {
+		lSlice := list.Range(0, start)
+		lValues := make([][]byte, 0, len(lSlice))
+		for i := len(lSlice) - 1; i >= 0; i-- {
+			lValues = append(lValues, lSlice[i].([]byte))
+		}
+		if len(lValues) > 0 {
+			params := make([][]byte, 0, len(lValues)+1)
+			params = append(params, []byte(key))
+			params = append(params, lValues...)
+			cmdLines = append(cmdLines, utils.ToCmdLine3(string(lPushCmd), params...))
+		}
+	}
+
+	if end+1 < length {
+		rSlice := list.Range(end+1, length)
+		rValues := make([][]byte, 0, len(rSlice))
+		for i := 0; i < len(rSlice); i++ {
+			rValues = append(rValues, rSlice[i].([]byte))
+		}
+
+		if len(rValues) > 0 {
+			params := make([][]byte, 0, len(rValues)+1)
+			params = append(params, []byte(key))
+			params = append(params, rValues...)
+			cmdLines = append(cmdLines, utils.ToCmdLine3(string(rPushCmd), params...))
+		}
+	}
+
+	return cmdLines
+}
+
+func execLInsert(db *DB, args [][]byte) redis.Reply {
+	n := len(args)
+	if n != 4 {
+		return protocol.MakeErrReply("ERR wrong number of arguments for 'linsert' command")
+	}
+	key := string(args[0])
+	list, errReply := db.getAsList(key)
+	if errReply != nil {
+		return errReply
+	}
+	if list == nil {
+		return protocol.MakeIntReply(0)
+	}
+
+	dir := strings.ToLower(string(args[1]))
+	if dir != "before" && dir != "after" {
+		return protocol.MakeErrReply("ERR syntax error")
+	}
+
+	pivot := string(args[2])
+	index := 0
+	length := list.Len()
+	for ; index < length; index++ {
+		if string(list.Get(index).([]byte)) == pivot {
+			break
+		}
+	}
+	if index == length {
+		return protocol.MakeIntReply(-1)
+	}
+
+	val := args[3]
+	if dir == "before" {
+		list.Insert(index, val)
+	} else {
+		list.Insert(index+1, val)
+	}
+
+	return protocol.MakeIntReply(int64(length + 1))
+}
+
+func undoLInsert(db *DB, args [][]byte) []CmdLine {
+	key := string(args[0])
+	list, errReply := db.getAsList(key)
+	if errReply != nil {
+		return nil
+	}
+	if list == nil {
+		return nil
+	}
+
+	dir := strings.ToLower(string(args[1]))
+	if dir != "before" && dir != "after" {
+		return nil
+	}
+
+	pivot := string(args[2])
+	index := 0
+	length := list.Len()
+	for ; index < length; index++ {
+		if string(list.Get(index).([]byte)) == pivot {
+			break
+		}
+	}
+	if index == length {
+		return nil
+	}
+
+	if dir == "after" {
+		index++
+	}
+
+	cmdLines := make([]CmdLine, 0, 2*(length-index)-1)
+	tmpKey := utils.RandString(10)
+	for i := length - 1; i > index; i-- {
+		cmdLines = append(cmdLines, utils.ToCmdLine("RPopLPush", key, tmpKey))
+	}
+	cmdLines = append(cmdLines, utils.ToCmdLine("RPop", key, "1"))
+	for i := index - 1; i >= 0; i-- {
+		cmdLines = append(cmdLines, utils.ToCmdLine("RPopLPush", key, tmpKey))
+	}
+
+	cmdLines = append(cmdLines, utils.ToCmdLine("Del", key))
+	cmdLines = append(cmdLines, utils.ToCmdLine("Rename", tmpKey, key))
+
+	return cmdLines
+}
+
 func init() {
 	registerCommand("LPush", execLPush, writeFirstKey, undoLPush, -3, flagWrite).
 		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM, redisFlagFast}, 1, 1, 1)
@@ -535,4 +740,8 @@ func init() {
 		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
 	registerCommand("LRange", execLRange, readFirstKey, nil, 4, flagReadOnly).
 		attachCommandExtra([]string{redisFlagReadonly}, 1, 1, 1)
+	registerCommand("LTrim", execLTrim, writeFirstKey, undoLTrim, 4, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite}, 1, 1, 1)
+	registerCommand("LInsert", execLInsert, writeFirstKey, undoLInsert, 5, flagWrite).
+		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
 }
