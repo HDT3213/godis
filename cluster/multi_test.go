@@ -44,7 +44,7 @@ func TestEmptyMulti(t *testing.T) {
 func TestMultiExecOnOthers(t *testing.T) {
 	testNodeA := testCluster[0]
 	conn := new(connection.FakeConn)
-	testNodeA.db.Exec(conn, utils.ToCmdLine("FLUSHALL"))
+	testNodeA.Exec(conn, utils.ToCmdLine("FLUSHALL"))
 	result := testNodeA.Exec(conn, toArgs("MULTI"))
 	asserts.AssertNotError(t, result)
 	key := utils.RandString(10)

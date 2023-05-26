@@ -8,16 +8,16 @@ import (
 )
 
 // Rename renames a key, the origin and the destination must within the same node
-func Rename(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
-	if len(args) != 3 {
+func Rename(cluster *Cluster, c redis.Connection, cmdLine [][]byte) redis.Reply {
+	if len(cmdLine) != 3 {
 		return protocol.MakeErrReply("ERR wrong number of arguments for 'rename' command")
 	}
-	srcKey := string(args[1])
-	destKey := string(args[2])
+	srcKey := string(cmdLine[1])
+	destKey := string(cmdLine[2])
 	srcNode := cluster.pickNodeAddrByKey(srcKey)
 	destNode := cluster.pickNodeAddrByKey(destKey)
 	if srcNode == destNode { // do fast
-		return cluster.relay(srcNode, c, args)
+		return cluster.relay2(srcNode, c, modifyCmd(cmdLine, "Rename_"))
 	}
 	groupMap := map[string][]string{
 		srcNode:  {srcKey},
@@ -92,16 +92,16 @@ func init() {
 
 // RenameNx renames a key, only if the new key does not exist.
 // The origin and the destination must within the same node
-func RenameNx(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
-	if len(args) != 3 {
+func RenameNx(cluster *Cluster, c redis.Connection, cmdLine [][]byte) redis.Reply {
+	if len(cmdLine) != 3 {
 		return protocol.MakeErrReply("ERR wrong number of arguments for 'renamenx' command")
 	}
-	srcKey := string(args[1])
-	destKey := string(args[2])
+	srcKey := string(cmdLine[1])
+	destKey := string(cmdLine[2])
 	srcNode := cluster.pickNodeAddrByKey(srcKey)
 	destNode := cluster.pickNodeAddrByKey(destKey)
 	if srcNode == destNode {
-		return cluster.relay(srcNode, c, args)
+		return cluster.relay2(srcNode, c, modifyCmd(cmdLine, "RenameNX_"))
 	}
 	groupMap := map[string][]string{
 		srcNode:  {srcKey},

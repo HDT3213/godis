@@ -45,3 +45,10 @@ func (cluster *Cluster) pickNodeAddrByKey(key string) string {
 	slotId := getSlot(key)
 	return cluster.pickNode(slotId).Addr
 }
+
+func modifyCmd(cmdLine CmdLine, newCmd string) CmdLine {
+	var cmdLine2 CmdLine
+	cmdLine2 = append(cmdLine2, cmdLine...)
+	cmdLine2[0] = []byte(newCmd)
+	return cmdLine2
+}

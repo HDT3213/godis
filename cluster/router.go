@@ -62,6 +62,12 @@ func init() {
 	registerCmd("Copy_", genPenetratingExecutor("Copy"))
 	registerCmd("Watch_", genPenetratingExecutor("Watch"))
 	registerCmd(relayPublish, genPenetratingExecutor("Publish"))
+	registerCmd("Del_", genPenetratingExecutor("Del"))
+	registerCmd("MSet_", genPenetratingExecutor("MSet"))
+	registerCmd("MSetNx_", genPenetratingExecutor("MSetNx"))
+	registerCmd("MGet_", genPenetratingExecutor("MGet"))
+	registerCmd("Rename_", genPenetratingExecutor("Rename"))
+	registerCmd("RenameNx_", genPenetratingExecutor("RenameNx"))
 
 	defaultCmds := []string{
 		"expire",
@@ -146,6 +152,7 @@ func init() {
 		"GeoRadius",
 		"GeoRadiusByMember",
 		"GetVer",
+		"DumpKey",
 	}
 	for _, name := range defaultCmds {
 		registerDefaultCmd(name)

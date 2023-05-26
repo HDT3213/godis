@@ -75,19 +75,6 @@ var defaultRelayImpl = func(cluster *Cluster, node string, c redis.Connection, c
 	return peerClient.Send(cmdLine)
 }
 
-// relay function relays command to peer or calls cluster.db.Exec
-// If the invoker is a commander handler of cluster,
-// 	calling cluster.db.Exec instead of Cluster.Exec could avoid infinite recursion. such as cluster.Del
-// But it can not execute command implemented in `cluster` package, such as Transaction.prepare
-func (cluster *Cluster) relay(peerID string, c redis.Connection, args [][]byte) redis.Reply {
-	// use a variable to allow injecting stub for testing, see defaultRelayImpl
-	if peerID == cluster.self {
-		// to self db
-		return cluster.db.Exec(c, args)
-	}
-	return cluster.relayImpl(cluster, peerID, c, args)
-}
-
 // relay2 function relays command to peer or calls cluster.Exec
 // If relay2 invoked by a commander handler of cluster may cause infinite recursion
 // For example. if `cluster.Del` calls relay2("DEL") the actual stack is: cluster.Exec -> cluster.Del -> relay2 -> cluster.Exec
@@ -106,7 +93,7 @@ func (cluster *Cluster) relay2(peer string, c redis.Connection, args [][]byte) r
 func (cluster *Cluster) relayByKey(routeKey string, c redis.Connection, args [][]byte) redis.Reply {
 	slotId := getSlot(routeKey)
 	peer := cluster.pickNode(slotId)
-	return cluster.relay(peer.ID, c, args)
+	return cluster.relay2(peer.ID, c, args)
 }
 
 // broadcast function broadcasts command to all node in cluster
@@ -132,7 +119,7 @@ func (cluster *Cluster) ensureKey(key string) protocol.ErrorReply {
 	if slot.state != slotStateImporting || slot.importedKeys.Has(key) {
 		return nil
 	}
-	resp := cluster.relay(slot.oldNodeID, connection.NewFakeConn(), utils.ToCmdLine("DumpKey", key))
+	resp := cluster.relay2(slot.oldNodeID, connection.NewFakeConn(), utils.ToCmdLine("DumpKey", key))
 	if protocol.IsErrorReply(resp) {
 		return resp.(protocol.ErrorReply)
 	}

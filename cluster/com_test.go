@@ -37,13 +37,13 @@ func TestAuth(t *testing.T) {
 }
 
 func TestRelay(t *testing.T) {
-	testCluster2 := testCluster[1]
+	testNodeA := testCluster[1]
 	key := RandString(4)
 	value := RandString(4)
 	conn := connection.NewFakeConn()
-	ret := testCluster2.relay(addresses[1], conn, toArgs("SET", key, value))
+	ret := testNodeA.relay2(addresses[1], conn, toArgs("SET", key, value))
 	asserts.AssertNotError(t, ret)
-	ret = testCluster2.relay(addresses[1], conn, toArgs("GET", key))
+	ret = testNodeA.relay2(addresses[1], conn, toArgs("GET", key))
 	asserts.AssertBulkReply(t, ret, value)
 }
 
