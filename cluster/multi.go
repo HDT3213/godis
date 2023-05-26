@@ -78,7 +78,7 @@ func execMultiOnOtherNode(cluster *Cluster, conn redis.Connection, peer string, 
 	relayCmdLine = append(relayCmdLine, encodeCmdLine([]CmdLine{watchingCmdLine})...)
 	relayCmdLine = append(relayCmdLine, encodeCmdLine(cmdLines)...)
 	var rawRelayResult redis.Reply
-	rawRelayResult = cluster.relay2(peer, connection.NewFakeConn(), relayCmdLine)
+	rawRelayResult = cluster.relay(peer, connection.NewFakeConn(), relayCmdLine)
 	if protocol.IsErrorReply(rawRelayResult) {
 		return rawRelayResult
 	}

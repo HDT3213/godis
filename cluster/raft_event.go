@@ -73,7 +73,7 @@ func (raft *Raft) NewNode(addr string) (*Node, error) {
 		Addr:   node.Addr,
 	}
 	conn := connection.NewFakeConn()
-	resp := raft.cluster.relay2(raft.leaderId, conn,
+	resp := raft.cluster.relay(raft.leaderId, conn,
 		utils.ToCmdLine("raft", "propose", string(proposal.marshal())))
 	if err, ok := resp.(protocol.ErrorReply); ok {
 		return nil, err
@@ -89,7 +89,7 @@ func (raft *Raft) SetSlot(slotIDs []uint32, newNodeID string) protocol.ErrorRepl
 		SlotIDs: slotIDs,
 	}
 	conn := connection.NewFakeConn()
-	resp := raft.cluster.relay2(raft.leaderId, conn,
+	resp := raft.cluster.relay(raft.leaderId, conn,
 		utils.ToCmdLine("raft", "propose", string(proposal.marshal())))
 	if err, ok := resp.(protocol.ErrorReply); ok {
 		return err

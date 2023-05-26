@@ -41,9 +41,9 @@ func TestRelay(t *testing.T) {
 	key := RandString(4)
 	value := RandString(4)
 	conn := connection.NewFakeConn()
-	ret := testNodeA.relay2(addresses[1], conn, toArgs("SET", key, value))
+	ret := testNodeA.relay(addresses[1], conn, toArgs("SET", key, value))
 	asserts.AssertNotError(t, ret)
-	ret = testNodeA.relay2(addresses[1], conn, toArgs("GET", key))
+	ret = testNodeA.relay(addresses[1], conn, toArgs("GET", key))
 	asserts.AssertBulkReply(t, ret, value)
 }
 

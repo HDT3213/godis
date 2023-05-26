@@ -219,7 +219,7 @@ func requestCommit(cluster *Cluster, c redis.Connection, txID int64, groupMap ma
 	txIDStr := strconv.FormatInt(txID, 10)
 	respList := make([]redis.Reply, 0, len(groupMap))
 	for node := range groupMap {
-		resp := cluster.relay2(node, c, makeArgs("commit", txIDStr))
+		resp := cluster.relay(node, c, makeArgs("commit", txIDStr))
 		if protocol.IsErrorReply(resp) {
 			errReply = resp.(protocol.ErrorReply)
 			break
@@ -238,6 +238,6 @@ func requestCommit(cluster *Cluster, c redis.Connection, txID int64, groupMap ma
 func requestRollback(cluster *Cluster, c redis.Connection, txID int64, groupMap map[string][]string) {
 	txIDStr := strconv.FormatInt(txID, 10)
 	for node := range groupMap {
-		cluster.relay2(node, c, makeArgs("rollback", txIDStr))
+		cluster.relay(node, c, makeArgs("rollback", txIDStr))
 	}
 }

@@ -17,7 +17,7 @@ func Rename(cluster *Cluster, c redis.Connection, cmdLine [][]byte) redis.Reply 
 	srcNode := cluster.pickNodeAddrByKey(srcKey)
 	destNode := cluster.pickNodeAddrByKey(destKey)
 	if srcNode == destNode { // do fast
-		return cluster.relay2(srcNode, c, modifyCmd(cmdLine, "Rename_"))
+		return cluster.relay(srcNode, c, modifyCmd(cmdLine, "Rename_"))
 	}
 	groupMap := map[string][]string{
 		srcNode:  {srcKey},
@@ -26,7 +26,7 @@ func Rename(cluster *Cluster, c redis.Connection, cmdLine [][]byte) redis.Reply 
 	txID := cluster.idGenerator.NextID()
 	txIDStr := strconv.FormatInt(txID, 10)
 	// prepare rename from
-	srcPrepareResp := cluster.relay2(srcNode, c, makeArgs("Prepare", txIDStr, "RenameFrom", srcKey))
+	srcPrepareResp := cluster.relay(srcNode, c, makeArgs("Prepare", txIDStr, "RenameFrom", srcKey))
 	if protocol.IsErrorReply(srcPrepareResp) {
 		// rollback src node
 		requestRollback(cluster, c, txID, map[string][]string{srcNode: {srcKey}})
@@ -38,7 +38,7 @@ func Rename(cluster *Cluster, c redis.Connection, cmdLine [][]byte) redis.Reply 
 		return protocol.MakeErrReply("ERR invalid prepare response")
 	}
 	// prepare rename to
-	destPrepareResp := cluster.relay2(destNode, c, utils.ToCmdLine3("Prepare", []byte(txIDStr),
+	destPrepareResp := cluster.relay(destNode, c, utils.ToCmdLine3("Prepare", []byte(txIDStr),
 		[]byte("RenameTo"), []byte(destKey), srcPrepareMBR.Args[0], srcPrepareMBR.Args[1]))
 	if protocol.IsErrorReply(destPrepareResp) {
 		// rollback src node
@@ -101,7 +101,7 @@ func RenameNx(cluster *Cluster, c redis.Connection, cmdLine [][]byte) redis.Repl
 	srcNode := cluster.pickNodeAddrByKey(srcKey)
 	destNode := cluster.pickNodeAddrByKey(destKey)
 	if srcNode == destNode {
-		return cluster.relay2(srcNode, c, modifyCmd(cmdLine, "RenameNX_"))
+		return cluster.relay(srcNode, c, modifyCmd(cmdLine, "RenameNX_"))
 	}
 	groupMap := map[string][]string{
 		srcNode:  {srcKey},
@@ -110,7 +110,7 @@ func RenameNx(cluster *Cluster, c redis.Connection, cmdLine [][]byte) redis.Repl
 	txID := cluster.idGenerator.NextID()
 	txIDStr := strconv.FormatInt(txID, 10)
 	// prepare rename from
-	srcPrepareResp := cluster.relay2(srcNode, c, makeArgs("Prepare", txIDStr, "RenameFrom", srcKey))
+	srcPrepareResp := cluster.relay(srcNode, c, makeArgs("Prepare", txIDStr, "RenameFrom", srcKey))
 	if protocol.IsErrorReply(srcPrepareResp) {
 		// rollback src node
 		requestRollback(cluster, c, txID, map[string][]string{srcNode: {srcKey}})
@@ -122,7 +122,7 @@ func RenameNx(cluster *Cluster, c redis.Connection, cmdLine [][]byte) redis.Repl
 		return protocol.MakeErrReply("ERR invalid prepare response")
 	}
 	// prepare rename to
-	destPrepareResp := cluster.relay2(destNode, c, utils.ToCmdLine3("Prepare", []byte(txIDStr),
+	destPrepareResp := cluster.relay(destNode, c, utils.ToCmdLine3("Prepare", []byte(txIDStr),
 		[]byte("RenameNxTo"), []byte(destKey), srcPrepareMBR.Args[0], srcPrepareMBR.Args[1]))
 	if protocol.IsErrorReply(destPrepareResp) {
 		// rollback src node

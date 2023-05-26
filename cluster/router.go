@@ -163,9 +163,6 @@ func init() {
 // genPenetratingExecutor generates an executor that can reach directly to the database layer
 func genPenetratingExecutor(realCmd string) CmdFunc {
 	return func(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
-		var cmdLine2 [][]byte
-		cmdLine2 = append(cmdLine2, cmdLine...) // broadcast may reuse cmdLine, do not change it
-		cmdLine2[0] = []byte(realCmd)
-		return cluster.db.Exec(c, cmdLine2)
+		return cluster.db.Exec(c, modifyCmd(cmdLine, realCmd))
 	}
 }

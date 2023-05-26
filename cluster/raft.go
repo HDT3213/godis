@@ -329,7 +329,7 @@ func (raft *Raft) candidateJob() {
 			if nodeID == raft.selfNodeID {
 				return
 			}
-			rawResp := raft.cluster.relay2(nodeID, conn, args)
+			rawResp := raft.cluster.relay(nodeID, conn, args)
 			if err, ok := rawResp.(protocol.ErrorReply); ok {
 				logger.Info(fmt.Sprintf("cannot get vote response from %s, %v", nodeID, err))
 				return
@@ -420,7 +420,7 @@ func (raft *Raft) askNodeIndex(node *Node) *nodeStatus {
 	}
 	logger.Debugf("ask %s for offset", node.ID)
 	c := connection.NewFakeConn()
-	reply := raft.cluster.relay2(node.Addr, c, utils.ToCmdLine("raft", "get-offset"))
+	reply := raft.cluster.relay(node.Addr, c, utils.ToCmdLine("raft", "get-offset"))
 	if protocol.IsErrorReply(reply) {
 		logger.Infof("ask node %s index failed: %v", node.ID, reply)
 		return nil
@@ -519,7 +519,7 @@ func (raft *Raft) leaderJob() {
 			}
 
 			conn := connection.NewFakeConn()
-			resp := raft.cluster.relay2(node.ID, conn, cmdLine)
+			resp := raft.cluster.relay(node.ID, conn, cmdLine)
 			switch respPayload := resp.(type) {
 			case *protocol.MultiBulkReply:
 				term, _ := strconv.Atoi(string(respPayload.Args[0]))
@@ -540,7 +540,7 @@ func (raft *Raft) leaderJob() {
 					)
 					cmdLine = append(cmdLine, []byte(node.ID), []byte{byte(follower)})
 					cmdLine = append(cmdLine, snapshot[2:]...)
-					resp := raft.cluster.relay2(node.ID, conn, cmdLine)
+					resp := raft.cluster.relay(node.ID, conn, cmdLine)
 					if err, ok := resp.(protocol.ErrorReply); ok {
 						logger.Errorf("heartbeat to %s failed: %v", node.ID, err)
 						return

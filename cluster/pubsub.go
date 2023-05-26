@@ -13,10 +13,7 @@ const (
 // Publish broadcasts msg to all peers in cluster when receive publish command from client
 func Publish(cluster *Cluster, c redis.Connection, cmdLine [][]byte) redis.Reply {
 	var count int64 = 0
-	var cmdLine2 [][]byte
-	cmdLine2 = append(cmdLine2, cmdLine...)
-	cmdLine2[0] = []byte(relayPublish) // FlushDB_ will go directly to cluster.db, avoiding infinite recursion
-	results := cluster.broadcast(c, cmdLine2)
+	results := cluster.broadcast(c, modifyCmd(cmdLine, relayPublish))
 	for _, val := range results {
 		if errReply, ok := val.(protocol.ErrorReply); ok {
 			logger.Error("publish occurs error: " + errReply.Error())
