@@ -191,8 +191,8 @@ func (raft *Raft) initLog(baseTerm, baseIndex int, entries []*logEntry) {
 }
 
 const (
-	electionTimeoutMaxMs = 4000
-	electionTimeoutMinMs = 2800
+	electionTimeoutMaxMs = 4000 + 3600*1000
+	electionTimeoutMinMs = 2800 + 3600*1000
 )
 
 func randRange(from, to int) int {
@@ -216,8 +216,8 @@ func (cluster *Cluster) asRaft() *Raft {
 }
 
 // StartAsSeed starts cluster as seed node
-func (raft *Raft) StartAsSeed(addr string) protocol.ErrorReply {
-	selfNodeID := config.Properties.AnnounceAddress()
+func (raft *Raft) StartAsSeed(listenAddr string) protocol.ErrorReply {
+	selfNodeID := listenAddr
 	raft.slots = make([]*Slot, slotCount)
 	// claim all slots
 	for i := range raft.slots {
@@ -231,7 +231,7 @@ func (raft *Raft) StartAsSeed(addr string) protocol.ErrorReply {
 	raft.nodes = make(map[string]*Node)
 	raft.nodes[selfNodeID] = &Node{
 		ID:    selfNodeID,
-		Addr:  addr,
+		Addr:  listenAddr,
 		Slots: raft.slots,
 	}
 	raft.nodes[selfNodeID].setState(leader)
@@ -267,8 +267,6 @@ func (raft *Raft) start(state raftState) {
 		}
 	}()
 }
-
-const heartbeatTimeout = 3 * time.Second
 
 func (raft *Raft) followerJob() {
 	electionTimeout := time.Until(raft.electionAlarm)
@@ -545,6 +543,9 @@ func (raft *Raft) leaderJob() {
 						logger.Errorf("heartbeat to %s failed: %v", node.ID, err)
 						return
 					}
+				} else if respPayload.Error() == nodeNotReady {
+					logger.Infof("%s is not ready yet", node.ID)
+					return
 				} else {
 					logger.Errorf("heartbeat to %s failed: %v", node.ID, respPayload.Error())
 					return
@@ -775,6 +776,7 @@ func (req *heartbeatRequest) unmarshal(args [][]byte) protocol.ErrorReply {
 }
 
 const prevLogMismatch = "prev log mismatch"
+const nodeNotReady = "not ready"
 
 // execRaftHeartbeat receives heartbeat from leader
 // command line: raft heartbeat nodeID term commitTo prevTerm prevIndex [log entry]
@@ -801,13 +803,18 @@ func execRaftHeartbeat(cluster *Cluster, c redis.Connection, args [][]byte) redi
 		raft.mu.Unlock()
 	}
 	raft.mu.RLock()
-	if compareLogIndex(req.prevLogTerm, req.prevLogIndex, raft.baseTerm, raft.baseIndex) != 0 {
+	// heartbeat may arrive earlier than follower ready
+	if raft.heartbeatChan == nil {
+		raft.mu.RUnlock()
+		return protocol.MakeErrReply(nodeNotReady)
+	}
+	if len(req.entries) > 0 && compareLogIndex(req.prevLogTerm, req.prevLogIndex, raft.baseTerm, raft.baseIndex) != 0 {
 		raft.mu.RUnlock()
 		return protocol.MakeErrReply(prevLogMismatch)
 	}
 	raft.mu.RUnlock()
 
-	cluster.asRaft().heartbeatChan <- &heartbeat{
+	raft.heartbeatChan <- &heartbeat{
 		sender:   req.leaderId,
 		term:     req.term,
 		entries:  req.entries,
@@ -972,7 +979,7 @@ func (raft *Raft) Join(seed string) protocol.ErrorReply {
 		return protocol.MakeErrReply("connect with seed failed: " + err.Error())
 	}
 	defer cluster.clientFactory.ReturnPeerClient(leaderAddr, leaderCli)
-	ret = leaderCli.Send(utils.ToCmdLine("raft", "join", config.Properties.AnnounceAddress()))
+	ret = leaderCli.Send(utils.ToCmdLine("raft", "join", cluster.addr))
 	if protocol.IsErrorReply(ret) {
 		return ret.(protocol.ErrorReply)
 	}

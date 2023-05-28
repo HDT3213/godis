@@ -11,6 +11,7 @@ import (
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/idgenerator"
 	"github.com/hdt3213/godis/lib/logger"
+	"github.com/hdt3213/godis/redis/parser"
 	"github.com/hdt3213/godis/redis/protocol"
 	"os"
 	"path"
@@ -23,6 +24,7 @@ import (
 // it holds part of data and coordinates other nodes to finish transactions
 type Cluster struct {
 	self         string
+	addr         string
 	db           database.DBEngine
 	transactions *dict.SimpleDict // id -> Transaction
 	topology     topology
@@ -37,9 +39,15 @@ type peerClient interface {
 	Send(args [][]byte) redis.Reply
 }
 
+type peerStream interface {
+	Stream() <-chan *parser.Payload
+	Close() error
+}
+
 type clientFactory interface {
 	GetPeerClient(peerAddr string) (peerClient, error)
 	ReturnPeerClient(peerAddr string, peerClient peerClient) error
+	NewStream(peerAddr string, cmdLine CmdLine) (peerStream, error)
 	Close() error
 }
 
@@ -82,6 +90,7 @@ var allowFastTransaction = true
 func MakeCluster() *Cluster {
 	cluster := &Cluster{
 		self:          config.Properties.Self,
+		addr:          config.Properties.AnnounceAddress(),
 		db:            database2.NewStandaloneServer(),
 		transactions:  dict.MakeSimple(),
 		idGenerator:   idgenerator.MakeGenerator(config.Properties.Self),
@@ -96,7 +105,7 @@ func MakeCluster() *Cluster {
 	if topologyPersistFile != "" && fileExists(topologyPersistFile) {
 		err = cluster.LoadConfig()
 	} else if config.Properties.ClusterAsSeed {
-		err = cluster.startAsSeed()
+		err = cluster.startAsSeed(config.Properties.AnnounceAddress())
 	} else {
 		err = cluster.Join(config.Properties.ClusterSeed)
 	}

@@ -68,6 +68,10 @@ func (cluster *Cluster) setSlotMovingOut(slotID uint32, newNodeID string) {
 // cleanDroppedSlot deletes keys when slot has moved out or failed to import
 func (cluster *Cluster) cleanDroppedSlot(slotID uint32) {
 	cluster.slotMu.RLock()
+	if cluster.slots[slotID] == nil {
+		cluster.slotMu.RUnlock()
+		return
+	}
 	keys := cluster.slots[slotID].importedKeys
 	cluster.slotMu.RUnlock()
 	c := connection.NewFakeConn()

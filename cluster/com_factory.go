@@ -2,11 +2,16 @@ package cluster
 
 import (
 	"errors"
+	"fmt"
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/datastruct/dict"
+	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/pool"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/client"
+	"github.com/hdt3213/godis/redis/parser"
+	"github.com/hdt3213/godis/redis/protocol"
+	"net"
 )
 
 type defaultClientFactory struct {
@@ -18,6 +23,7 @@ var connectionPoolConfig = pool.Config{
 	MaxActive: 16,
 }
 
+// GetPeerClient gets a client with peer form pool
 func (factory *defaultClientFactory) GetPeerClient(peerAddr string) (peerClient, error) {
 	var connectionPool *pool.Pool
 	raw, ok := factory.nodeConnections.Get(peerAddr)
@@ -30,7 +36,10 @@ func (factory *defaultClientFactory) GetPeerClient(peerAddr string) (peerClient,
 			c.Start()
 			// all peers of cluster should use the same password
 			if config.Properties.RequirePass != "" {
-				c.Send(utils.ToCmdLine("AUTH", config.Properties.RequirePass))
+				authResp := c.Send(utils.ToCmdLine("AUTH", config.Properties.RequirePass))
+				if !protocol.IsOKReply(authResp) {
+					return nil, fmt.Errorf("auth failed, resp: %s", string(authResp.ToBytes()))
+				}
 			}
 			return c, nil
 		}
@@ -57,6 +66,7 @@ func (factory *defaultClientFactory) GetPeerClient(peerAddr string) (peerClient,
 	return conn, nil
 }
 
+// ReturnPeerClient returns client to pool
 func (factory *defaultClientFactory) ReturnPeerClient(peer string, peerClient peerClient) error {
 	raw, ok := factory.nodeConnections.Get(peer)
 	if !ok {
@@ -64,6 +74,54 @@ func (factory *defaultClientFactory) ReturnPeerClient(peer string, peerClient pe
 	}
 	raw.(*pool.Pool).Put(peerClient)
 	return nil
+}
+
+type tcpStream struct {
+	conn net.Conn
+	ch   <-chan *parser.Payload
+}
+
+func (s *tcpStream) Stream() <-chan *parser.Payload {
+	return s.ch
+}
+
+func (s *tcpStream) Close() error {
+	return s.conn.Close()
+}
+
+func (factory *defaultClientFactory) NewStream(peerAddr string, cmdLine CmdLine) (peerStream, error) {
+	conn, err := net.Dial("tcp", peerAddr)
+	if err != nil {
+		return nil, fmt.Errorf("connect with %s failed: %v", peerAddr, err)
+	}
+	ch := parser.ParseStream(conn)
+	send2node := func(cmdLine CmdLine) redis.Reply {
+		req := protocol.MakeMultiBulkReply(cmdLine)
+		_, err := conn.Write(req.ToBytes())
+		if err != nil {
+			return protocol.MakeErrReply(err.Error())
+		}
+		resp := <-ch
+		if resp.Err != nil {
+			return protocol.MakeErrReply(resp.Err.Error())
+		}
+		return resp.Data
+	}
+	if config.Properties.RequirePass != "" {
+		authResp := send2node(utils.ToCmdLine("AUTH", config.Properties.RequirePass))
+		if !protocol.IsOKReply(authResp) {
+			return nil, fmt.Errorf("auth failed, resp: %s", string(authResp.ToBytes()))
+		}
+	}
+	req := protocol.MakeMultiBulkReply(cmdLine)
+	_, err = conn.Write(req.ToBytes())
+	if err != nil {
+		return nil, protocol.MakeErrReply("send cmdLine failed: " + err.Error())
+	}
+	return &tcpStream{
+		conn: conn,
+		ch:   ch,
+	}, nil
 }
 
 func newDefaultClientFactory() *defaultClientFactory {

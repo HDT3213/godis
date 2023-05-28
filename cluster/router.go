@@ -22,16 +22,13 @@ func registerDefaultCmd(name string) {
 // relay command to responsible peer, and return its protocol to client
 func defaultFunc(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	key := string(args[1])
-	cluster.db.RWLocks(0, []string{key}, nil)
-	err := cluster.ensureKey(key)
-	if err != nil {
-		cluster.db.RWUnLocks(0, []string{key}, nil)
-		return err
-	}
-	cluster.db.RWUnLocks(0, []string{key}, nil)
 	slotId := getSlot(key)
 	peer := cluster.pickNode(slotId)
 	if peer.ID == cluster.self {
+		err := cluster.ensureKeyWithinLock(key)
+		if err != nil {
+			return err
+		}
 		// to self db
 		//return cluster.db.Exec(c, cmdLine)
 		return cluster.db.Exec(c, args)

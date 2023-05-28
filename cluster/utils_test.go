@@ -9,6 +9,7 @@ import (
 	"github.com/hdt3213/godis/lib/idgenerator"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/connection"
+	"github.com/hdt3213/godis/redis/parser"
 	"github.com/hdt3213/godis/redis/protocol"
 	"math/rand"
 	"sync"
@@ -47,6 +48,37 @@ func (factory *testClientFactory) GetPeerClient(peerAddr string) (peerClient, er
 		}
 	}
 	return nil, errors.New("peer not found")
+}
+
+type mockStream struct {
+	targetNode *Cluster
+	ch         <-chan *parser.Payload
+}
+
+func (s *mockStream) Stream() <-chan *parser.Payload {
+	return s.ch
+}
+
+func (s *mockStream) Close() error {
+	return nil
+}
+
+func (factory *testClientFactory) NewStream(peerAddr string, cmdLine CmdLine) (peerStream, error) {
+	for _, n := range factory.nodes {
+		if n.self == peerAddr {
+			conn := connection.NewFakeConn()
+			if config.Properties.RequirePass != "" {
+				n.Exec(conn, utils.ToCmdLine("AUTH", config.Properties.RequirePass))
+			}
+			n.Exec(conn, cmdLine)
+			ch := parser.ParseStream(conn)
+			return &mockStream{
+				targetNode: n,
+				ch:         ch,
+			}, nil
+		}
+	}
+	return nil, errors.New("node not found")
 }
 
 func (factory *testClientFactory) ReturnPeerClient(peer string, peerClient peerClient) error {

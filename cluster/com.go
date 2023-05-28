@@ -74,3 +74,9 @@ func (cluster *Cluster) ensureKey(key string) protocol.ErrorReply {
 	slot.importedKeys.Add(key)
 	return nil
 }
+
+func (cluster *Cluster) ensureKeyWithinLock(key string) protocol.ErrorReply {
+	cluster.db.RWLocks(0, []string{key}, nil)
+	defer cluster.db.RWUnLocks(0, []string{key}, nil)
+	return cluster.ensureKey(key)
+}

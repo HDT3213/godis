@@ -2,21 +2,17 @@ package cluster
 
 import (
 	"fmt"
-	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/database"
-	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/connection"
-	"github.com/hdt3213/godis/redis/parser"
 	"github.com/hdt3213/godis/redis/protocol"
-	"net"
 	"strconv"
 	"time"
 )
 
-func (cluster *Cluster) startAsSeed() protocol.ErrorReply {
-	err := cluster.topology.StartAsSeed(config.Properties.AnnounceAddress())
+func (cluster *Cluster) startAsSeed(listenAddr string) protocol.ErrorReply {
+	err := cluster.topology.StartAsSeed(listenAddr)
 	if err != nil {
 		return err
 	}
@@ -94,45 +90,34 @@ func (cluster *Cluster) reBalance() {
 }
 
 func (cluster *Cluster) importSlot(slot *Slot) error {
-	fakeConn := connection.NewFakeConn()
+	/* change slot host */
 	node := cluster.pickNode(slot.ID)
-	conn, err := net.Dial("tcp", node.Addr)
-	if err != nil {
-		return fmt.Errorf("connect with %s(%s) error: %v", node.ID, node.Addr, err)
-	}
-	defer conn.Close()
-	// we need to receive continuous stream like replication slave, so redis.Client cannot be used here
-	nodeChan := parser.ParseStream(conn)
-	send2node := func(cmdLine CmdLine) redis.Reply {
-		req := protocol.MakeMultiBulkReply(cmdLine)
-		_, err := conn.Write(req.ToBytes())
-		if err != nil {
-			return protocol.MakeErrReply(err.Error())
-		}
-		resp := <-nodeChan
-		if resp.Err != nil {
-			return protocol.MakeErrReply(resp.Err.Error())
-		}
-		return resp.Data
-	}
-
 	cluster.initSlot(slot.ID, slotStateImporting) // prepare host slot before send `set slot`
 	cluster.setLocalSlotImporting(slot.ID, cluster.self)
-	ret := send2node(utils.ToCmdLine(
+	peerCli, err := cluster.clientFactory.GetPeerClient(node.Addr)
+	if err != nil {
+		return err
+	}
+	defer cluster.clientFactory.ReturnPeerClient(node.Addr, peerCli)
+	ret := peerCli.Send(utils.ToCmdLine(
 		"gcluster", "set-slot", strconv.Itoa(int(slot.ID)), cluster.self))
 	if !protocol.IsOKReply(ret) {
 		return fmt.Errorf("set slot %d error: %v", slot.ID, ret)
 	}
 	logger.Info(fmt.Sprintf("set slot %d to current node, start migrate", slot.ID))
 
-	req := protocol.MakeMultiBulkReply(utils.ToCmdLine(
-		"gcluster", "migrate", strconv.Itoa(int(slot.ID)), cluster.self))
-	_, err = conn.Write(req.ToBytes())
+	/* get migrate stream */
+	migrateCmdLine := utils.ToCmdLine(
+		"gcluster", "migrate", strconv.Itoa(int(slot.ID)))
+	migrateStream, err := cluster.clientFactory.NewStream(node.Addr, migrateCmdLine)
 	if err != nil {
-		return protocol.MakeErrReply(err.Error())
+		return err
 	}
+	defer migrateStream.Close()
+
+	fakeConn := connection.NewFakeConn()
 slotLoop:
-	for proto := range nodeChan {
+	for proto := range migrateStream.Stream() {
 		if proto.Err != nil {
 			return fmt.Errorf("set slot %d error: %v", slot.ID, err)
 		}
@@ -164,6 +149,6 @@ slotLoop:
 		}
 	}
 	cluster.finishSlotImport(slot.ID)
-	send2node(utils.ToCmdLine("gcluster", "migrate-done", strconv.Itoa(int(slot.ID))))
+	peerCli.Send(utils.ToCmdLine("gcluster", "migrate-done", strconv.Itoa(int(slot.ID))))
 	return nil
 }
