@@ -951,10 +951,11 @@ func (raft *Raft) Join(seed string) protocol.ErrorReply {
 	cluster := raft.cluster
 
 	/* STEP1: get leader from seed */
-	seedCli, err := cluster.getPeerClient(seed)
+	seedCli, err := cluster.clientFactory.GetPeerClient(seed)
 	if err != nil {
 		return protocol.MakeErrReply("connect with seed failed: " + err.Error())
 	}
+	defer cluster.clientFactory.ReturnPeerClient(seed, seedCli)
 	ret := seedCli.Send(utils.ToCmdLine("raft", "get-leader"))
 	if protocol.IsErrorReply(ret) {
 		return ret.(protocol.ErrorReply)
@@ -966,10 +967,11 @@ func (raft *Raft) Join(seed string) protocol.ErrorReply {
 	leaderAddr := string(leaderInfo.Args[1])
 
 	/* STEP2: join raft group */
-	leaderCli, err := cluster.getPeerClient(leaderAddr)
+	leaderCli, err := cluster.clientFactory.GetPeerClient(leaderAddr)
 	if err != nil {
 		return protocol.MakeErrReply("connect with seed failed: " + err.Error())
 	}
+	defer cluster.clientFactory.ReturnPeerClient(leaderAddr, leaderCli)
 	ret = leaderCli.Send(utils.ToCmdLine("raft", "join", config.Properties.AnnounceAddress()))
 	if protocol.IsErrorReply(ret) {
 		return ret.(protocol.ErrorReply)

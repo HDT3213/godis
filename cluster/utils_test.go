@@ -1,34 +1,66 @@
 package cluster
 
 import (
+	"errors"
 	"github.com/hdt3213/godis/config"
 	database2 "github.com/hdt3213/godis/database"
 	"github.com/hdt3213/godis/datastruct/dict"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/idgenerator"
+	"github.com/hdt3213/godis/lib/utils"
+	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/protocol"
 	"math/rand"
 	"sync"
 )
 
+type testClientFactory struct {
+	nodes        []*Cluster
+	timeoutFlags []bool
+}
+
+type testClient struct {
+	targetNode  *Cluster
+	timeoutFlag *bool
+	conn        redis.Connection
+}
+
+func (cli *testClient) Send(cmdLine [][]byte) redis.Reply {
+	if *cli.timeoutFlag {
+		return protocol.MakeErrReply("ERR timeout")
+	}
+	return cli.targetNode.Exec(cli.conn, cmdLine)
+}
+
+func (factory *testClientFactory) GetPeerClient(peerAddr string) (peerClient, error) {
+	for i, n := range factory.nodes {
+		if n.self == peerAddr {
+			cli := &testClient{
+				targetNode:  n,
+				timeoutFlag: &factory.timeoutFlags[i],
+				conn:        connection.NewFakeConn(),
+			}
+			if config.Properties.RequirePass != "" {
+				cli.Send(utils.ToCmdLine("AUTH", config.Properties.RequirePass))
+			}
+			return cli, nil
+		}
+	}
+	return nil, errors.New("peer not found")
+}
+
+func (factory *testClientFactory) ReturnPeerClient(peer string, peerClient peerClient) error {
+	return nil
+}
+
+func (factory *testClientFactory) Close() error {
+	return nil
+}
+
 // mockClusterNodes creates a fake cluster for test
 // timeoutFlags should have the same length as addresses, set timeoutFlags[i] == true could simulate addresses[i] timeout
 func mockClusterNodes(addresses []string, timeoutFlags []bool) []*Cluster {
 	nodes := make([]*Cluster, len(addresses))
-	relay := func(cluster *Cluster, node string, c redis.Connection, cmdLine CmdLine) redis.Reply {
-		if node == cluster.self {
-			return cluster.db.Exec(c, cmdLine)
-		}
-		for i, n := range nodes {
-			if n.self == node {
-				if timeoutFlags[i] {
-					return protocol.MakeErrReply("ERR timeout")
-				}
-				return n.Exec(c, cmdLine)
-			}
-		}
-		return protocol.MakeErrReply("unknown node: " + node)
-	}
 	// build fixedTopology
 	slots := make([]*Slot, slotCount)
 	nodeMap := make(map[string]*Node)
@@ -48,6 +80,10 @@ func mockClusterNodes(addresses []string, timeoutFlags []bool) []*Cluster {
 		}
 		nodeMap[addr].Slots = append(nodeMap[addr].Slots, slots[i])
 	}
+	factory := &testClientFactory{
+		nodes:        nodes,
+		timeoutFlags: timeoutFlags,
+	}
 	for i, addr := range addresses {
 		topo := &fixedTopology{
 			mu:         sync.RWMutex{},
@@ -56,13 +92,12 @@ func mockClusterNodes(addresses []string, timeoutFlags []bool) []*Cluster {
 			selfNodeID: addr,
 		}
 		nodes[i] = &Cluster{
-			self:            addr,
-			db:              database2.NewStandaloneServer(),
-			transactions:    dict.MakeSimple(),
-			nodeConnections: dict.MakeConcurrent(1),
-			idGenerator:     idgenerator.MakeGenerator(config.Properties.Self),
-			relayImpl:       relay,
-			topology:        topo,
+			self:          addr,
+			db:            database2.NewStandaloneServer(),
+			transactions:  dict.MakeSimple(),
+			idGenerator:   idgenerator.MakeGenerator(config.Properties.Self),
+			topology:      topo,
+			clientFactory: factory,
 		}
 	}
 	return nodes

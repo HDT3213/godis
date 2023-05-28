@@ -36,7 +36,7 @@ func defaultFunc(cluster *Cluster, c redis.Connection, args [][]byte) redis.Repl
 		//return cluster.db.Exec(c, cmdLine)
 		return cluster.db.Exec(c, args)
 	}
-	return cluster.relayImpl(cluster, peer.ID, c, args)
+	return cluster.relay(peer.ID, c, args)
 }
 
 func init() {

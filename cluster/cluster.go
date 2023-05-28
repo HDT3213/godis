@@ -11,7 +11,6 @@ import (
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/idgenerator"
 	"github.com/hdt3213/godis/lib/logger"
-	"github.com/hdt3213/godis/lib/pool"
 	"github.com/hdt3213/godis/redis/protocol"
 	"os"
 	"path"
@@ -23,16 +22,25 @@ import (
 // Cluster represents a node of godis cluster
 // it holds part of data and coordinates other nodes to finish transactions
 type Cluster struct {
-	self            string
-	nodeConnections dict.Dict // map[string]*pool.Pool
-	db              database.DBEngine
-	transactions    *dict.SimpleDict // id -> Transaction
-	topology        topology
-	slotMu          sync.RWMutex
-	slots           map[uint32]*hostSlot
-	idGenerator     *idgenerator.IDGenerator
+	self         string
+	db           database.DBEngine
+	transactions *dict.SimpleDict // id -> Transaction
+	topology     topology
+	slotMu       sync.RWMutex
+	slots        map[uint32]*hostSlot
+	idGenerator  *idgenerator.IDGenerator
 
-	relayImpl relayFunc // use a variable to allow injecting stub for testing
+	clientFactory clientFactory
+}
+
+type peerClient interface {
+	Send(args [][]byte) redis.Reply
+}
+
+type clientFactory interface {
+	GetPeerClient(peerAddr string) (peerClient, error)
+	ReturnPeerClient(peerAddr string, peerClient peerClient) error
+	Close() error
 }
 
 type relayFunc func(cluster *Cluster, node string, c redis.Connection, cmdLine CmdLine) redis.Reply
@@ -73,14 +81,11 @@ var allowFastTransaction = true
 // MakeCluster creates and starts a node of cluster
 func MakeCluster() *Cluster {
 	cluster := &Cluster{
-		self: config.Properties.Self,
-
-		db:              database2.NewStandaloneServer(),
-		transactions:    dict.MakeSimple(),
-		nodeConnections: dict.MakeConcurrent(1),
-
-		idGenerator: idgenerator.MakeGenerator(config.Properties.Self),
-		relayImpl:   defaultRelayImpl,
+		self:          config.Properties.Self,
+		db:            database2.NewStandaloneServer(),
+		transactions:  dict.MakeSimple(),
+		idGenerator:   idgenerator.MakeGenerator(config.Properties.Self),
+		clientFactory: newDefaultClientFactory(),
 	}
 	topologyPersistFile := path.Join(config.Properties.Dir, config.Properties.ClusterConfigFile)
 	cluster.topology = newRaft(cluster, topologyPersistFile)
@@ -107,10 +112,7 @@ type CmdFunc func(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.R
 // Close stops current node of cluster
 func (cluster *Cluster) Close() {
 	cluster.db.Close()
-	cluster.nodeConnections.ForEach(func(key string, val interface{}) bool {
-		val.(*pool.Pool).Close()
-		return true
-	})
+	cluster.clientFactory.Close()
 }
 
 func isAuthenticated(c redis.Connection) bool {
