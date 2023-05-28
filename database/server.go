@@ -111,7 +111,7 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 	}
 	// info
 	if cmdName == "info" {
-		return Info(c, cmdLine)
+		return Info(server, cmdLine[1:])
 	}
 	if cmdName == "slaveof" {
 		if c != nil && c.InMultiState() {
@@ -387,4 +387,24 @@ func (server *Server) startReplCron() {
 			mdb.masterCron()
 		}
 	}(server)
+}
+
+// GetAvgTTL Calculate the average expiration time of keys
+func (server *Server) GetAvgTTL(dbIndex, randomKeyCount int) int64 {
+	var ttlCount int64
+	db := server.mustSelectDB(dbIndex)
+	keys := db.data.RandomKeys(randomKeyCount)
+	for _, k := range keys {
+		t := time.Now()
+		rawExpireTime, ok := db.ttlMap.Get(k)
+		if !ok {
+			continue
+		}
+		expireTime, _ := rawExpireTime.(time.Time)
+		// if the key has already reached its expiration time during calculation, ignore it
+		if expireTime.Sub(t).Microseconds() > 0 {
+			ttlCount += expireTime.Sub(t).Microseconds()
+		}
+	}
+	return ttlCount / int64(len(keys))
 }
