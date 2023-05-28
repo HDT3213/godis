@@ -97,6 +97,10 @@
     - zrem
     - zremrangebyscore
     - zremrangebyrank
+    - zlexcount
+    - zrangebylex
+    - zremrangebylex
+    - zrevrangebylex
 - Pub / Sub
     - publish
     - subscribe

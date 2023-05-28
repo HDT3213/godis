@@ -168,7 +168,7 @@ func (persister *Persister) generateRDB(ctx *RewriteCtx) error {
 				err = encoder.WriteHashMapObject(key, hash, opts...)
 			case *SortedSet.SortedSet:
 				var entries []*model.ZSetEntry
-				obj.ForEach(int64(0), obj.Len(), true, func(element *SortedSet.Element) bool {
+				obj.ForEachByRank(int64(0), obj.Len(), true, func(element *SortedSet.Element) bool {
 					entries = append(entries, &model.ZSetEntry{
 						Member: element.Member,
 						Score:  element.Score,
