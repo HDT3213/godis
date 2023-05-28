@@ -221,25 +221,25 @@ func (skiplist *skiplist) getByRank(rank int64) *node {
 	return nil
 }
 
-func (skiplist *skiplist) hasInRange(min *ScoreBorder, max *ScoreBorder) bool {
-	// min & max = empty
-	if min.Value > max.Value || (min.Value == max.Value && (min.Exclude || max.Exclude)) {
+func (skiplist *skiplist) hasInRange(min Border, max Border) bool {
+	if min.isIntersected(max) { //是有交集的，则返回false
 		return false
 	}
+
 	// min > tail
 	n := skiplist.tail
-	if n == nil || !min.less(n.Score) {
+	if n == nil || !min.less(&n.Element) {
 		return false
 	}
 	// max < head
 	n = skiplist.header.level[0].forward
-	if n == nil || !max.greater(n.Score) {
+	if n == nil || !max.greater(&n.Element) {
 		return false
 	}
 	return true
 }
 
-func (skiplist *skiplist) getFirstInScoreRange(min *ScoreBorder, max *ScoreBorder) *node {
+func (skiplist *skiplist) getFirstInRange(min Border, max Border) *node {
 	if !skiplist.hasInRange(min, max) {
 		return nil
 	}
@@ -247,30 +247,30 @@ func (skiplist *skiplist) getFirstInScoreRange(min *ScoreBorder, max *ScoreBorde
 	// scan from top level
 	for level := skiplist.level - 1; level >= 0; level-- {
 		// if forward is not in range than move forward
-		for n.level[level].forward != nil && !min.less(n.level[level].forward.Score) {
+		for n.level[level].forward != nil && !min.less(&n.level[level].forward.Element) {
 			n = n.level[level].forward
 		}
 	}
 	/* This is an inner range, so the next node cannot be NULL. */
 	n = n.level[0].forward
-	if !max.greater(n.Score) {
+	if !max.greater(&n.Element) {
 		return nil
 	}
 	return n
 }
 
-func (skiplist *skiplist) getLastInScoreRange(min *ScoreBorder, max *ScoreBorder) *node {
+func (skiplist *skiplist) getLastInRange(min Border, max Border) *node {
 	if !skiplist.hasInRange(min, max) {
 		return nil
 	}
 	n := skiplist.header
 	// scan from top level
 	for level := skiplist.level - 1; level >= 0; level-- {
-		for n.level[level].forward != nil && max.greater(n.level[level].forward.Score) {
+		for n.level[level].forward != nil && max.greater(&n.level[level].forward.Element) {
 			n = n.level[level].forward
 		}
 	}
-	if !min.less(n.Score) {
+	if !min.less(&n.Element) {
 		return nil
 	}
 	return n
@@ -279,14 +279,14 @@ func (skiplist *skiplist) getLastInScoreRange(min *ScoreBorder, max *ScoreBorder
 /*
  * return removed elements
  */
-func (skiplist *skiplist) RemoveRangeByScore(min *ScoreBorder, max *ScoreBorder, limit int) (removed []*Element) {
+func (skiplist *skiplist) RemoveRange(min Border, max Border, limit int) (removed []*Element) {
 	update := make([]*node, maxLevel)
 	removed = make([]*Element, 0)
 	// find backward nodes (of target range) or last node of each level
 	node := skiplist.header
 	for i := skiplist.level - 1; i >= 0; i-- {
 		for node.level[i].forward != nil {
-			if min.less(node.level[i].forward.Score) { // already in range
+			if min.less(&node.level[i].forward.Element) { // already in range
 				break
 			}
 			node = node.level[i].forward
@@ -299,7 +299,7 @@ func (skiplist *skiplist) RemoveRangeByScore(min *ScoreBorder, max *ScoreBorder,
 
 	// remove nodes in range
 	for node != nil {
-		if !max.greater(node.Score) { // already out of range
+		if !max.greater(&node.Element) { // already out of range
 			break
 		}
 		next := node.level[0].forward

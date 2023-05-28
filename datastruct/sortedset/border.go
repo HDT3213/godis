@@ -14,9 +14,19 @@ import (
  */
 
 const (
-	negativeInf int8 = -1
-	positiveInf int8 = 1
+	scoreNegativeInf int8 = -1
+	scorePositiveInf int8 = 1
+	lexNegativeInf   int8 = '-'
+	lexPositiveInf   int8 = '+'
 )
+
+type Border interface {
+	greater(element *Element) bool
+	less(element *Element) bool
+	getValue() interface{}
+	getExclude() bool
+	isIntersected(max Border) bool
+}
 
 // ScoreBorder represents range of a float value, including: <, <=, >, >=, +inf, -inf
 type ScoreBorder struct {
@@ -27,10 +37,11 @@ type ScoreBorder struct {
 
 // if max.greater(score) then the score is within the upper border
 // do not use min.greater()
-func (border *ScoreBorder) greater(value float64) bool {
-	if border.Inf == negativeInf {
+func (border *ScoreBorder) greater(element *Element) bool {
+	value := element.Score
+	if border.Inf == scoreNegativeInf {
 		return false
-	} else if border.Inf == positiveInf {
+	} else if border.Inf == scorePositiveInf {
 		return true
 	}
 	if border.Exclude {
@@ -39,10 +50,11 @@ func (border *ScoreBorder) greater(value float64) bool {
 	return border.Value >= value
 }
 
-func (border *ScoreBorder) less(value float64) bool {
-	if border.Inf == negativeInf {
+func (border *ScoreBorder) less(element *Element) bool {
+	value := element.Score
+	if border.Inf == scoreNegativeInf {
 		return true
-	} else if border.Inf == positiveInf {
+	} else if border.Inf == scorePositiveInf {
 		return false
 	}
 	if border.Exclude {
@@ -51,21 +63,29 @@ func (border *ScoreBorder) less(value float64) bool {
 	return border.Value <= value
 }
 
-var positiveInfBorder = &ScoreBorder{
-	Inf: positiveInf,
+func (border *ScoreBorder) getValue() interface{} {
+	return border.Value
 }
 
-var negativeInfBorder = &ScoreBorder{
-	Inf: negativeInf,
+func (border *ScoreBorder) getExclude() bool {
+	return border.Exclude
+}
+
+var scorePositiveInfBorder = &ScoreBorder{
+	Inf: scorePositiveInf,
+}
+
+var scoreNegativeInfBorder = &ScoreBorder{
+	Inf: scoreNegativeInf,
 }
 
 // ParseScoreBorder creates ScoreBorder from redis arguments
-func ParseScoreBorder(s string) (*ScoreBorder, error) {
+func ParseScoreBorder(s string) (Border, error) {
 	if s == "inf" || s == "+inf" {
-		return positiveInfBorder, nil
+		return scorePositiveInfBorder, nil
 	}
 	if s == "-inf" {
-		return negativeInfBorder, nil
+		return scoreNegativeInfBorder, nil
 	}
 	if s[0] == '(' {
 		value, err := strconv.ParseFloat(s[1:], 64)
@@ -87,4 +107,94 @@ func ParseScoreBorder(s string) (*ScoreBorder, error) {
 		Value:   value,
 		Exclude: false,
 	}, nil
+}
+
+func (border *ScoreBorder) isIntersected(max Border) bool {
+	minValue := border.Value
+	maxValue := max.(*ScoreBorder).Value
+	return minValue > maxValue || (minValue == maxValue && (border.getExclude() || max.getExclude()))
+}
+
+// LexBorder represents range of a string value, including: <, <=, >, >=, +, -
+type LexBorder struct {
+	Inf     int8
+	Value   string
+	Exclude bool
+}
+
+// if max.greater(lex) then the lex is within the upper border
+// do not use min.greater()
+func (border *LexBorder) greater(element *Element) bool {
+	value := element.Member
+	if border.Inf == lexNegativeInf {
+		return false
+	} else if border.Inf == lexPositiveInf {
+		return true
+	}
+	if border.Exclude {
+		return border.Value > value
+	}
+	return border.Value >= value
+}
+
+func (border *LexBorder) less(element *Element) bool {
+	value := element.Member
+	if border.Inf == lexNegativeInf {
+		return true
+	} else if border.Inf == lexPositiveInf {
+		return false
+	}
+	if border.Exclude {
+		return border.Value < value
+	}
+	return border.Value <= value
+}
+
+func (border *LexBorder) getValue() interface{} {
+	return border.Value
+}
+
+func (border *LexBorder) getExclude() bool {
+	return border.Exclude
+}
+
+var lexPositiveInfBorder = &LexBorder{
+	Inf: lexPositiveInf,
+}
+
+var lexNegativeInfBorder = &LexBorder{
+	Inf: lexNegativeInf,
+}
+
+// ParseLexBorder creates LexBorder from redis arguments
+func ParseLexBorder(s string) (Border, error) {
+	if s == "+" {
+		return lexPositiveInfBorder, nil
+	}
+	if s == "-" {
+		return lexNegativeInfBorder, nil
+	}
+	if s[0] == '(' {
+		return &LexBorder{
+			Inf:     0,
+			Value:   s[1:],
+			Exclude: true,
+		}, nil
+	}
+
+	if s[0] == '[' {
+		return &LexBorder{
+			Inf:     0,
+			Value:   s[1:],
+			Exclude: false,
+		}, nil
+	}
+
+	return nil, errors.New("ERR min or max not valid string range item")
+}
+
+func (border *LexBorder) isIntersected(max Border) bool {
+	minValue := border.Value
+	maxValue := max.(*LexBorder).Value
+	return border.Inf == '+' || minValue > maxValue || (minValue == maxValue && (border.getExclude() || max.getExclude()))
 }

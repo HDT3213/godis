@@ -1,14 +1,15 @@
 package aof
 
 import (
+	"strconv"
+	"time"
+
 	"github.com/hdt3213/godis/datastruct/dict"
 	List "github.com/hdt3213/godis/datastruct/list"
 	"github.com/hdt3213/godis/datastruct/set"
 	SortedSet "github.com/hdt3213/godis/datastruct/sortedset"
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/redis/protocol"
-	"strconv"
-	"time"
 )
 
 // EntityToCmd serialize data entity to redis command
@@ -95,7 +96,7 @@ func zSetToCmd(key string, zset *SortedSet.SortedSet) *protocol.MultiBulkReply {
 	args[0] = zAddCmd
 	args[1] = []byte(key)
 	i := 0
-	zset.ForEach(int64(0), int64(zset.Len()), true, func(element *SortedSet.Element) bool {
+	zset.ForEachByRank(int64(0), int64(zset.Len()), true, func(element *SortedSet.Element) bool {
 		value := strconv.FormatFloat(element.Score, 'f', -1, 64)
 		args[2+i*2] = []byte(value)
 		args[3+i*2] = []byte(element.Member)

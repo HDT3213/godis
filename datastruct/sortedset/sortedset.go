@@ -18,7 +18,7 @@ func Make() *SortedSet {
 	}
 }
 
-// Add puts member into set,  and returns whether has inserted new node
+// Add puts member into set,  and returns whether it has inserted new node
 func (sortedSet *SortedSet) Add(member string, score float64) bool {
 	element, ok := sortedSet.dict[member]
 	sortedSet.dict[member] = &Element{
@@ -76,8 +76,8 @@ func (sortedSet *SortedSet) GetRank(member string, desc bool) (rank int64) {
 	return r
 }
 
-// ForEach visits each member which rank within [start, stop), sort by ascending order, rank starts from 0
-func (sortedSet *SortedSet) ForEach(start int64, stop int64, desc bool, consumer func(element *Element) bool) {
+// ForEachByRank visits each member which rank within [start, stop), sort by ascending order, rank starts from 0
+func (sortedSet *SortedSet) ForEachByRank(start int64, stop int64, desc bool, consumer func(element *Element) bool) {
 	size := int64(sortedSet.Len())
 	if start < 0 || start >= size {
 		panic("illegal start " + strconv.FormatInt(start, 10))
@@ -113,12 +113,12 @@ func (sortedSet *SortedSet) ForEach(start int64, stop int64, desc bool, consumer
 	}
 }
 
-// Range returns members which rank within [start, stop), sort by ascending order, rank starts from 0
-func (sortedSet *SortedSet) Range(start int64, stop int64, desc bool) []*Element {
+// RangeByRank returns members which rank within [start, stop), sort by ascending order, rank starts from 0
+func (sortedSet *SortedSet) RangeByRank(start int64, stop int64, desc bool) []*Element {
 	sliceSize := int(stop - start)
 	slice := make([]*Element, sliceSize)
 	i := 0
-	sortedSet.ForEach(start, stop, desc, func(element *Element) bool {
+	sortedSet.ForEachByRank(start, stop, desc, func(element *Element) bool {
 		slice[i] = element
 		i++
 		return true
@@ -126,17 +126,17 @@ func (sortedSet *SortedSet) Range(start int64, stop int64, desc bool) []*Element
 	return slice
 }
 
-// Count returns the number of  members which score within the given border
-func (sortedSet *SortedSet) Count(min *ScoreBorder, max *ScoreBorder) int64 {
+// RangeCount returns the number of  members which score or member within the given border
+func (sortedSet *SortedSet) RangeCount(min Border, max Border) int64 {
 	var i int64 = 0
 	// ascending order
-	sortedSet.ForEach(0, sortedSet.Len(), false, func(element *Element) bool {
-		gtMin := min.less(element.Score) // greater than min
+	sortedSet.ForEachByRank(0, sortedSet.Len(), false, func(element *Element) bool {
+		gtMin := min.less(element) // greater than min
 		if !gtMin {
 			// has not into range, continue foreach
 			return true
 		}
-		ltMax := max.greater(element.Score) // less than max
+		ltMax := max.greater(element) // less than max
 		if !ltMax {
 			// break through score border, break foreach
 			return false
@@ -148,14 +148,14 @@ func (sortedSet *SortedSet) Count(min *ScoreBorder, max *ScoreBorder) int64 {
 	return i
 }
 
-// ForEachByScore visits members which score within the given border
-func (sortedSet *SortedSet) ForEachByScore(min *ScoreBorder, max *ScoreBorder, offset int64, limit int64, desc bool, consumer func(element *Element) bool) {
+// ForEach visits members which score or member within the given border
+func (sortedSet *SortedSet) ForEach(min Border, max Border, offset int64, limit int64, desc bool, consumer func(element *Element) bool) {
 	// find start node
 	var node *node
 	if desc {
-		node = sortedSet.skiplist.getLastInScoreRange(min, max)
+		node = sortedSet.skiplist.getLastInRange(min, max)
 	} else {
-		node = sortedSet.skiplist.getFirstInScoreRange(min, max)
+		node = sortedSet.skiplist.getFirstInRange(min, max)
 	}
 
 	for node != nil && offset > 0 {
@@ -180,31 +180,31 @@ func (sortedSet *SortedSet) ForEachByScore(min *ScoreBorder, max *ScoreBorder, o
 		if node == nil {
 			break
 		}
-		gtMin := min.less(node.Element.Score) // greater than min
-		ltMax := max.greater(node.Element.Score)
+		gtMin := min.less(&node.Element) // greater than min
+		ltMax := max.greater(&node.Element)
 		if !gtMin || !ltMax {
 			break // break through score border
 		}
 	}
 }
 
-// RangeByScore returns members which score within the given border
+// Range returns members which score or member within the given border
 // param limit: <0 means no limit
-func (sortedSet *SortedSet) RangeByScore(min *ScoreBorder, max *ScoreBorder, offset int64, limit int64, desc bool) []*Element {
+func (sortedSet *SortedSet) Range(min Border, max Border, offset int64, limit int64, desc bool) []*Element {
 	if limit == 0 || offset < 0 {
 		return make([]*Element, 0)
 	}
 	slice := make([]*Element, 0)
-	sortedSet.ForEachByScore(min, max, offset, limit, desc, func(element *Element) bool {
+	sortedSet.ForEach(min, max, offset, limit, desc, func(element *Element) bool {
 		slice = append(slice, element)
 		return true
 	})
 	return slice
 }
 
-// RemoveByScore removes members which score within the given border
-func (sortedSet *SortedSet) RemoveByScore(min *ScoreBorder, max *ScoreBorder) int64 {
-	removed := sortedSet.skiplist.RemoveRangeByScore(min, max, 0)
+// RemoveRange removes members which score or member within the given border
+func (sortedSet *SortedSet) RemoveRange(min Border, max Border) int64 {
+	removed := sortedSet.skiplist.RemoveRange(min, max, 0)
 	for _, element := range removed {
 		delete(sortedSet.dict, element.Member)
 	}
@@ -212,7 +212,7 @@ func (sortedSet *SortedSet) RemoveByScore(min *ScoreBorder, max *ScoreBorder) in
 }
 
 func (sortedSet *SortedSet) PopMin(count int) []*Element {
-	first := sortedSet.skiplist.getFirstInScoreRange(negativeInfBorder, positiveInfBorder)
+	first := sortedSet.skiplist.getFirstInRange(scoreNegativeInfBorder, scorePositiveInfBorder)
 	if first == nil {
 		return nil
 	}
@@ -220,7 +220,7 @@ func (sortedSet *SortedSet) PopMin(count int) []*Element {
 		Value:   first.Score,
 		Exclude: false,
 	}
-	removed := sortedSet.skiplist.RemoveRangeByScore(border, positiveInfBorder, count)
+	removed := sortedSet.skiplist.RemoveRange(border, scorePositiveInfBorder, count)
 	for _, element := range removed {
 		delete(sortedSet.dict, element.Member)
 	}

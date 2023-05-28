@@ -2,13 +2,14 @@ package database
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
+
 	"github.com/hdt3213/godis/datastruct/sortedset"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/geohash"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
-	"strconv"
-	"strings"
 )
 
 // execGeoAdd add a location into SortedSet
@@ -253,7 +254,7 @@ func geoRadius0(sortedSet *sortedset.SortedSet, lat float64, lng float64, radius
 	for _, area := range areas {
 		lower := &sortedset.ScoreBorder{Value: float64(area[0])}
 		upper := &sortedset.ScoreBorder{Value: float64(area[1])}
-		elements := sortedSet.RangeByScore(lower, upper, 0, -1, true)
+		elements := sortedSet.Range(lower, upper, 0, -1, true)
 		for _, elem := range elements {
 			members = append(members, []byte(elem.Member))
 		}
