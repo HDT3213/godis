@@ -194,9 +194,20 @@ func GetTmpDir() string {
 	return Properties.Dir + "/tmp"
 }
 
-func IsImmutableConfig(parameter string) bool {
+func IsMutableConfig(parameter string) bool {
 	switch parameter {
-	case SaveConfig, AppendonlyConfig, DirConfig, PortConfig, MasterauthConfig, MaxclientsConfig, ReplTimeoutConfig, AppendfilenameConfig, AppendfsyncConfig, RequirepassConfig, DbfilenameConfig, BindConfig:
+	case SaveConfig,
+		AppendonlyConfig,
+		DirConfig,
+		PortConfig,
+		MasterauthConfig,
+		MaxclientsConfig,
+		ReplTimeoutConfig,
+		AppendfilenameConfig,
+		AppendfsyncConfig,
+		RequirepassConfig,
+		DbfilenameConfig,
+		BindConfig:
 		return true
 	default:
 		return false

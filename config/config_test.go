@@ -38,12 +38,12 @@ func TestParse(t *testing.T) {
 	}
 }
 
-func TestIsImmutableConfig(t *testing.T) {
-	if IsImmutableConfig("databases") {
+func TestIsMutableConfig(t *testing.T) {
+	if IsMutableConfig("databases") {
 		t.Error("save is an immutable config")
 	}
-	if !IsImmutableConfig("maxclients") {
-		t.Error("maxclients is not an immutable config")
+	if !IsMutableConfig("maxclients") {
+		t.Error("maxclients is a mutable config")
 	}
 }
 

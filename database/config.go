@@ -115,8 +115,17 @@ func setConfig(args [][]byte) redis.Reply {
 		updateMap[parameter] = value
 		mu.Unlock()
 	}
+	propertyMap := getPropertyMap(properties)
 	for parameter, value := range updateMap {
-		err := updateConfig(properties, parameter, value)
+		_, ok := propertyMap[parameter]
+		if !ok {
+			return protocol.MakeErrReply(fmt.Sprintf("ERR Unknown option or number of arguments for CONFIG SET - '%s'", parameter))
+		}
+		isMutable := config.IsMutableConfig(parameter)
+		if !isMutable {
+			return protocol.MakeErrReply(fmt.Sprintf("ERR CONFIG SET failed (possibly related to argument '%s') - can't set immutable config", parameter))
+		}
+		err := setVal(propertyMap[parameter], parameter, value)
 		if err != nil {
 			return err
 		}
@@ -126,54 +135,47 @@ func setConfig(args [][]byte) redis.Reply {
 	return &protocol.OkReply{}
 }
 
-func updateConfig(properties *config.ServerProperties, parameter string, value string) redis.Reply {
+func getPropertyMap(properties *config.ServerProperties) map[string]*reflect.Value {
+	propertiesMap := make(map[string]*reflect.Value)
 	t := reflect.TypeOf(properties)
 	v := reflect.ValueOf(properties)
 	n := t.Elem().NumField()
-	var isExist bool
 	for i := 0; i < n; i++ {
 		field := t.Elem().Field(i)
 		fieldVal := v.Elem().Field(i)
 		key, ok := field.Tag.Lookup("cfg")
-		if !ok || strings.TrimLeft(key, " ") == "" {
-			key = field.Name
+		if !ok {
+			continue
 		}
-		if key == parameter {
-			isExist = true
-			isImmutable := config.IsImmutableConfig(parameter)
-			if !isImmutable {
-				return protocol.MakeErrReply(fmt.Sprintf("ERR CONFIG SET failed (possibly related to argument '%s') - can't set immutable config", parameter))
-			}
-			switch fieldVal.Type().Kind() {
-			case reflect.String:
-				fieldVal.SetString(value)
-			case reflect.Int:
-				intValue, err := strconv.ParseInt(value, 10, 64)
-				if err != nil {
-					errStr := fmt.Sprintf("ERR CONFIG SET failed (possibly related to argument '%s') - argument couldn't be parsed into an integer", parameter)
-					return protocol.MakeErrReply(errStr)
-				}
-				fieldVal.SetInt(intValue)
-			case reflect.Bool:
-				if "yes" == value {
-					fieldVal.SetBool(true)
-				} else if "no" == value {
-					fieldVal.SetBool(false)
-				} else {
-					errStr := fmt.Sprintf("ERR CONFIG SET failed (possibly related to argument '%s') - argument couldn't be parsed into a bool", parameter)
-					return protocol.MakeErrReply(errStr)
-				}
-			case reflect.Slice:
-				if field.Type.Elem().Kind() == reflect.String {
-					slice := strings.Split(value, ",")
-					fieldVal.Set(reflect.ValueOf(slice))
-				}
-			}
-			break
-		}
+		propertiesMap[key] = &fieldVal
 	}
-	if !isExist {
-		return protocol.MakeErrReply(fmt.Sprintf("ERR Unknown option or number of arguments for CONFIG SET - '%s'", parameter))
+	return propertiesMap
+}
+func setVal(val *reflect.Value, parameter, expectVal string) redis.Reply {
+	switch val.Type().Kind() {
+	case reflect.String:
+		val.SetString(expectVal)
+	case reflect.Int:
+		intValue, err := strconv.ParseInt(expectVal, 10, 64)
+		if err != nil {
+			errStr := fmt.Sprintf("ERR CONFIG SET failed (possibly related to argument '%s') - argument couldn't be parsed into an integer", parameter)
+			return protocol.MakeErrReply(errStr)
+		}
+		val.SetInt(intValue)
+	case reflect.Bool:
+		if "yes" == expectVal {
+			val.SetBool(true)
+		} else if "no" == expectVal {
+			val.SetBool(false)
+		} else {
+			errStr := fmt.Sprintf("ERR CONFIG SET failed (possibly related to argument '%s') - argument couldn't be parsed into a bool", parameter)
+			return protocol.MakeErrReply(errStr)
+		}
+	case reflect.Slice:
+		if val.Elem().Kind() == reflect.String {
+			slice := strings.Split(expectVal, ",")
+			val.Set(reflect.ValueOf(slice))
+		}
 	}
 	return nil
 }
