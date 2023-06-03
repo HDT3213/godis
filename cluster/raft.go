@@ -494,7 +494,7 @@ func (raft *Raft) leaderJob() {
 					raft.selfNodeID,
 				)
 				// see makeSnapshotForFollower
-				cmdLine = append(cmdLine, []byte(node.ID), []byte{byte(follower)})
+				cmdLine = append(cmdLine, []byte(node.ID), []byte(strconv.Itoa(int(follower))))
 				cmdLine = append(cmdLine, snapshot[2:]...)
 			} else {
 				// leader has all needed entries, send normal heartbeat
@@ -536,7 +536,7 @@ func (raft *Raft) leaderJob() {
 						"load-snapshot",
 						raft.selfNodeID,
 					)
-					cmdLine = append(cmdLine, []byte(node.ID), []byte{byte(follower)})
+					cmdLine = append(cmdLine, []byte(node.ID), []byte(strconv.Itoa(int(follower))))
 					cmdLine = append(cmdLine, snapshot[2:]...)
 					resp := raft.cluster.relay(node.ID, conn, cmdLine)
 					if err, ok := resp.(protocol.ErrorReply); ok {
@@ -1010,7 +1010,8 @@ func (raft *Raft) LoadConfigFile() protocol.ErrorReply {
 	scanner := bufio.NewScanner(f)
 	var snapshot [][]byte
 	for scanner.Scan() {
-		snapshot = append(snapshot, scanner.Bytes())
+		line := append([]byte{}, scanner.Bytes()...) // copy the line...
+		snapshot = append(snapshot, line)
 	}
 	raft.mu.Lock()
 	defer raft.mu.Unlock()

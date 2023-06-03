@@ -56,23 +56,57 @@ func (cluster *Cluster) LoadConfig() protocol.ErrorReply {
 }
 
 func (cluster *Cluster) reBalance() {
-	slots := cluster.findSlotsForNewNode()
-	var slotIds []uint32
-	for _, slot := range slots {
-		slotIds = append(slotIds, slot.ID)
+	nodes := cluster.topology.GetNodes()
+	var slotIDs []uint32
+	var slots []*Slot
+	reqDonateCmdLine := utils.ToCmdLine("gcluster", "request-donate", cluster.self)
+	for _, node := range nodes {
+		if node.ID == cluster.self {
+			continue
+		}
+		node := node
+		peerCli, err := cluster.clientFactory.GetPeerClient(node.Addr)
+		if err != nil {
+			logger.Errorf("get client of %s failed: %v", node.Addr, err)
+			continue
+		}
+		resp := peerCli.Send(reqDonateCmdLine)
+		payload, ok := resp.(*protocol.MultiBulkReply)
+		if !ok {
+			logger.Errorf("request donate to %s failed: %v", node.Addr, err)
+			continue
+		}
+		for _, bin := range payload.Args {
+			slotID64, err := strconv.ParseUint(string(bin), 10, 64)
+			if err != nil {
+				continue
+			}
+			slotID := uint32(slotID64)
+			slotIDs = append(slotIDs, slotID)
+			slots = append(slots, &Slot{
+				ID:     slotID,
+				NodeID: node.ID,
+			})
+		}
 	}
-	err := cluster.topology.SetSlot(slotIds, cluster.self)
+	if len(slots) == 0 {
+		return
+	}
+	logger.Infof("received %d donated slots", len(slots))
+
+	// change route
+	err := cluster.topology.SetSlot(slotIDs, cluster.self)
 	if err != nil {
 		logger.Errorf("set slot route failed: %v", err)
 		return
 	}
-	// serial migrations to avoid overloading the cluster
 	slotChan := make(chan *Slot, len(slots))
 	for _, slot := range slots {
 		slotChan <- slot
 	}
 	close(slotChan)
 	for i := 0; i < 4; i++ {
+		i := i
 		go func() {
 			for slot := range slotChan {
 				logger.Info("start import slot ", slot.ID)
@@ -83,28 +117,19 @@ func (cluster *Cluster) reBalance() {
 					cluster.cleanDroppedSlot(slot.ID)
 					return
 				}
-				logger.Info("finish import slot", slot.ID)
+				logger.Infof("finish import slot: %d, about %d slots remains", slot.ID, len(slotChan))
 			}
+			logger.Infof("import worker %d exited", i)
 		}()
 	}
 }
 
+// importSlot do migrate slot into current node
+// the pseudo `slot` parameter is used to store slotID and former host node
 func (cluster *Cluster) importSlot(slot *Slot) error {
-	/* change slot host */
-	node := cluster.pickNode(slot.ID)
+	node := cluster.topology.GetNode(slot.NodeID)
 	cluster.initSlot(slot.ID, slotStateImporting) // prepare host slot before send `set slot`
 	cluster.setLocalSlotImporting(slot.ID, cluster.self)
-	peerCli, err := cluster.clientFactory.GetPeerClient(node.Addr)
-	if err != nil {
-		return err
-	}
-	defer cluster.clientFactory.ReturnPeerClient(node.Addr, peerCli)
-	ret := peerCli.Send(utils.ToCmdLine(
-		"gcluster", "set-slot", strconv.Itoa(int(slot.ID)), cluster.self))
-	if !protocol.IsOKReply(ret) {
-		return fmt.Errorf("set slot %d error: %v", slot.ID, ret)
-	}
-	logger.Info(fmt.Sprintf("set slot %d to current node, start migrate", slot.ID))
 
 	/* get migrate stream */
 	migrateCmdLine := utils.ToCmdLine(
@@ -149,6 +174,13 @@ slotLoop:
 		}
 	}
 	cluster.finishSlotImport(slot.ID)
+
+	// finish migration mode
+	peerCli, err := cluster.clientFactory.GetPeerClient(node.Addr)
+	if err != nil {
+		return err
+	}
+	defer cluster.clientFactory.ReturnPeerClient(node.Addr, peerCli)
 	peerCli.Send(utils.ToCmdLine("gcluster", "migrate-done", strconv.Itoa(int(slot.ID))))
 	return nil
 }

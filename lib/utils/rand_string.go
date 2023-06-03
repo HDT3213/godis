@@ -26,3 +26,15 @@ func RandHexString(n int) string {
 	}
 	return string(b)
 }
+
+// RandIndex returns random indexes to random pick elements from slice
+func RandIndex(size int) []int {
+	result := make([]int, size)
+	for i := range result {
+		result[i] = i
+	}
+	rand.Shuffle(size, func(i, j int) {
+		result[i], result[j] = result[j], result[i]
+	})
+	return result
+}

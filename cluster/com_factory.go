@@ -90,6 +90,7 @@ func (s *tcpStream) Close() error {
 }
 
 func (factory *defaultClientFactory) NewStream(peerAddr string, cmdLine CmdLine) (peerStream, error) {
+	// todo: reuse connection
 	conn, err := net.Dial("tcp", peerAddr)
 	if err != nil {
 		return nil, fmt.Errorf("connect with %s failed: %v", peerAddr, err)

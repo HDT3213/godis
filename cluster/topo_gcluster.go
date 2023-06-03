@@ -35,6 +35,10 @@ func execGCluster(cluster *Cluster, c redis.Connection, args [][]byte) redis.Rep
 		// command line: gcluster migrate-done <slotId>
 		// The new node hosting given slot tells current node that migration has finished, remains data can be deleted
 		return execGClusterMigrateDone(cluster, c, args[2:])
+	case "request-donate":
+		// command line: gcluster donate <nodeID>
+		// picks some slots and gives them to the calling node for load balance
+		return execGClusterDonateSlot(cluster, c, args[2:])
 	}
 	return protocol.MakeErrReply(" ERR unknown gcluster sub command '" + subCmd + "'")
 }
@@ -58,6 +62,34 @@ func execGClusterSetSlot(cluster *Cluster, c redis.Connection, args [][]byte) re
 	cluster.setSlotMovingOut(slotId, targetNodeID)
 	logger.Info(fmt.Sprintf("set slot %d to node %s", slotId, targetNodeID))
 	return protocol.MakeOkReply()
+}
+
+// execGClusterDonateSlot picks some slots and gives them to the calling node for load balance
+// args is [callingNodeId]
+func execGClusterDonateSlot(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
+	targetNodeID := string(args[0])
+	nodes := cluster.topology.GetNodes() // including the new node
+	avgSlot := slotCount / len(nodes)
+	cluster.slotMu.Lock()
+	defer cluster.slotMu.Unlock()
+	limit := len(cluster.slots) - avgSlot
+	if limit <= 0 {
+		return protocol.MakeEmptyMultiBulkReply()
+	}
+	result := make([][]byte, 0, limit)
+	// use the randomness of the for-each-in-map to randomly select slots
+	for slotID, slot := range cluster.slots {
+		if slot.state == slotStateHost {
+			slot.state = slotStateMovingOut
+			slot.newNodeID = targetNodeID
+			slotIDBin := []byte(strconv.FormatUint(uint64(slotID), 10))
+			result = append(result, slotIDBin)
+			if len(result) == limit {
+				break
+			}
+		}
+	}
+	return protocol.MakeMultiBulkReply(result)
 }
 
 // execGClusterMigrate Command line: gcluster migrate slotId
