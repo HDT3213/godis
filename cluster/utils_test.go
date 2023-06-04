@@ -70,7 +70,8 @@ func (factory *testClientFactory) NewStream(peerAddr string, cmdLine CmdLine) (p
 			if config.Properties.RequirePass != "" {
 				n.Exec(conn, utils.ToCmdLine("AUTH", config.Properties.RequirePass))
 			}
-			n.Exec(conn, cmdLine)
+			result := n.Exec(conn, cmdLine)
+			conn.Write(result.ToBytes())
 			ch := parser.ParseStream(conn)
 			return &mockStream{
 				targetNode: n,

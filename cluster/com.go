@@ -56,9 +56,13 @@ func (cluster *Cluster) ensureKey(key string) protocol.ErrorReply {
 	if slot.state != slotStateImporting || slot.importedKeys.Has(key) {
 		return nil
 	}
-	resp := cluster.relay(slot.oldNodeID, connection.NewFakeConn(), utils.ToCmdLine("DumpKey", key))
+	resp := cluster.relay(slot.oldNodeID, connection.NewFakeConn(), utils.ToCmdLine("DumpKey_", key))
 	if protocol.IsErrorReply(resp) {
 		return resp.(protocol.ErrorReply)
+	}
+	if protocol.IsEmptyMultiBulkReply(resp) {
+		slot.importedKeys.Add(key)
+		return nil
 	}
 	dumpResp := resp.(*protocol.MultiBulkReply)
 	if len(dumpResp.Args) != 2 {
@@ -75,7 +79,7 @@ func (cluster *Cluster) ensureKey(key string) protocol.ErrorReply {
 	return nil
 }
 
-func (cluster *Cluster) ensureKeyWithinLock(key string) protocol.ErrorReply {
+func (cluster *Cluster) ensureKeyWithoutLock(key string) protocol.ErrorReply {
 	cluster.db.RWLocks(0, []string{key}, nil)
 	defer cluster.db.RWUnLocks(0, []string{key}, nil)
 	return cluster.ensureKey(key)

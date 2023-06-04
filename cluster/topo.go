@@ -87,6 +87,10 @@ func (cluster *Cluster) reBalance() {
 				ID:     slotID,
 				NodeID: node.ID,
 			})
+			// Raft cannot guarantee the simultaneity and order of submissions to the source and destination nodes
+			// In some cases the source node thinks the slot belongs to the destination node, and the destination node thinks the slot belongs to the source node
+			// To avoid it, the source node and the destination node must reach a consensus  before propose to raft
+			cluster.setLocalSlotImporting(slotID, node.ID)
 		}
 	}
 	if len(slots) == 0 {
@@ -115,6 +119,7 @@ func (cluster *Cluster) reBalance() {
 					logger.Error(fmt.Sprintf("import slot %d error: %v", slot.ID, err))
 					// delete all imported keys in slot
 					cluster.cleanDroppedSlot(slot.ID)
+					// todo: recover route
 					return
 				}
 				logger.Infof("finish import slot: %d, about %d slots remains", slot.ID, len(slotChan))
@@ -128,8 +133,6 @@ func (cluster *Cluster) reBalance() {
 // the pseudo `slot` parameter is used to store slotID and former host node
 func (cluster *Cluster) importSlot(slot *Slot) error {
 	node := cluster.topology.GetNode(slot.NodeID)
-	cluster.initSlot(slot.ID, slotStateImporting) // prepare host slot before send `set slot`
-	cluster.setLocalSlotImporting(slot.ID, cluster.self)
 
 	/* get migrate stream */
 	migrateCmdLine := utils.ToCmdLine(

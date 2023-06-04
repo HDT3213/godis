@@ -135,5 +135,5 @@ func init() {
 	RegisterCommand("RenameTo", execRenameTo, writeFirstKey, rollbackFirstKey, 4, flagWrite)
 	RegisterCommand("RenameNxTo", execRenameTo, writeFirstKey, rollbackFirstKey, 4, flagWrite)
 	RegisterCommand("CopyFrom", execCopyFrom, readFirstKey, nil, 2, flagReadOnly)
-	RegisterCommand("CopyTo", execCopyTo, writeFirstKey, rollbackFirstKey, 5, flagWrite)
+	RegisterCommand("CopyTo", execCopyTo, writeFirstKey, rollbackFirstKey, 4, flagWrite)
 }

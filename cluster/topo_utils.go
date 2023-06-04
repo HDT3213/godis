@@ -52,6 +52,13 @@ func (cluster *Cluster) setLocalSlotImporting(slotID uint32, oldNodeID string) {
 	cluster.slotMu.Lock()
 	defer cluster.slotMu.Unlock()
 	slot := cluster.slots[slotID]
+	if slot == nil {
+		slot = &hostSlot{
+			importedKeys: set.Make(),
+			keys:         set.Make(),
+		}
+		cluster.slots[slotID] = slot
+	}
 	slot.state = slotStateImporting
 	slot.oldNodeID = oldNodeID
 }
@@ -60,6 +67,13 @@ func (cluster *Cluster) setSlotMovingOut(slotID uint32, newNodeID string) {
 	cluster.slotMu.Lock()
 	defer cluster.slotMu.Unlock()
 	slot := cluster.slots[slotID]
+	if slot == nil {
+		slot = &hostSlot{
+			importedKeys: set.Make(),
+			keys:         set.Make(),
+		}
+		cluster.slots[slotID] = slot
+	}
 	slot.state = slotStateMovingOut
 	slot.newNodeID = newNodeID
 }

@@ -37,8 +37,21 @@ func (cluster *Cluster) groupBy(keys []string) map[string][]string {
 // pickNode returns the node id hosting the given slot.
 // If the slot is migrating, return the node which is importing the slot
 func (cluster *Cluster) pickNode(slotID uint32) *Node {
+	// check cluster.slot to avoid errors caused by inconsistent status on follower nodes during raft commits
+	// see cluster.reBalance()
+	hSlot := cluster.getHostSlot(slotID)
+	if hSlot != nil {
+		switch hSlot.state {
+		case slotStateMovingOut:
+			return cluster.topology.GetNode(hSlot.newNodeID)
+		case slotStateImporting, slotStateHost:
+			return cluster.topology.GetNode(cluster.self)
+		}
+	}
+
 	slot := cluster.topology.GetSlots()[int(slotID)]
-	return cluster.topology.GetNode(slot.NodeID)
+	node := cluster.topology.GetNode(slot.NodeID)
+	return node
 }
 
 func (cluster *Cluster) pickNodeAddrByKey(key string) string {

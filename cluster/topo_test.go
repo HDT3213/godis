@@ -11,7 +11,6 @@ import (
 	"path"
 	"strconv"
 	"testing"
-	"time"
 )
 
 func TestRaftStart(t *testing.T) {
@@ -64,7 +63,6 @@ func TestRaftStart(t *testing.T) {
 		t.Error("expect follower")
 		return
 	}
-	time.Sleep(3 * time.Second)
 	size := 100
 	conn := connection.NewFakeConn()
 	for i := 0; i < size; i++ {

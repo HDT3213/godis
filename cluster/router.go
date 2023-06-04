@@ -25,7 +25,7 @@ func defaultFunc(cluster *Cluster, c redis.Connection, args [][]byte) redis.Repl
 	slotId := getSlot(key)
 	peer := cluster.pickNode(slotId)
 	if peer.ID == cluster.self {
-		err := cluster.ensureKeyWithinLock(key)
+		err := cluster.ensureKeyWithoutLock(key)
 		if err != nil {
 			return err
 		}
@@ -65,6 +65,7 @@ func init() {
 	registerCmd("MGet_", genPenetratingExecutor("MGet"))
 	registerCmd("Rename_", genPenetratingExecutor("Rename"))
 	registerCmd("RenameNx_", genPenetratingExecutor("RenameNx"))
+	registerCmd("DumpKey_", genPenetratingExecutor("DumpKey"))
 
 	defaultCmds := []string{
 		"expire",

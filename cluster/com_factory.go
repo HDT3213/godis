@@ -6,6 +6,7 @@ import (
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/datastruct/dict"
 	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/pool"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/client"
@@ -44,6 +45,7 @@ func (factory *defaultClientFactory) GetPeerClient(peerAddr string) (peerClient,
 			return c, nil
 		}
 		finalizer := func(x interface{}) {
+			logger.Debug("destroy client")
 			cli, ok := x.(client.Client)
 			if !ok {
 				return
