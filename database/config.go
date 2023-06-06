@@ -37,7 +37,8 @@ func execSubCommand(args [][]byte) redis.Reply {
 	case "GET":
 		return getConfig(args[2:])
 	case "SET":
-		return setConfig(args[2:])
+		mu := &sync.Mutex{}
+		return setConfig(args[2:], mu)
 	case "RESETSTAT":
 		// todo add resetstat
 		return protocol.MakeErrReply(fmt.Sprintf("Unknown subcommand or wrong number of arguments for '%s'", subCommand))
@@ -97,26 +98,25 @@ func getPropertiesMap() map[string]string {
 	return PropertiesMap
 }
 
-func setConfig(args [][]byte) redis.Reply {
+func setConfig(args [][]byte, mu *sync.Mutex) redis.Reply {
+	mu.Lock()
+	defer mu.Unlock()
 	if len(args)%2 != 0 {
 		return protocol.MakeErrReply("ERR wrong number of arguments for 'config|set' command")
 	}
-	properties := config.CopyProperties()
-	updateMap := make(map[string]string)
-	mu := sync.Mutex{}
+	duplicateDetectMap := make(map[string]string)
 	for i := 0; i < len(args); i += 2 {
 		parameter := string(args[i])
 		value := string(args[i+1])
-		mu.Lock()
-		if _, ok := updateMap[parameter]; ok {
+		if _, ok := duplicateDetectMap[parameter]; ok {
 			errStr := fmt.Sprintf("ERR CONFIG SET failed (possibly related to argument '%s') - duplicate parameter", parameter)
 			return protocol.MakeErrReply(errStr)
 		}
-		updateMap[parameter] = value
-		mu.Unlock()
+		duplicateDetectMap[parameter] = value
 	}
+	properties := config.CopyProperties()
 	propertyMap := getPropertyMap(properties)
-	for parameter, value := range updateMap {
+	for parameter, value := range duplicateDetectMap {
 		_, ok := propertyMap[parameter]
 		if !ok {
 			return protocol.MakeErrReply(fmt.Sprintf("ERR Unknown option or number of arguments for CONFIG SET - '%s'", parameter))
@@ -130,7 +130,6 @@ func setConfig(args [][]byte) redis.Reply {
 			return err
 		}
 	}
-
 	config.Properties = properties
 	return &protocol.OkReply{}
 }
