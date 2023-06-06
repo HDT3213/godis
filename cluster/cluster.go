@@ -120,6 +120,7 @@ type CmdFunc func(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.R
 
 // Close stops current node of cluster
 func (cluster *Cluster) Close() {
+	_ = cluster.topology.Close()
 	cluster.db.Close()
 	cluster.clientFactory.Close()
 }

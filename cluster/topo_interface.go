@@ -54,4 +54,5 @@ type topology interface {
 	SetSlot(slotIDs []uint32, newNodeID string) protocol.ErrorReply
 	LoadConfigFile() protocol.ErrorReply
 	Join(seed string) protocol.ErrorReply
+	Close() error
 }

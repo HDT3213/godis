@@ -123,7 +123,7 @@ func TestConcurrentRemove(t *testing.T) {
 		key := "k" + strconv.Itoa(i)
 		d.Put(key, i)
 	}
-	if d.Len()!=totalCount{
+	if d.Len() != totalCount {
 		t.Error("put test failed: expected len is 100, actual: " + strconv.Itoa(d.Len()))
 	}
 	for i := 0; i < totalCount; i++ {
@@ -139,22 +139,22 @@ func TestConcurrentRemove(t *testing.T) {
 			t.Error("put test failed: expected true, actual: false")
 		}
 
-		ret := d.Remove(key)
+		_, ret := d.Remove(key)
 		if ret != 1 {
 			t.Error("remove test failed: expected result 1, actual: " + strconv.Itoa(ret) + ", key:" + key)
 		}
-		if d.Len()!=totalCount-i-1{
+		if d.Len() != totalCount-i-1 {
 			t.Error("put test failed: expected len is 99, actual: " + strconv.Itoa(d.Len()))
 		}
 		_, ok = d.Get(key)
 		if ok {
 			t.Error("remove test failed: expected true, actual false")
 		}
-		ret = d.Remove(key)
+		_, ret = d.Remove(key)
 		if ret != 0 {
 			t.Error("remove test failed: expected result 0 actual: " + strconv.Itoa(ret))
 		}
-		if d.Len()!=totalCount-i-1{
+		if d.Len() != totalCount-i-1 {
 			t.Error("put test failed: expected len is 99, actual: " + strconv.Itoa(d.Len()))
 		}
 	}
@@ -179,7 +179,7 @@ func TestConcurrentRemove(t *testing.T) {
 			t.Error("put test failed: expected true, actual: false")
 		}
 
-		ret := d.Remove(key)
+		_, ret := d.Remove(key)
 		if ret != 1 {
 			t.Error("remove test failed: expected result 1, actual: " + strconv.Itoa(ret))
 		}
@@ -187,7 +187,7 @@ func TestConcurrentRemove(t *testing.T) {
 		if ok {
 			t.Error("remove test failed: expected true, actual false")
 		}
-		ret = d.Remove(key)
+		_, ret = d.Remove(key)
 		if ret != 0 {
 			t.Error("remove test failed: expected result 0 actual: " + strconv.Itoa(ret))
 		}
@@ -215,7 +215,7 @@ func TestConcurrentRemove(t *testing.T) {
 			t.Error("put test failed: expected true, actual: false")
 		}
 
-		ret := d.Remove(key)
+		_, ret := d.Remove(key)
 		if ret != 1 {
 			t.Error("remove test failed: expected result 1, actual: " + strconv.Itoa(ret))
 		}
@@ -223,7 +223,7 @@ func TestConcurrentRemove(t *testing.T) {
 		if ok {
 			t.Error("remove test failed: expected true, actual false")
 		}
-		ret = d.Remove(key)
+		_, ret = d.Remove(key)
 		if ret != 0 {
 			t.Error("remove test failed: expected result 0 actual: " + strconv.Itoa(ret))
 		}

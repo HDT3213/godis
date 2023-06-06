@@ -52,3 +52,7 @@ func (fixed *fixedTopology) Join(seed string) protocol.ErrorReply {
 func (fixed *fixedTopology) SetSlot(slotIDs []uint32, newNodeID string) protocol.ErrorReply {
 	return protocol.MakeErrReply("fixed topology does not support set slots")
 }
+
+func (fixed *fixedTopology) Close() error {
+	return nil
+}

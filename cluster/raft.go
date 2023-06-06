@@ -120,6 +120,8 @@ type Raft struct {
 	heartbeatChan  chan *heartbeat
 	persistFile    string
 	electionAlarm  time.Time
+	closeChan      chan struct{}
+	closed         bool
 
 	// for leader
 	nodeIndexMap map[string]*nodeStatus
@@ -130,6 +132,7 @@ func newRaft(cluster *Cluster, persistFilename string) *Raft {
 	return &Raft{
 		cluster:     cluster,
 		persistFile: persistFilename,
+		closeChan:   make(chan struct{}),
 	}
 }
 
@@ -191,8 +194,8 @@ func (raft *Raft) initLog(baseTerm, baseIndex int, entries []*logEntry) {
 }
 
 const (
-	electionTimeoutMaxMs = 4000 + 3600*1000
-	electionTimeoutMinMs = 2800 + 3600*1000
+	electionTimeoutMaxMs = 4000
+	electionTimeoutMinMs = 2800
 )
 
 func randRange(from, to int) int {
@@ -218,6 +221,8 @@ func (cluster *Cluster) asRaft() *Raft {
 // StartAsSeed starts cluster as seed node
 func (raft *Raft) StartAsSeed(listenAddr string) protocol.ErrorReply {
 	selfNodeID := listenAddr
+	raft.mu.Lock()
+	defer raft.mu.Unlock()
 	raft.slots = make([]*Slot, slotCount)
 	// claim all slots
 	for i := range raft.slots {
@@ -249,6 +254,8 @@ func (raft *Raft) GetSelfNodeID() string {
 	return raft.selfNodeID
 }
 
+const raftClosed = "ERR raft has closed"
+
 func (raft *Raft) start(state raftState) {
 	raft.state = state
 	raft.heartbeatChan = make(chan *heartbeat, 1)
@@ -256,6 +263,10 @@ func (raft *Raft) start(state raftState) {
 	//raft.nodeIndexMap = make(map[string]*nodeStatus)
 	go func() {
 		for {
+			if raft.closed {
+				logger.Info("quit raft job")
+				return
+			}
 			switch raft.state {
 			case follower:
 				raft.followerJob()
@@ -266,6 +277,12 @@ func (raft *Raft) start(state raftState) {
 			}
 		}
 	}()
+}
+
+func (raft *Raft) Close() error {
+	raft.closed = true
+	close(raft.closeChan)
+	return raft.persist()
 }
 
 func (raft *Raft) followerJob() {
@@ -290,24 +307,42 @@ func (raft *Raft) followerJob() {
 		if raft.votedFor != "" {
 			// received request-vote and has voted during waiting timeout
 			raft.mu.Unlock()
-			logger.Info("has voted, give up being a candidate")
+			logger.Infof("%s has voted for %s, give up being a candidate", raft.selfNodeID, raft.votedFor)
 			return
 		}
 		logger.Info("change to candidate")
 		raft.state = candidate
 		raft.mu.Unlock()
+	case <-raft.closeChan:
+		return
 	}
+}
+
+func (raft *Raft) getLogProgressWithinLock() (int, int) {
+	var lastLogTerm, lastLogIndex int
+	if len(raft.log) > 0 {
+		lastLog := raft.log[len(raft.log)-1]
+		lastLogTerm = lastLog.Term
+		lastLogIndex = lastLog.Index
+	} else {
+		lastLogTerm = raft.baseTerm
+		lastLogIndex = raft.baseIndex
+	}
+	return lastLogTerm, lastLogIndex
 }
 
 func (raft *Raft) candidateJob() {
 	raft.mu.Lock()
+
 	raft.term++
 	raft.votedFor = raft.selfNodeID
 	raft.voteCount++
 	currentTerm := raft.term
+	lastLogTerm, lastLogIndex := raft.getLogProgressWithinLock()
 	req := &voteReq{
 		nodeID:       raft.selfNodeID,
-		lastLogIndex: raft.proposedIndex,
+		lastLogTerm:  lastLogTerm,
+		lastLogIndex: lastLogIndex,
 		term:         raft.term,
 	}
 	raft.mu.Unlock()
@@ -320,13 +355,13 @@ func (raft *Raft) candidateJob() {
 	elected := make(chan struct{}, len(raft.nodes)) // may receive many elected message during an election, only handle the first one
 	voteFinished := make(chan struct{})
 	for nodeID := range raft.nodes {
+		if nodeID == raft.selfNodeID {
+			continue
+		}
 		nodeID := nodeID
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			if nodeID == raft.selfNodeID {
-				return
-			}
 			rawResp := raft.cluster.relay(nodeID, conn, args)
 			if err, ok := rawResp.(protocol.ErrorReply); ok {
 				logger.Info(fmt.Sprintf("cannot get vote response from %s, %v", nodeID, err))
@@ -384,12 +419,18 @@ func (raft *Raft) candidateJob() {
 	case <-voteFinished:
 		raft.mu.Lock()
 		if raft.term == currentTerm && raft.state == candidate {
-			logger.Info("failed to be elected, back to follower")
+			logger.Infof("%s failed to be elected, back to follower", raft.selfNodeID)
 			raft.state = follower
+			raft.votedFor = ""
+			raft.voteCount = 0
 		}
 		raft.mu.Unlock()
 	case <-elected:
+		raft.votedFor = ""
+		raft.voteCount = 0
 		logger.Info("win election, take leader of  term " + strconv.Itoa(currentTerm))
+	case <-raft.closeChan:
+		return
 	}
 }
 
@@ -563,6 +604,10 @@ func init() {
 }
 
 func execRaft(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
+	raft := cluster.asRaft()
+	if raft.closed {
+		return protocol.MakeErrReply(raftClosed)
+	}
 	if len(args) < 2 {
 		return protocol.MakeArgNumErrReply("raft")
 	}
@@ -685,7 +730,8 @@ func execRaftRequestVote(cluster *Cluster, c redis.Connection, args [][]byte) re
 		return protocol.MakeMultiBulkReply(resp.marshal())
 	}
 	// todo: if req.term > raft.term step down as leader?
-	if compareLogIndex(req.lastLogTerm, req.lastLogIndex, raft.term, raft.proposedIndex) < 0 {
+	lastLogTerm, lastLogIndex := raft.getLogProgressWithinLock()
+	if compareLogIndex(req.lastLogTerm, req.lastLogIndex, lastLogTerm, lastLogIndex) < 0 {
 		resp.term = raft.term
 		resp.voteFor = raft.votedFor
 		logger.Info("deny request vote from " + req.nodeID + " for log progress")
