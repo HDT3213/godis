@@ -20,7 +20,23 @@ var (
 	StandaloneMode = "standalone"
 )
 
+const (
+	PortConfig           = "port"           // Port number for Redis server
+	AppendfilenameConfig = "appendfilename" // Name of the append-only file
+	RequirepassConfig    = "requirepass"    // Password for Redis server
+	AppendfsyncConfig    = "appendfsync"    // Type of fsync policy used for the append-only file
+	MasterauthConfig     = "masterauth"     // Authentication password for master Redis server
+	ReplTimeoutConfig    = "repl-timeout"   // Replication timeout for Redis
+	MaxclientsConfig     = "maxclients"     // Maximum number of clients that can be connected to the Redis server
+	SaveConfig           = "save"           // Save points for Redis server
+	AppendonlyConfig     = "appendonly"     // Enable or disable the append-only file feature
+	DirConfig            = "dir"            // Directory where database files are stored
+	DbfilenameConfig     = "dbfilename"     // Name of the database file
+	BindConfig           = "bind"           // IP address and port number to bind Redis server to
+)
+
 // ServerProperties defines global config properties
+// When update properties update the CopyProperties() method;
 type ServerProperties struct {
 	// for Public configuration
 	RunID             string `cfg:"runid"` // runID always different at every exec.
@@ -69,6 +85,31 @@ func init() {
 		Port:       6379,
 		AppendOnly: false,
 		RunID:      utils.RandString(40),
+	}
+}
+
+func CopyProperties() *ServerProperties {
+	return &ServerProperties{
+		RunID:             Properties.RunID,
+		Bind:              Properties.Bind,
+		Port:              Properties.Port,
+		Dir:               Properties.Dir,
+		AppendOnly:        Properties.AppendOnly,
+		AppendFilename:    Properties.AppendFilename,
+		AppendFsync:       Properties.AppendFsync,
+		AofUseRdbPreamble: Properties.AofUseRdbPreamble,
+		MaxClients:        Properties.MaxClients,
+		RequirePass:       Properties.RequirePass,
+		Databases:         Properties.Databases,
+		RDBFilename:       Properties.RDBFilename,
+		MasterAuth:        Properties.MasterAuth,
+		SlaveAnnouncePort: Properties.SlaveAnnouncePort,
+		SlaveAnnounceIP:   Properties.SlaveAnnounceIP,
+		ReplTimeout:       Properties.ReplTimeout,
+		ClusterEnabled:    Properties.ClusterEnabled,
+		Peers:             Properties.Peers,
+		Self:              Properties.Self,
+		CfPath:            Properties.CfPath,
 	}
 }
 
@@ -151,4 +192,25 @@ func SetupConfig(configFilename string) {
 
 func GetTmpDir() string {
 	return Properties.Dir + "/tmp"
+}
+
+func IsMutableConfig(parameter string) bool {
+	switch parameter {
+	case SaveConfig,
+		AppendonlyConfig,
+		DirConfig,
+		PortConfig,
+		MasterauthConfig,
+		MaxclientsConfig,
+		ReplTimeoutConfig,
+		AppendfilenameConfig,
+		AppendfsyncConfig,
+		RequirepassConfig,
+		DbfilenameConfig,
+		BindConfig:
+		return true
+	default:
+		return false
+	}
+	return false
 }

@@ -123,6 +123,8 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 		return server.execSlaveOf(c, cmdLine[1:])
 	} else if cmdName == "command" {
 		return execCommand(cmdLine[1:])
+	} else if cmdName == "config" {
+		return ExecConfigCommand(cmdLine)
 	}
 
 	// read only slave
