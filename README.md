@@ -27,6 +27,7 @@ Key Features:
 - Replication (experimental)
 - Server-side Cluster which is transparent to client. You can connect to any node in the cluster to
   access all data in the cluster.
+  - Use the raft algorithm to maintain cluster metadata. (experimental)
   - `MSET`, `MSETNX`, `DEL`, `Rename`, `RenameNX` command is supported and atomically executed in cluster mode, allow over multi node
   - `MULTI` Commands Transaction is supported within slot in cluster mode
 - Concurrent Core, so you don't have to worry about your commands blocking the server too much. 

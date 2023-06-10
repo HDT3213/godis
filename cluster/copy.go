@@ -20,8 +20,8 @@ func Copy(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	}
 	srcKey := string(args[1])
 	destKey := string(args[2])
-	srcNode := cluster.peerPicker.PickNode(srcKey)
-	destNode := cluster.peerPicker.PickNode(destKey)
+	srcNode := cluster.pickNodeAddrByKey(srcKey)
+	destNode := cluster.pickNodeAddrByKey(destKey)
 	replaceFlag := noReplace
 	if len(args) > 3 {
 		for i := 3; i < len(args); i++ {
@@ -37,6 +37,7 @@ func Copy(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	}
 
 	if srcNode == destNode {
+		args[0] = []byte("Copy_") // Copy_ will go directly to cluster.DB avoiding infinite recursion
 		return cluster.relay(srcNode, c, args)
 	}
 	groupMap := map[string][]string{
@@ -47,7 +48,7 @@ func Copy(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	txID := cluster.idGenerator.NextID()
 	txIDStr := strconv.FormatInt(txID, 10)
 	// prepare Copy from
-	srcPrepareResp := cluster.relayPrepare(srcNode, c, makeArgs("Prepare", txIDStr, "CopyFrom", srcKey))
+	srcPrepareResp := cluster.relay(srcNode, c, makeArgs("Prepare", txIDStr, "CopyFrom", srcKey))
 	if protocol.IsErrorReply(srcPrepareResp) {
 		// rollback src node
 		requestRollback(cluster, c, txID, map[string][]string{srcNode: {srcKey}})
@@ -59,11 +60,14 @@ func Copy(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 		return protocol.MakeErrReply("ERR invalid prepare response")
 	}
 	// prepare Copy to
-	destPrepareResp := cluster.relayPrepare(destNode, c, utils.ToCmdLine3("Prepare", []byte(txIDStr),
+	destPrepareResp := cluster.relay(destNode, c, utils.ToCmdLine3("Prepare", []byte(txIDStr),
 		[]byte("CopyTo"), []byte(destKey), srcPrepareMBR.Args[0], srcPrepareMBR.Args[1], []byte(replaceFlag)))
-	if protocol.IsErrorReply(destPrepareResp) {
+	if destErr, ok := destPrepareResp.(protocol.ErrorReply); ok {
 		// rollback src node
 		requestRollback(cluster, c, txID, groupMap)
+		if destErr.Error() == keyExistsErr {
+			return protocol.MakeIntReply(0)
+		}
 		return destPrepareResp
 	}
 	if _, errReply := requestCommit(cluster, c, txID, groupMap); errReply != nil {

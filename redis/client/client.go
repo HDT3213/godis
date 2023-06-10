@@ -136,23 +136,23 @@ func (client *Client) Send(args [][]byte) redis.Reply {
 	if atomic.LoadInt32(&client.status) != running {
 		return protocol.MakeErrReply("client closed")
 	}
-	request := &request{
+	req := &request{
 		args:      args,
 		heartbeat: false,
 		waiting:   &wait.Wait{},
 	}
-	request.waiting.Add(1)
+	req.waiting.Add(1)
 	client.working.Add(1)
 	defer client.working.Done()
-	client.pendingReqs <- request
-	timeout := request.waiting.WaitWithTimeout(maxWait)
+	client.pendingReqs <- req
+	timeout := req.waiting.WaitWithTimeout(maxWait)
 	if timeout {
 		return protocol.MakeErrReply("server time out")
 	}
-	if request.err != nil {
-		return protocol.MakeErrReply("request failed")
+	if req.err != nil {
+		return protocol.MakeErrReply("request failed " + req.err.Error())
 	}
-	return request.reply
+	return req.reply
 }
 
 func (client *Client) doHeartbeat() {

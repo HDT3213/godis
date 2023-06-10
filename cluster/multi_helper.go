@@ -35,6 +35,7 @@ func parseEncodedMultiRawReply(args [][]byte) (*protocol.MultiRawReply, error) {
 	return protocol.MakeMultiRawReply(cmds), nil
 }
 
+// todo: use multi raw reply instead of base64
 func encodeMultiRawReply(src *protocol.MultiRawReply) *protocol.MultiBulkReply {
 	args := make([][]byte, 0, len(src.Replies))
 	for _, rep := range src.Replies {

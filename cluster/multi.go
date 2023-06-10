@@ -4,12 +4,13 @@ import (
 	"github.com/hdt3213/godis/database"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/utils"
+	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/protocol"
 	"strconv"
 )
 
-const relayMulti = "_multi"
-const innerWatch = "_watch"
+const relayMulti = "multi_"
+const innerWatch = "watch_"
 
 var relayMultiBytes = []byte(relayMulti)
 
@@ -50,6 +51,11 @@ func execMulti(cluster *Cluster, conn redis.Connection, cmdLine CmdLine) redis.R
 
 	// out parser not support protocol.MultiRawReply, so we have to encode it
 	if peer == cluster.self {
+		for _, key := range keys {
+			if errReply := cluster.ensureKey(key); errReply != nil {
+				return errReply
+			}
+		}
 		return cluster.db.ExecMulti(conn, watching, cmdLines)
 	}
 	return execMultiOnOtherNode(cluster, conn, peer, watching, cmdLines)
@@ -72,12 +78,7 @@ func execMultiOnOtherNode(cluster *Cluster, conn redis.Connection, peer string, 
 	relayCmdLine = append(relayCmdLine, encodeCmdLine([]CmdLine{watchingCmdLine})...)
 	relayCmdLine = append(relayCmdLine, encodeCmdLine(cmdLines)...)
 	var rawRelayResult redis.Reply
-	if peer == cluster.self {
-		// this branch just for testing
-		rawRelayResult = execRelayedMulti(cluster, conn, relayCmdLine)
-	} else {
-		rawRelayResult = cluster.relay(peer, conn, relayCmdLine)
-	}
+	rawRelayResult = cluster.relay(peer, connection.NewFakeConn(), relayCmdLine)
 	if protocol.IsErrorReply(rawRelayResult) {
 		return rawRelayResult
 	}
@@ -116,7 +117,7 @@ func execRelayedMulti(cluster *Cluster, conn redis.Connection, cmdLine CmdLine) 
 		txCmdLines = append(txCmdLines, mbr.Args)
 	}
 	watching := make(map[string]uint32)
-	watchCmdLine := txCmdLines[0] // format: _watch key1 ver1 key2 ver2...
+	watchCmdLine := txCmdLines[0] // format: watch_ key1 ver1 key2 ver2...
 	for i := 2; i < len(watchCmdLine); i += 2 {
 		key := string(watchCmdLine[i-1])
 		verStr := string(watchCmdLine[i])
@@ -146,8 +147,11 @@ func execWatch(cluster *Cluster, conn redis.Connection, args [][]byte) redis.Rep
 	watching := conn.GetWatching()
 	for _, bkey := range args {
 		key := string(bkey)
-		peer := cluster.peerPicker.PickNode(key)
-		result := cluster.relay(peer, conn, utils.ToCmdLine("GetVer", key))
+		err := cluster.ensureKey(key)
+		if err != nil {
+			return err
+		}
+		result := cluster.relayByKey(key, conn, utils.ToCmdLine("GetVer", key))
 		if protocol.IsErrorReply(result) {
 			return result
 		}

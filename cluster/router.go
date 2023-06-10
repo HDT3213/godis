@@ -1,135 +1,166 @@
 package cluster
 
-import "github.com/hdt3213/godis/interface/redis"
+import (
+	"github.com/hdt3213/godis/interface/redis"
+	"strings"
+)
 
 // CmdLine is alias for [][]byte, represents a command line
 type CmdLine = [][]byte
 
-func makeRouter() map[string]CmdFunc {
-	routerMap := make(map[string]CmdFunc)
-	routerMap["ping"] = ping
-	routerMap["info"] = info
+var router = make(map[string]CmdFunc)
 
-	routerMap["prepare"] = execPrepare
-	routerMap["commit"] = execCommit
-	routerMap["rollback"] = execRollback
-	routerMap["del"] = Del
+func registerCmd(name string, cmd CmdFunc) {
+	name = strings.ToLower(name)
+	router[name] = cmd
+}
 
-	routerMap["expire"] = defaultFunc
-	routerMap["expireat"] = defaultFunc
-	routerMap["expiretime"] = defaultFunc
-	routerMap["pexpire"] = defaultFunc
-	routerMap["pexpireat"] = defaultFunc
-	routerMap["pexpiretime"] = defaultFunc
-	routerMap["ttl"] = defaultFunc
-	routerMap["pttl"] = defaultFunc
-	routerMap["persist"] = defaultFunc
-	routerMap["exists"] = defaultFunc
-	routerMap["type"] = defaultFunc
-	routerMap["rename"] = Rename
-	routerMap["renamenx"] = RenameNx
-	routerMap["copy"] = Copy
-
-	routerMap["set"] = defaultFunc
-	routerMap["setnx"] = defaultFunc
-	routerMap["setex"] = defaultFunc
-	routerMap["psetex"] = defaultFunc
-	routerMap["mset"] = MSet
-	routerMap["mget"] = MGet
-	routerMap["msetnx"] = MSetNX
-	routerMap["get"] = defaultFunc
-	routerMap["getex"] = defaultFunc
-	routerMap["getset"] = defaultFunc
-	routerMap["getdel"] = defaultFunc
-	routerMap["incr"] = defaultFunc
-	routerMap["incrby"] = defaultFunc
-	routerMap["incrbyfloat"] = defaultFunc
-	routerMap["decr"] = defaultFunc
-	routerMap["decrby"] = defaultFunc
-	routerMap["randomkey"] = randomkey
-
-	routerMap["lpush"] = defaultFunc
-	routerMap["lpushx"] = defaultFunc
-	routerMap["rpush"] = defaultFunc
-	routerMap["rpushx"] = defaultFunc
-	routerMap["lpop"] = defaultFunc
-	routerMap["rpop"] = defaultFunc
-	//routerMap["rpoplpush"] = RPopLPush
-	routerMap["lrem"] = defaultFunc
-	routerMap["llen"] = defaultFunc
-	routerMap["lindex"] = defaultFunc
-	routerMap["lset"] = defaultFunc
-	routerMap["lrange"] = defaultFunc
-
-	routerMap["hset"] = defaultFunc
-	routerMap["hsetnx"] = defaultFunc
-	routerMap["hget"] = defaultFunc
-	routerMap["hexists"] = defaultFunc
-	routerMap["hdel"] = defaultFunc
-	routerMap["hlen"] = defaultFunc
-	routerMap["hstrlen"] = defaultFunc
-	routerMap["hmget"] = defaultFunc
-	routerMap["hmset"] = defaultFunc
-	routerMap["hkeys"] = defaultFunc
-	routerMap["hvals"] = defaultFunc
-	routerMap["hgetall"] = defaultFunc
-	routerMap["hincrby"] = defaultFunc
-	routerMap["hincrbyfloat"] = defaultFunc
-	routerMap["hrandfield"] = defaultFunc
-
-	routerMap["sadd"] = defaultFunc
-	routerMap["sismember"] = defaultFunc
-	routerMap["srem"] = defaultFunc
-	routerMap["spop"] = defaultFunc
-	routerMap["scard"] = defaultFunc
-	routerMap["smembers"] = defaultFunc
-	routerMap["sinter"] = defaultFunc
-	routerMap["sinterstore"] = defaultFunc
-	routerMap["sunion"] = defaultFunc
-	routerMap["sunionstore"] = defaultFunc
-	routerMap["sdiff"] = defaultFunc
-	routerMap["sdiffstore"] = defaultFunc
-	routerMap["srandmember"] = defaultFunc
-
-	routerMap["zadd"] = defaultFunc
-	routerMap["zscore"] = defaultFunc
-	routerMap["zincrby"] = defaultFunc
-	routerMap["zrank"] = defaultFunc
-	routerMap["zcount"] = defaultFunc
-	routerMap["zrevrank"] = defaultFunc
-	routerMap["zcard"] = defaultFunc
-	routerMap["zrange"] = defaultFunc
-	routerMap["zrevrange"] = defaultFunc
-	routerMap["zrangebyscore"] = defaultFunc
-	routerMap["zrevrangebyscore"] = defaultFunc
-	routerMap["zrem"] = defaultFunc
-	routerMap["zremrangebyscore"] = defaultFunc
-	routerMap["zremrangebyrank"] = defaultFunc
-
-	routerMap["geoadd"] = defaultFunc
-	routerMap["geopos"] = defaultFunc
-	routerMap["geodist"] = defaultFunc
-	routerMap["geohash"] = defaultFunc
-	routerMap["georadius"] = defaultFunc
-	routerMap["georadiusbymember"] = defaultFunc
-
-	routerMap["publish"] = Publish
-	routerMap[relayPublish] = onRelayedPublish
-	routerMap["subscribe"] = Subscribe
-	routerMap["unsubscribe"] = UnSubscribe
-
-	routerMap["flushdb"] = FlushDB
-	routerMap["flushall"] = FlushAll
-	routerMap[relayMulti] = execRelayedMulti
-	routerMap["getver"] = defaultFunc
-	routerMap["watch"] = execWatch
-
-	return routerMap
+func registerDefaultCmd(name string) {
+	registerCmd(name, defaultFunc)
 }
 
 // relay command to responsible peer, and return its protocol to client
 func defaultFunc(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	key := string(args[1])
-	peer := cluster.peerPicker.PickNode(key)
-	return cluster.relay(peer, c, args)
+	slotId := getSlot(key)
+	peer := cluster.pickNode(slotId)
+	if peer.ID == cluster.self {
+		err := cluster.ensureKeyWithoutLock(key)
+		if err != nil {
+			return err
+		}
+		// to self db
+		//return cluster.db.Exec(c, cmdLine)
+		return cluster.db.Exec(c, args)
+	}
+	return cluster.relay(peer.ID, c, args)
+}
+
+func init() {
+	registerCmd("Ping", ping)
+	registerCmd("Prepare", execPrepare)
+	registerCmd("Commit", execCommit)
+	registerCmd("Rollback", execRollback)
+	registerCmd("Del", Del)
+	registerCmd("Rename", Rename)
+	registerCmd("RenameNx", RenameNx)
+	registerCmd("Copy", Copy)
+	registerCmd("MSet", MSet)
+	registerCmd("MGet", MGet)
+	registerCmd("MSetNx", MSetNX)
+	registerCmd("Publish", Publish)
+	registerCmd("Subscribe", Subscribe)
+	registerCmd("Unsubscribe", UnSubscribe)
+	registerCmd("FlushDB", FlushDB)
+	registerCmd("FlushAll", FlushAll)
+	registerCmd(relayMulti, execRelayedMulti)
+	registerCmd("Watch", execWatch)
+	registerCmd("FlushDB_", genPenetratingExecutor("FlushDB"))
+	registerCmd("Copy_", genPenetratingExecutor("Copy"))
+	registerCmd("Watch_", genPenetratingExecutor("Watch"))
+	registerCmd(relayPublish, genPenetratingExecutor("Publish"))
+	registerCmd("Del_", genPenetratingExecutor("Del"))
+	registerCmd("MSet_", genPenetratingExecutor("MSet"))
+	registerCmd("MSetNx_", genPenetratingExecutor("MSetNx"))
+	registerCmd("MGet_", genPenetratingExecutor("MGet"))
+	registerCmd("Rename_", genPenetratingExecutor("Rename"))
+	registerCmd("RenameNx_", genPenetratingExecutor("RenameNx"))
+	registerCmd("DumpKey_", genPenetratingExecutor("DumpKey"))
+
+	defaultCmds := []string{
+		"expire",
+		"expireAt",
+		"pExpire",
+		"pExpireAt",
+		"ttl",
+		"PTtl",
+		"persist",
+		"exists",
+		"type",
+		"set",
+		"setNx",
+		"setEx",
+		"pSetEx",
+		"get",
+		"getEx",
+		"getSet",
+		"getDel",
+		"incr",
+		"incrBy",
+		"incrByFloat",
+		"decr",
+		"decrBy",
+		"lPush",
+		"lPushX",
+		"rPush",
+		"rPushX",
+		"LPop",
+		"RPop",
+		"LRem",
+		"LLen",
+		"LIndex",
+		"LSet",
+		"LRange",
+		"HSet",
+		"HSetNx",
+		"HGet",
+		"HExists",
+		"HDel",
+		"HLen",
+		"HStrLen",
+		"HMGet",
+		"HMSet",
+		"HKeys",
+		"HVals",
+		"HGetAll",
+		"HIncrBy",
+		"HIncrByFloat",
+		"HRandField",
+		"SAdd",
+		"SIsMember",
+		"SRem",
+		"SPop",
+		"SCard",
+		"SMembers",
+		"SInter",
+		"SInterStore",
+		"SUnion",
+		"SUnionStore",
+		"SDiff",
+		"SDiffStore",
+		"SRandMember",
+		"ZAdd",
+		"ZScore",
+		"ZIncrBy",
+		"ZRank",
+		"ZCount",
+		"ZRevRank",
+		"ZCard",
+		"ZRange",
+		"ZRevRange",
+		"ZRangeByScore",
+		"ZRevRangeByScore",
+		"ZRem",
+		"ZRemRangeByScore",
+		"ZRemRangeByRank",
+		"GeoAdd",
+		"GeoPos",
+		"GeoDist",
+		"GeoHash",
+		"GeoRadius",
+		"GeoRadiusByMember",
+		"GetVer",
+		"DumpKey",
+	}
+	for _, name := range defaultCmds {
+		registerDefaultCmd(name)
+	}
+
+}
+
+// genPenetratingExecutor generates an executor that can reach directly to the database layer
+func genPenetratingExecutor(realCmd string) CmdFunc {
+	return func(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
+		return cluster.db.Exec(c, modifyCmd(cmdLine, realCmd))
+	}
 }

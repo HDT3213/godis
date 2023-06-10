@@ -50,8 +50,8 @@ var connPool = sync.Pool{
 }
 
 // RemoteAddr returns the remote network address
-func (c *Connection) RemoteAddr() net.Addr {
-	return c.conn.RemoteAddr()
+func (c *Connection) RemoteAddr() string {
+	return c.conn.RemoteAddr().String()
 }
 
 // Close disconnect with the client

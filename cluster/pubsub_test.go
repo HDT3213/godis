@@ -9,6 +9,7 @@ import (
 )
 
 func TestPublish(t *testing.T) {
+	testNodeA := testCluster[0]
 	channel := utils.RandString(5)
 	msg := utils.RandString(5)
 	conn := connection.NewFakeConn()

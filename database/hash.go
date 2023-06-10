@@ -149,7 +149,7 @@ func execHDel(db *DB, args [][]byte) redis.Reply {
 
 	deleted := 0
 	for _, field := range fields {
-		result := dict.Remove(field)
+		_, result := dict.Remove(field)
 		deleted += result
 	}
 	if dict.Len() == 0 {

@@ -36,8 +36,7 @@ type Handler struct {
 // MakeHandler creates a Handler instance
 func MakeHandler() *Handler {
 	var db database.DB
-	if config.Properties.Self != "" &&
-		len(config.Properties.Peers) > 0 {
+	if config.Properties.ClusterEnable {
 		db = cluster.MakeCluster()
 	} else {
 		db = database2.NewStandaloneServer()
@@ -72,7 +71,7 @@ func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 				strings.Contains(payload.Err.Error(), "use of closed network connection") {
 				// connection closed
 				h.closeClient(client)
-				logger.Info("connection closed: " + client.RemoteAddr().String())
+				logger.Info("connection closed: " + client.RemoteAddr())
 				return
 			}
 			// protocol err
@@ -80,7 +79,7 @@ func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 			_, err := client.Write(errReply.ToBytes())
 			if err != nil {
 				h.closeClient(client)
-				logger.Info("connection closed: " + client.RemoteAddr().String())
+				logger.Info("connection closed: " + client.RemoteAddr())
 				return
 			}
 			continue

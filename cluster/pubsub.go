@@ -7,19 +7,13 @@ import (
 )
 
 const (
-	relayPublish = "_publish"
-	publish      = "publish"
-)
-
-var (
-	publishRelayCmd = []byte(relayPublish)
-	publishCmd      = []byte(publish)
+	relayPublish = "publish_"
 )
 
 // Publish broadcasts msg to all peers in cluster when receive publish command from client
-func Publish(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
+func Publish(cluster *Cluster, c redis.Connection, cmdLine [][]byte) redis.Reply {
 	var count int64 = 0
-	results := cluster.broadcast(c, args)
+	results := cluster.broadcast(c, modifyCmd(cmdLine, relayPublish))
 	for _, val := range results {
 		if errReply, ok := val.(protocol.ErrorReply); ok {
 			logger.Error("publish occurs error: " + errReply.Error())
@@ -28,12 +22,6 @@ func Publish(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 		}
 	}
 	return protocol.MakeIntReply(count)
-}
-
-// onRelayedPublish receives publish command from peer, just publish to local subscribing clients, do not relay to peers
-func onRelayedPublish(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
-	args[0] = publishCmd
-	return cluster.db.Exec(c, args) // let local db.hub handle publish
 }
 
 // Subscribe puts the given connection into the given channel

@@ -90,6 +90,18 @@ func (tx *Transaction) prepare() error {
 	// lock writeKeys
 	tx.lockKeys()
 
+	for _, key := range tx.writeKeys {
+		err := tx.cluster.ensureKey(key)
+		if err != nil {
+			return err
+		}
+	}
+	for _, key := range tx.readKeys {
+		err := tx.cluster.ensureKey(key)
+		if err != nil {
+			return err
+		}
+	}
 	// build undoLog
 	tx.undoLog = tx.cluster.db.GetUndoLogs(tx.dbIndex, tx.cmdLine)
 	tx.status = preparedStatus
@@ -131,7 +143,9 @@ func execPrepare(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Re
 	txID := string(cmdLine[1])
 	cmdName := strings.ToLower(string(cmdLine[2]))
 	tx := NewTransaction(cluster, c, txID, cmdLine[2:])
+	cluster.transactionMu.Lock()
 	cluster.transactions.Put(txID, tx)
+	cluster.transactionMu.Unlock()
 	err := tx.prepare()
 	if err != nil {
 		return protocol.MakeErrReply(err.Error())
@@ -149,7 +163,9 @@ func execRollback(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.R
 		return protocol.MakeErrReply("ERR wrong number of arguments for 'rollback' command")
 	}
 	txID := string(cmdLine[1])
+	cluster.transactionMu.RLock()
 	raw, ok := cluster.transactions.Get(txID)
+	cluster.transactionMu.RUnlock()
 	if !ok {
 		return protocol.MakeIntReply(0)
 	}
@@ -163,7 +179,9 @@ func execRollback(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.R
 	}
 	// clean transaction
 	timewheel.Delay(waitBeforeCleanTx, "", func() {
+		cluster.transactionMu.Lock()
 		cluster.transactions.Remove(tx.id)
+		cluster.transactionMu.Unlock()
 	})
 	return protocol.MakeIntReply(1)
 }
@@ -174,7 +192,9 @@ func execCommit(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Rep
 		return protocol.MakeErrReply("ERR wrong number of arguments for 'commit' command")
 	}
 	txID := string(cmdLine[1])
+	cluster.transactionMu.RLock()
 	raw, ok := cluster.transactions.Get(txID)
+	cluster.transactionMu.RUnlock()
 	if !ok {
 		return protocol.MakeIntReply(0)
 	}
@@ -196,7 +216,9 @@ func execCommit(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Rep
 	// clean finished transaction
 	// do not clean immediately, in case rollback
 	timewheel.Delay(waitBeforeCleanTx, "", func() {
+		cluster.transactionMu.Lock()
 		cluster.transactions.Remove(tx.id)
+		cluster.transactionMu.Unlock()
 	})
 	return result
 }
@@ -207,12 +229,7 @@ func requestCommit(cluster *Cluster, c redis.Connection, txID int64, groupMap ma
 	txIDStr := strconv.FormatInt(txID, 10)
 	respList := make([]redis.Reply, 0, len(groupMap))
 	for node := range groupMap {
-		var resp redis.Reply
-		if node == cluster.self {
-			resp = execCommit(cluster, c, makeArgs("commit", txIDStr))
-		} else {
-			resp = cluster.relay(node, c, makeArgs("commit", txIDStr))
-		}
+		resp := cluster.relay(node, c, makeArgs("commit", txIDStr))
 		if protocol.IsErrorReply(resp) {
 			errReply = resp.(protocol.ErrorReply)
 			break
@@ -231,18 +248,6 @@ func requestCommit(cluster *Cluster, c redis.Connection, txID int64, groupMap ma
 func requestRollback(cluster *Cluster, c redis.Connection, txID int64, groupMap map[string][]string) {
 	txIDStr := strconv.FormatInt(txID, 10)
 	for node := range groupMap {
-		if node == cluster.self {
-			execRollback(cluster, c, makeArgs("rollback", txIDStr))
-		} else {
-			cluster.relay(node, c, makeArgs("rollback", txIDStr))
-		}
-	}
-}
-
-func (cluster *Cluster) relayPrepare(node string, c redis.Connection, cmdLine CmdLine) redis.Reply {
-	if node == cluster.self {
-		return execPrepare(cluster, c, cmdLine)
-	} else {
-		return cluster.relay(node, c, cmdLine)
+		cluster.relay(node, c, makeArgs("rollback", txIDStr))
 	}
 }

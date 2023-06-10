@@ -57,13 +57,13 @@ func (dict *SimpleDict) PutIfExists(key string, val interface{}) (result int) {
 }
 
 // Remove removes the key and return the number of deleted key-value
-func (dict *SimpleDict) Remove(key string) (result int) {
-	_, existed := dict.m[key]
+func (dict *SimpleDict) Remove(key string) (val interface{}, result int) {
+	val, existed := dict.m[key]
 	delete(dict.m, key)
 	if existed {
-		return 1
+		return val, 1
 	}
-	return 0
+	return nil, 0
 }
 
 // Keys returns all keys in dict
