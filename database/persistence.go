@@ -28,7 +28,7 @@ func (server *Server) loadRdbFile() error {
 	decoder := rdb.NewDecoder(rdbFile)
 	err = server.LoadRDB(decoder)
 	if err != nil {
-		return fmt.Errorf("dump rdb file failed " + err.Error())
+		return fmt.Errorf("load rdb file failed " + err.Error())
 	}
 	return nil
 }
