@@ -321,7 +321,10 @@ func execKeys(db *DB, args [][]byte) redis.Reply {
 	}
 	result := make([][]byte, 0)
 	db.data.ForEach(func(key string, val interface{}) bool {
-		if pattern.IsMatch(key) {
+		if !pattern.IsMatch(key) {
+			return true
+		}
+		if !db.IsExpired(key) {
 			result = append(result, []byte(key))
 		}
 		return true
