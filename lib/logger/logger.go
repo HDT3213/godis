@@ -5,6 +5,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"sync"
@@ -78,12 +79,11 @@ func NewStdoutLogger() *Logger {
 
 // NewFileLogger creates a logger which print msg to stdout and log file
 func NewFileLogger(settings *Settings) (*Logger, error) {
-	dir := settings.Path
 	fileName := fmt.Sprintf("%s-%s.%s",
 		settings.Name,
 		time.Now().Format(settings.TimeFormat),
 		settings.Ext)
-	logFile, err := mustOpen(fileName, dir)
+	logFile, err := mustOpen(fileName, settings.Path)
 	if err != nil {
 		return nil, fmt.Errorf("logging.Join err: %s", err)
 	}
@@ -100,6 +100,18 @@ func NewFileLogger(settings *Settings) (*Logger, error) {
 	}
 	go func() {
 		for e := range logger.entryChan {
+			logFilename := fmt.Sprintf("%s-%s.%s",
+				settings.Name,
+				time.Now().Format(settings.TimeFormat),
+				settings.Ext)
+			if path.Join(settings.Path, logFilename) != logger.logFile.Name() {
+				logFile, err := mustOpen(logFilename, settings.Path)
+				if err != nil {
+					panic("open log " + logFilename + " failed: " + err.Error())
+				}
+				logger.logFile = logFile
+				logger.logger = log.New(io.MultiWriter(os.Stdout, logFile), "", flags)
+			}
 			_ = logger.logger.Output(0, e.msg) // msg includes call stack, no need for calldepth
 			logger.entryPool.Put(e)
 		}
