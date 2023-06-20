@@ -25,7 +25,7 @@ import (
 type CmdLine = [][]byte
 
 const (
-	aofQueueSize = 1 << 16
+	aofQueueSize = 1 << 20
 )
 
 const (
