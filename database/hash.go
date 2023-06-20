@@ -6,7 +6,6 @@ import (
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
-	"github.com/shopspring/decimal"
 	"strconv"
 	"strings"
 )
@@ -394,7 +393,7 @@ func execHIncrByFloat(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	field := string(args[1])
 	rawDelta := string(args[2])
-	delta, err := decimal.NewFromString(rawDelta)
+	delta, err := strconv.ParseFloat(rawDelta, 64)
 	if err != nil {
 		return protocol.MakeErrReply("ERR value is not a valid float")
 	}
@@ -410,12 +409,12 @@ func execHIncrByFloat(db *DB, args [][]byte) redis.Reply {
 		dict.Put(field, args[2])
 		return protocol.MakeBulkReply(args[2])
 	}
-	val, err := decimal.NewFromString(string(value.([]byte)))
+	val, err := strconv.ParseFloat(string(value.([]byte)), 64)
 	if err != nil {
 		return protocol.MakeErrReply("ERR hash value is not a float")
 	}
-	result := val.Add(delta)
-	resultBytes := []byte(result.String())
+	result := val + delta
+	resultBytes := []byte(strconv.FormatFloat(result, 'f', -1, 64))
 	dict.Put(field, resultBytes)
 	db.addAof(utils.ToCmdLine3("hincrbyfloat", args...))
 	return protocol.MakeBulkReply(resultBytes)

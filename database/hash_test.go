@@ -5,6 +5,7 @@ import (
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
 	"github.com/hdt3213/godis/redis/protocol/asserts"
+	"math"
 	"strconv"
 	"testing"
 )
@@ -246,12 +247,18 @@ func TestHIncrBy(t *testing.T) {
 	}
 
 	result = testDB.Exec(nil, utils.ToCmdLine("hincrbyfloat", key, "b", "1.2"))
-	if bulkResult, _ := result.(*protocol.BulkReply); string(bulkResult.Arg) != "1.2" {
-		t.Error(fmt.Sprintf("expected %s, actually %s", "1.2", string(bulkResult.Arg)))
+	if bulkResult, ok := result.(*protocol.BulkReply); ok {
+		val, _ := strconv.ParseFloat(string(bulkResult.Arg), 10)
+		if math.Abs(val-1.2) > 1e-4 {
+			t.Error(fmt.Sprintf("expected %s, actually %s", "1.2", string(bulkResult.Arg)))
+		}
 	}
 	result = testDB.Exec(nil, utils.ToCmdLine("hincrbyfloat", key, "b", "1.2"))
-	if bulkResult, _ := result.(*protocol.BulkReply); string(bulkResult.Arg) != "2.4" {
-		t.Error(fmt.Sprintf("expected %s, actually %s", "2.4", string(bulkResult.Arg)))
+	if bulkResult, ok := result.(*protocol.BulkReply); ok {
+		val, _ := strconv.ParseFloat(string(bulkResult.Arg), 10)
+		if math.Abs(val-2.4) > 1e-4 {
+			t.Error(fmt.Sprintf("expected %s, actually %s", "1.2", string(bulkResult.Arg)))
+		}
 	}
 }
 

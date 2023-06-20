@@ -260,6 +260,9 @@ func TestKeys(t *testing.T) {
 	testDB.Exec(nil, utils.ToCmdLine("set", key, value))
 	testDB.Exec(nil, utils.ToCmdLine("set", "a:"+key, value))
 	testDB.Exec(nil, utils.ToCmdLine("set", "b:"+key, value))
+	testDB.Exec(nil, utils.ToCmdLine("set", "b:"+key, value))
+	testDB.Exec(nil, utils.ToCmdLine("set", "c:"+key, value, "EX", "0"))
+	time.Sleep(time.Second)
 
 	result := testDB.Exec(nil, utils.ToCmdLine("keys", "*"))
 	asserts.AssertMultiBulkReplySize(t, result, 3)

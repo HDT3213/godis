@@ -12,7 +12,6 @@ import (
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
-	"github.com/shopspring/decimal"
 )
 
 func (db *DB) getAsString(key string) ([]byte, protocol.ErrorReply) {
@@ -477,7 +476,7 @@ func execIncrBy(db *DB, args [][]byte) redis.Reply {
 func execIncrByFloat(db *DB, args [][]byte) redis.Reply {
 	key := string(args[0])
 	rawDelta := string(args[1])
-	delta, err := decimal.NewFromString(rawDelta)
+	delta, err := strconv.ParseFloat(rawDelta, 64)
 	if err != nil {
 		return protocol.MakeErrReply("ERR value is not a valid float")
 	}
@@ -487,11 +486,11 @@ func execIncrByFloat(db *DB, args [][]byte) redis.Reply {
 		return errReply
 	}
 	if bytes != nil {
-		val, err := decimal.NewFromString(string(bytes))
+		val, err := strconv.ParseFloat(string(bytes), 64)
 		if err != nil {
 			return protocol.MakeErrReply("ERR value is not a valid float")
 		}
-		resultBytes := []byte(val.Add(delta).String())
+		resultBytes := []byte(strconv.FormatFloat(val+delta, 'f', -1, 64))
 		db.PutEntity(key, &database.DataEntity{
 			Data: resultBytes,
 		})

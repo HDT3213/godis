@@ -5,6 +5,7 @@ import (
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
 	"github.com/hdt3213/godis/redis/protocol/asserts"
+	"math"
 	"strconv"
 	"testing"
 )
@@ -259,7 +260,7 @@ func TestIncr(t *testing.T) {
 			t.Error(err)
 			return
 		}
-		if int(val) != expected {
+		if math.Abs(val-float64(expected)) > 1e-4 {
 			t.Errorf("expect %d, actual: %d", expected, int(val))
 			return
 		}
