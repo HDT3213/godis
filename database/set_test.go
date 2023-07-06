@@ -130,7 +130,7 @@ func TestSInter(t *testing.T) {
 	key1 := utils.RandString(10)
 	testDB.Exec(nil, utils.ToCmdLine("sadd", key1, "a", "b"))
 	key2 := utils.RandString(10)
-	testDB.Exec(nil, utils.ToCmdLine("sadd", key1, "1", "2"))
+	testDB.Exec(nil, utils.ToCmdLine("sadd", key2, "1", "2"))
 	result = testDB.Exec(nil, utils.ToCmdLine("sinter", key0, key1, key2))
 	asserts.AssertMultiBulkReplySize(t, result, 0)
 	result = testDB.Exec(nil, utils.ToCmdLine("sinter", key1, key2))
