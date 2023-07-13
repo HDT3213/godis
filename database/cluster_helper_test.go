@@ -1,7 +1,6 @@
 package database
 
 import (
-	"fmt"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
 	"github.com/hdt3213/godis/redis/protocol/asserts"
@@ -48,7 +47,7 @@ func TestDumpKeyAndRenameTo(t *testing.T) {
 	result = testDB.Exec(nil, utils.ToCmdLine("ttl", newKey))
 	intResult, ok := result.(*protocol.IntReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected int protocol, actually %s", result.ToBytes()))
+		t.Errorf("expected int protocol, actually %s", result.ToBytes())
 		return
 	}
 	if intResult.Code <= 0 {

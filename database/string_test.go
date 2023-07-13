@@ -94,11 +94,11 @@ func TestSet(t *testing.T) {
 	actual = testDB.Exec(nil, utils.ToCmdLine("TTL", key))
 	intResult, ok := actual.(*protocol.IntReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected int protocol, actually %s", actual.ToBytes()))
+		t.Errorf("expected int protocol, actually %s", actual.ToBytes())
 		return
 	}
 	if intResult.Code <= 0 || intResult.Code > 1000 {
-		t.Error(fmt.Sprintf("expected int between [0, 1000], actually %d", intResult.Code))
+		t.Errorf("expected int between [0, 1000], actually %d", intResult.Code)
 		return
 	}
 
@@ -111,11 +111,11 @@ func TestSet(t *testing.T) {
 	actual = testDB.Exec(nil, utils.ToCmdLine("TTL", key))
 	intResult, ok = actual.(*protocol.IntReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected int protocol, actually %s", actual.ToBytes()))
+		t.Errorf("expected int protocol, actually %s", actual.ToBytes())
 		return
 	}
 	if intResult.Code <= 0 || intResult.Code > 1000 {
-		t.Error(fmt.Sprintf("expected int between [0, 1000], actually %d", intResult.Code))
+		t.Errorf("expected int between [0, 1000], actually %d", intResult.Code)
 		return
 	}
 }
@@ -150,11 +150,11 @@ func TestSetEX(t *testing.T) {
 	actual = testDB.Exec(nil, utils.ToCmdLine("TTL", key))
 	intResult, ok := actual.(*protocol.IntReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected int protocol, actually %s", actual.ToBytes()))
+		t.Errorf("expected int protocol, actually %s", actual.ToBytes())
 		return
 	}
 	if intResult.Code <= 0 || intResult.Code > 1000 {
-		t.Error(fmt.Sprintf("expected int between [0, 1000], actually %d", intResult.Code))
+		t.Errorf("expected int between [0, 1000], actually %d", intResult.Code)
 		return
 	}
 }
@@ -171,11 +171,11 @@ func TestPSetEX(t *testing.T) {
 	actual = testDB.Exec(nil, utils.ToCmdLine("PTTL", key))
 	intResult, ok := actual.(*protocol.IntReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected int protocol, actually %s", actual.ToBytes()))
+		t.Errorf("expected int protocol, actually %s", actual.ToBytes())
 		return
 	}
 	if intResult.Code <= 0 || intResult.Code > 1000000 {
-		t.Error(fmt.Sprintf("expected int between [0, 1000], actually %d", intResult.Code))
+		t.Errorf("expected int between [0, 1000], actually %d", intResult.Code)
 		return
 	}
 }
@@ -252,7 +252,7 @@ func TestIncr(t *testing.T) {
 		expected := -i - 1
 		bulk, ok := actual.(*protocol.BulkReply)
 		if !ok {
-			t.Error(fmt.Sprintf("expected bulk protocol, actually %s", actual.ToBytes()))
+			t.Errorf("expected bulk protocol, actually %s", actual.ToBytes())
 			return
 		}
 		val, err := strconv.ParseFloat(string(bulk.Arg), 10)
@@ -283,7 +283,7 @@ func TestDecr(t *testing.T) {
 		expected := -i - 1
 		bulk, ok := actual.(*protocol.BulkReply)
 		if !ok {
-			t.Error(fmt.Sprintf("expected bulk protocol, actually %s", actual.ToBytes()))
+			t.Errorf("expected bulk protocol, actually %s", actual.ToBytes())
 			return
 		}
 		val, err := strconv.ParseFloat(string(bulk.Arg), 10)
@@ -316,11 +316,11 @@ func TestGetEX(t *testing.T) {
 	actual = testDB.Exec(nil, utils.ToCmdLine("TTL", key))
 	intResult, ok := actual.(*protocol.IntReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected int protocol, actually %s", actual.ToBytes()))
+		t.Errorf("expected int protocol, actually %s", actual.ToBytes())
 		return
 	}
 	if intResult.Code <= 0 || intResult.Code > 1000 {
-		t.Error(fmt.Sprintf("expected int between [0, 1000], actually %d", intResult.Code))
+		t.Errorf("expected int between [0, 1000], actually %d", intResult.Code)
 		return
 	}
 
@@ -330,11 +330,11 @@ func TestGetEX(t *testing.T) {
 	actual = testDB.Exec(nil, utils.ToCmdLine("TTL", key))
 	intResult, ok = actual.(*protocol.IntReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected int protocol, actually %s", actual.ToBytes()))
+		t.Errorf("expected int protocol, actually %s", actual.ToBytes())
 		return
 	}
 	if intResult.Code != -1 {
-		t.Error(fmt.Sprintf("expected int equals -1, actually %d", intResult.Code))
+		t.Errorf("expected int equals -1, actually %d", intResult.Code)
 		return
 	}
 
@@ -345,11 +345,11 @@ func TestGetEX(t *testing.T) {
 	actual = testDB.Exec(nil, utils.ToCmdLine("TTL", key))
 	intResult, ok = actual.(*protocol.IntReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected int protocol, actually %s", actual.ToBytes()))
+		t.Errorf("expected int protocol, actually %s", actual.ToBytes())
 		return
 	}
 	if intResult.Code <= 0 || intResult.Code > 1000000 {
-		t.Error(fmt.Sprintf("expected int between [0, 1000000], actually %d", intResult.Code))
+		t.Errorf("expected int between [0, 1000000], actually %d", intResult.Code)
 		return
 	}
 }
