@@ -1,7 +1,6 @@
 package database
 
 import (
-	"fmt"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/protocol"
@@ -73,7 +72,7 @@ func TestRename(t *testing.T) {
 	result = testDB.Exec(nil, utils.ToCmdLine("ttl", newKey))
 	intResult, ok := result.(*protocol.IntReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected int protocol, actually %s", result.ToBytes()))
+		t.Errorf("expected int protocol, actually %s", result.ToBytes())
 		return
 	}
 	if intResult.Code <= 0 {
@@ -97,7 +96,7 @@ func TestRenameNx(t *testing.T) {
 	result = testDB.Exec(nil, utils.ToCmdLine("ttl", newKey))
 	intResult, ok := result.(*protocol.IntReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected int protocol, actually %s", result.ToBytes()))
+		t.Errorf("expected int protocol, actually %s", result.ToBytes())
 		return
 	}
 	if intResult.Code <= 0 {
@@ -117,7 +116,7 @@ func TestTTL(t *testing.T) {
 	result = testDB.Exec(nil, utils.ToCmdLine("ttl", key))
 	intResult, ok := result.(*protocol.IntReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected int protocol, actually %s", result.ToBytes()))
+		t.Errorf("expected int protocol, actually %s", result.ToBytes())
 		return
 	}
 	if intResult.Code <= 0 {
@@ -135,7 +134,7 @@ func TestTTL(t *testing.T) {
 	result = testDB.Exec(nil, utils.ToCmdLine("PTTL", key))
 	intResult, ok = result.(*protocol.IntReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected int protocol, actually %s", result.ToBytes()))
+		t.Errorf("expected int protocol, actually %s", result.ToBytes())
 		return
 	}
 	if intResult.Code <= 0 {
@@ -168,7 +167,7 @@ func TestExpireAt(t *testing.T) {
 	result = testDB.Exec(nil, utils.ToCmdLine("ttl", key))
 	intResult, ok := result.(*protocol.IntReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected int protocol, actually %s", result.ToBytes()))
+		t.Errorf("expected int protocol, actually %s", result.ToBytes())
 		return
 	}
 	if intResult.Code <= 0 {
@@ -182,7 +181,7 @@ func TestExpireAt(t *testing.T) {
 	result = testDB.Exec(nil, utils.ToCmdLine("ttl", key))
 	intResult, ok = result.(*protocol.IntReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected int protocol, actually %s", result.ToBytes()))
+		t.Errorf("expected int protocol, actually %s", result.ToBytes())
 		return
 	}
 	if intResult.Code <= 0 {
@@ -210,7 +209,7 @@ func TestExpiredTime(t *testing.T) {
 	result = testDB.Exec(nil, utils.ToCmdLine("ttl", key))
 	intResult, ok := result.(*protocol.IntReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected int protocol, actually %s", result.ToBytes()))
+		t.Errorf("expected int protocol, actually %s", result.ToBytes())
 		return
 	}
 	if intResult.Code < 0 || intResult.Code > 2 {
@@ -221,7 +220,7 @@ func TestExpiredTime(t *testing.T) {
 	asserts.AssertIntReply(t, result, int(time.Now().Add(2*time.Second).Unix()))
 	intResult, ok = result.(*protocol.IntReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected int protocol, actually %s", result.ToBytes()))
+		t.Errorf("expected int protocol, actually %s", result.ToBytes())
 		return
 	}
 	if intResult.Code <= 0 {
@@ -233,7 +232,7 @@ func TestExpiredTime(t *testing.T) {
 	asserts.AssertIntReply(t, result, int(time.Now().Add(2*time.Second).UnixMilli()))
 	intResult, ok = result.(*protocol.IntReply)
 	if !ok {
-		t.Error(fmt.Sprintf("expected int protocol, actually %s", result.ToBytes()))
+		t.Errorf("expected int protocol, actually %s", result.ToBytes())
 		return
 	}
 	if intResult.Code <= 0 {
