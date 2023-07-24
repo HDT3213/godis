@@ -1,6 +1,7 @@
 package dict
 
 import (
+	"github.com/hdt3213/godis/lib/wildcard"
 	"math"
 	"math/rand"
 	"sort"
@@ -434,4 +435,57 @@ func (dict *ConcurrentDict) RWUnLocks(writeKeys []string, readKeys []string) {
 			mu.RUnlock()
 		}
 	}
+}
+
+// ScanKeys iteratively output all keys in the current db
+func (dict *ConcurrentDict) ScanKeys(cursor, count int, matchKey string) ([]string, int) {
+	nextCursor := 0
+	size := dict.Len()
+	result := make([]string, count)
+	r := make(map[string]struct{})
+	if count >= size {
+		return dict.Keys(), nextCursor
+	}
+	remainingKeys := dict.table[cursor:]
+	i := 0
+	for tableK, s := range remainingKeys {
+		s.mutex.RLock()
+		f := func(m map[string]struct{}) bool {
+			defer s.mutex.RUnlock()
+			for key, _ := range s.m {
+				if key != "" {
+					if matchKey != "*" {
+						pattern, err := wildcard.CompilePattern(matchKey)
+						if err != nil {
+							return false
+						}
+						if pattern.IsMatch(key) {
+							m[key] = struct{}{}
+							i++
+						}
+					} else {
+						m[key] = struct{}{}
+						i++
+					}
+				}
+				if count <= i {
+					return false
+				}
+			}
+			return true
+		}
+		nextCursor = tableK + cursor + 1
+		if !f(r) {
+			break
+		}
+	}
+	j := 0
+	for k := range r {
+		result[j] = k
+		j++
+	}
+	if nextCursor >= dict.shardCount {
+		nextCursor = 0
+	}
+	return result, nextCursor
 }

@@ -412,6 +412,91 @@ func execCopy(mdb *Server, conn redis.Connection, args [][]byte) redis.Reply {
 	return protocol.MakeIntReply(1)
 }
 
+// execScan iteratively output all keys in the current db
+func execScan(db *DB, args [][]byte) redis.Reply {
+	argsNum := len(args)
+	if argsNum < 3 && argsNum > 5 {
+		return protocol.MakeArgNumErrReply("scan")
+	}
+
+	if argsNum == 1 {
+		return scanWithArg(db, args, false)
+	} else if argsNum == 3 {
+		firstArg := strings.ToLower(string(args[1]))
+		if firstArg == "match" {
+			return scanWithArg(db, args, true)
+		} else if firstArg == "count" {
+			return scanWithArg(db, args, false)
+		} else {
+			return protocol.MakeSyntaxErrReply()
+		}
+	} else if argsNum == 5 {
+		return scanWithArg(db, args, true)
+	}
+	return protocol.MakeNullBulkReply()
+}
+
+func scanWithArg(db *DB, args [][]byte, match bool) redis.Reply {
+	result := make([]redis.Reply, 2)
+	var m [][]byte
+	var scanReturnKeys []string
+	var nextCursor int
+	cursor, err := strconv.Atoi(string(args[0]))
+	if err != nil {
+		return &protocol.SyntaxErrReply{}
+	}
+
+	if len(args) == 1 {
+		scanReturnKeys, nextCursor = db.data.ScanKeys(cursor, 10, "*")
+	} else if !match {
+		count, err := strconv.Atoi(string(args[2]))
+		if err != nil || count < 0 {
+			return &protocol.SyntaxErrReply{}
+		}
+		scanReturnKeys, nextCursor = db.data.ScanKeys(cursor, count, "*")
+	} else {
+		commandAndArgs := parseScanCommandArgs(args)
+		numOfcommandAndArgs := len(commandAndArgs)
+		if numOfcommandAndArgs == 1 {
+			//if there is only the match parameter, then count defaults to 10
+			scanReturnKeys, nextCursor = db.data.ScanKeys(cursor, 10, commandAndArgs["match"])
+		} else if numOfcommandAndArgs == 2 {
+			count, err := strconv.Atoi(commandAndArgs["count"])
+			if err != nil || count <= 0 {
+				return &protocol.SyntaxErrReply{}
+			}
+			scanReturnKeys, nextCursor = db.data.ScanKeys(cursor, count, commandAndArgs["match"])
+		} else {
+			return &protocol.SyntaxErrReply{}
+		}
+	}
+	nextCursorTobyte := strconv.FormatInt(int64(nextCursor), 10)
+	result[0] = protocol.MakeBulkReply([]byte(nextCursorTobyte))
+	for _, s := range scanReturnKeys {
+		if s != "" {
+			m = append(m, []byte(s))
+		}
+	}
+	result[1] = protocol.MakeMultiBulkReply(m)
+	return protocol.MakeMultiRawReply(result)
+}
+
+// parseScanCommandArgs parse the parameters of the scan args
+func parseScanCommandArgs(args [][]byte) map[string]string {
+	arg := make(map[string]string)
+	argNum := len(args)
+	if argNum == 3 {
+		firstCommand := strings.ToLower(string(args[1]))
+		arg[firstCommand] = string(args[2])
+	} else if argNum == 5 {
+		firstCommand := strings.ToLower(string(args[1]))
+		arg[firstCommand] = string(args[2])
+		secondCommand := strings.ToLower(string(args[3]))
+		arg[secondCommand] = string(args[4])
+	}
+	return arg
+}
+
 func init() {
 	registerCommand("Del", execDel, writeAllKeys, undoDel, -2, flagWrite).
 		attachCommandExtra([]string{redisFlagWrite}, 1, -1, 1)
@@ -442,5 +527,7 @@ func init() {
 	registerCommand("RenameNx", execRenameNx, prepareRename, undoRename, 3, flagReadOnly).
 		attachCommandExtra([]string{redisFlagWrite, redisFlagFast}, 1, 1, 1)
 	registerCommand("Keys", execKeys, noPrepare, nil, 2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagSortForScript}, 1, 1, 1)
+	registerCommand("Scan", execScan, readAllKeys, nil, -2, flagReadOnly).
 		attachCommandExtra([]string{redisFlagReadonly, redisFlagSortForScript}, 1, 1, 1)
 }
