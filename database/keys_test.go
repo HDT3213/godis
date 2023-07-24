@@ -315,3 +315,20 @@ func TestCopy(t *testing.T) {
 	result = testMDB.Exec(conn, utils.ToCmdLine("ttl", destKey))
 	asserts.AssertIntReplyGreaterThan(t, result, 0)
 }
+
+func TestScan(t *testing.T) {
+	testDB.Flush()
+	for i := 0; i < 3; i++ {
+		key := string(rune(i))
+		value := key
+		testDB.Exec(nil, utils.ToCmdLine("set", "a:"+key, value))
+	}
+
+	testDB.Exec(nil, utils.ToCmdLine("scan", "0"))
+	testDB.Exec(nil, utils.ToCmdLine("scan", "0", "match", "a*"))
+	testDB.Exec(nil, utils.ToCmdLine("scan", "0", "match", "b*"))
+	testDB.Exec(nil, utils.ToCmdLine("scan", "0", "match", "*"))
+	testDB.Exec(nil, utils.ToCmdLine("scan", "0", "count", "2"))
+	testDB.Exec(nil, utils.ToCmdLine("scan", "0", "count", "2", "match", "a*"))
+
+}
