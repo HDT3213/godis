@@ -164,7 +164,6 @@ func TestZRangeByScore(t *testing.T) {
 	asserts.AssertMultiBulkReply(t, result, members[20:31])
 	result = testDB.Exec(nil, utils.ToCmdLine("ZRangeByScore", key, min, max, "WithScores"))
 	asserts.AssertMultiBulkReplySize(t, result, 22)
-	result = execZRevRangeByScore(testDB, utils.ToCmdLine(key, max, min))
 	result = testDB.Exec(nil, utils.ToCmdLine("ZRevRangeByScore", key, max, min))
 	asserts.AssertMultiBulkReply(t, result, reverse(members[20:31]))
 
