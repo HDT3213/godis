@@ -56,11 +56,15 @@ func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan
 	errCh := make(chan error, 1)
 	defer close(errCh)
 	go func() {
-		select {
-		case <-closeChan:
-			logger.Info("get exit signal")
-		case er := <-errCh:
-			logger.Info(fmt.Sprintf("accept error: %s", er.Error()))
+	shutdown:
+		for {
+			select {
+			case <-closeChan:
+				logger.Info("get exit signal")
+				break shutdown
+			case er := <-errCh:
+				logger.Error(fmt.Sprintf("accept error: %s", er.Error()))
+			}
 		}
 		logger.Info("shutting down...")
 		_ = listener.Close() // listener.Accept() will return err immediately
