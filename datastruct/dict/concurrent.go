@@ -438,28 +438,32 @@ func (dict *ConcurrentDict) RWUnLocks(writeKeys []string, readKeys []string) {
 }
 
 // ScanKeys iteratively output all keys in the current db
-func (dict *ConcurrentDict) ScanKeys(cursor, count int, matchKey string) ([]string, int) {
+func (dict *ConcurrentDict) ScanKeys(cursor, count int, pattern string) ([]string, int) {
 	nextCursor := 0
+	errReturnCode := -1
 	size := dict.Len()
 	result := make([]string, count)
-	r := make(map[string]struct{})
-	if count >= size {
+	storeScanKeysTemp := make(map[string]struct{})
+	if pattern == "*" && count >= size {
 		return dict.Keys(), nextCursor
 	}
-	remainingKeys := dict.table[cursor:]
+
+	remainingShards := dict.table[cursor:]
+
+	matchKey, err := wildcard.CompilePattern(pattern)
+	if err != nil {
+		return []string{err.Error()}, errReturnCode
+	}
+
 	i := 0
-	for tableK, s := range remainingKeys {
+	for shardIndex, s := range remainingShards {
 		s.mutex.RLock()
 		f := func(m map[string]struct{}) bool {
 			defer s.mutex.RUnlock()
 			for key, _ := range s.m {
 				if key != "" {
-					if matchKey != "*" {
-						pattern, err := wildcard.CompilePattern(matchKey)
-						if err != nil {
-							return false
-						}
-						if pattern.IsMatch(key) {
+					if pattern != "*" {
+						if matchKey.IsMatch(key) {
 							m[key] = struct{}{}
 							i++
 						}
@@ -468,19 +472,19 @@ func (dict *ConcurrentDict) ScanKeys(cursor, count int, matchKey string) ([]stri
 						i++
 					}
 				}
-				if count <= i {
+				if len(m) >= count {
 					return false
 				}
 			}
 			return true
 		}
-		nextCursor = tableK + cursor + 1
-		if !f(r) {
+		nextCursor = shardIndex + cursor + 1
+		if !f(storeScanKeysTemp) {
 			break
 		}
 	}
 	j := 0
-	for k := range r {
+	for k := range storeScanKeysTemp {
 		result[j] = k
 		j++
 	}
