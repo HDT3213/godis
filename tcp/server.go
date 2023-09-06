@@ -27,6 +27,7 @@ type Config struct {
 
 // ClientCounter Record the number of clients in the current Godis server
 var ClientCounter int
+var mu sync.Mutex
 
 // ListenAndServeWithSignal binds port and handle requests, blocking until receive stop signal
 func ListenAndServeWithSignal(cfg *Config, handler tcp.Handler) error {
@@ -66,7 +67,11 @@ func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan
 		_ = listener.Close() // listener.Accept() will return err immediately
 		_ = handler.Close()  // close connections
 	}()
-
+	increment := func() {
+		mu.Lock()
+		defer mu.Unlock()
+		ClientCounter--
+	}
 	ctx := context.Background()
 	var waitDone sync.WaitGroup
 	for {
@@ -87,8 +92,8 @@ func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan
 		waitDone.Add(1)
 		go func() {
 			defer func() {
+				increment()
 				waitDone.Done()
-				ClientCounter--
 			}()
 			handler.Handle(ctx, conn)
 		}()
