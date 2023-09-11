@@ -62,12 +62,14 @@ func NewStandaloneServer() *Server {
 		singleDB := makeDB()
 		singleDB.index = i
 		holder := &atomic.Value{}
+		// set init value
 		holder.Store(singleDB)
 		server.dbSet[i] = holder
 	}
 	server.hub = pubsub.MakeHub()
 	// record aof
 	validAof := false
+	// default value is false
 	if config.Properties.AppendOnly {
 		validAof = fileExists(config.Properties.AppendFilename)
 		aofHandler, err := NewPersister(server,
@@ -77,6 +79,7 @@ func NewStandaloneServer() *Server {
 		}
 		server.bindPersister(aofHandler)
 	}
+	// dbfilename value is test.rdb
 	if config.Properties.RDBFilename != "" && !validAof {
 		// load rdb
 		err := server.loadRdbFile()

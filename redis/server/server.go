@@ -60,6 +60,7 @@ func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 		return
 	}
 
+	// reuse link object in sync.Pool
 	client := connection.NewConn(conn)
 	h.activeConn.Store(client, struct{}{})
 

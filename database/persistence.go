@@ -25,7 +25,7 @@ func (server *Server) loadRdbFile() error {
 	defer func() {
 		_ = rdbFile.Close()
 	}()
-	decoder := rdb.NewDecoder(rdbFile)
+	decoder := rdb.NewDecoder(rdbFile) // 创建一个新的RDB解码器
 	err = server.LoadRDB(decoder)
 	if err != nil {
 		return fmt.Errorf("load rdb file failed " + err.Error())
