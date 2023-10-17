@@ -191,7 +191,6 @@ func TestExpireAt(t *testing.T) {
 }
 
 func TestExpiredTime(t *testing.T) {
-	//测试ExpireTime
 	testDB.Flush()
 	key := utils.RandString(10)
 	value := utils.RandString(10)
@@ -204,6 +203,7 @@ func TestExpiredTime(t *testing.T) {
 	result = testDB.Exec(nil, utils.ToCmdLine("PEXPIRETIME", key))
 	asserts.AssertIntReply(t, result, -1)
 
+	estimateExpireTimestamp := time.Now().Add(2 * time.Second).Unix() // actually expiration may be >= estimateExpireTimestamp
 	testDB.Exec(nil, utils.ToCmdLine("EXPIRE", key, "2"))
 	//tt := time.Now()
 	result = testDB.Exec(nil, utils.ToCmdLine("ttl", key))
@@ -217,25 +217,23 @@ func TestExpiredTime(t *testing.T) {
 		return
 	}
 	result = testDB.Exec(nil, utils.ToCmdLine("EXPIRETIME", key))
-	asserts.AssertIntReply(t, result, int(time.Now().Add(2*time.Second).Unix()))
 	intResult, ok = result.(*protocol.IntReply)
 	if !ok {
 		t.Errorf("expected int protocol, actually %s", result.ToBytes())
 		return
 	}
-	if intResult.Code <= 0 {
+	if intResult.Code < estimateExpireTimestamp {
 		t.Errorf("expected ttl more than 0, actual: %d", intResult.Code)
 		return
 	}
 
 	result = testDB.Exec(nil, utils.ToCmdLine("PEXPIRETIME", key))
-	asserts.AssertIntReply(t, result, int(time.Now().Add(2*time.Second).UnixMilli()))
 	intResult, ok = result.(*protocol.IntReply)
 	if !ok {
 		t.Errorf("expected int protocol, actually %s", result.ToBytes())
 		return
 	}
-	if intResult.Code <= 0 {
+	if intResult.Code < estimateExpireTimestamp*1000 {
 		t.Errorf("expected ttl more than 0, actual: %d", intResult.Code)
 		return
 	}

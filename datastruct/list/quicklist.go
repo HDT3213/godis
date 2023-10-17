@@ -227,10 +227,17 @@ func (iter *iterator) remove() interface{} {
 	} else {
 		// page is empty, update iter.node and iter.offset
 		if iter.node == iter.ql.data.Back() {
-			// removed last element, ql is empty now
-			iter.ql.data.Remove(iter.node)
-			iter.node = nil
-			iter.offset = 0
+			// move iter so iter.atEnd() can be true
+			if prevNode := iter.node.Prev(); prevNode != nil {
+				iter.ql.data.Remove(iter.node)
+				iter.node = prevNode
+				iter.offset = len(prevNode.Value.([]interface{}))
+			} else {
+				// removed last element, ql is empty now
+				iter.ql.data.Remove(iter.node)
+				iter.node = nil
+				iter.offset = 0
+			}
 		} else {
 			nextNode := iter.node.Next()
 			iter.ql.data.Remove(iter.node)

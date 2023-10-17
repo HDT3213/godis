@@ -72,6 +72,12 @@ func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan
 	for {
 		conn, err := listener.Accept()
 		if err != nil {
+			// learn from net/http/serve.go#Serve()
+			if ne, ok := err.(net.Error); ok && ne.Timeout() {
+				logger.Infof("accept occurs temporary error: %v, retry in 5ms", err)
+				time.Sleep(5 * time.Millisecond)
+				continue
+			}
 			errCh <- err
 			break
 		}
