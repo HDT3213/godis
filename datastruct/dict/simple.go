@@ -46,7 +46,7 @@ func (dict *SimpleDict) PutIfAbsent(key string, val interface{}) (result int) {
 	return 1
 }
 
-// PutIfExists puts value if the key is exist and returns the number of inserted key-value
+// PutIfExists puts value if the key is existed and returns the number of inserted key-value
 func (dict *SimpleDict) PutIfExists(key string, val interface{}) (result int) {
 	_, existed := dict.m[key]
 	if existed {
