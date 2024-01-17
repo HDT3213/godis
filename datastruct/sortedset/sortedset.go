@@ -78,7 +78,7 @@ func (sortedSet *SortedSet) GetRank(member string, desc bool) (rank int64) {
 
 // ForEachByRank visits each member which rank within [start, stop), sort by ascending order, rank starts from 0
 func (sortedSet *SortedSet) ForEachByRank(start int64, stop int64, desc bool, consumer func(element *Element) bool) {
-	size := int64(sortedSet.Len())
+	size := sortedSet.Len()
 	if start < 0 || start >= size {
 		panic("illegal start " + strconv.FormatInt(start, 10))
 	}
@@ -91,12 +91,12 @@ func (sortedSet *SortedSet) ForEachByRank(start int64, stop int64, desc bool, co
 	if desc {
 		node = sortedSet.skiplist.tail
 		if start > 0 {
-			node = sortedSet.skiplist.getByRank(int64(size - start))
+			node = sortedSet.skiplist.getByRank(size - start)
 		}
 	} else {
 		node = sortedSet.skiplist.header.level[0].forward
 		if start > 0 {
-			node = sortedSet.skiplist.getByRank(int64(start + 1))
+			node = sortedSet.skiplist.getByRank(start + 1)
 		}
 	}
 

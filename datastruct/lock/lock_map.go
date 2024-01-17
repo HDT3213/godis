@@ -39,7 +39,7 @@ func (locks *Locks) spread(hashCode uint32) uint32 {
 		panic("dict is nil")
 	}
 	tableSize := uint32(len(locks.table))
-	return (tableSize - 1) & uint32(hashCode)
+	return (tableSize - 1) & hashCode
 }
 
 // Lock obtains exclusive lock for writing
