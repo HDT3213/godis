@@ -90,7 +90,7 @@ func (locks *Locks) toLockIndices(keys []string, reverse bool) []uint32 {
 }
 
 // Locks obtains multiple exclusive locks for writing
-// invoking Lock in loop may cause dead lock, please use Locks
+// invoking Lock in loop may cause deadlock, please use Locks
 func (locks *Locks) Locks(keys ...string) {
 	indices := locks.toLockIndices(keys, false)
 	for _, index := range indices {
@@ -100,7 +100,7 @@ func (locks *Locks) Locks(keys ...string) {
 }
 
 // RLocks obtains multiple shared locks for reading
-// invoking RLock in loop may cause dead lock, please use RLocks
+// invoking RLock in loop may cause deadlock, please use RLocks
 func (locks *Locks) RLocks(keys ...string) {
 	indices := locks.toLockIndices(keys, false)
 	for _, index := range indices {
