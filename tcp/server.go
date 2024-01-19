@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -26,7 +27,7 @@ type Config struct {
 }
 
 // ClientCounter Record the number of clients in the current Godis server
-var ClientCounter int
+var ClientCounter int32
 
 // ListenAndServeWithSignal binds port and handle requests, blocking until receive stop signal
 func ListenAndServeWithSignal(cfg *Config, handler tcp.Handler) error {
@@ -88,7 +89,7 @@ func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan
 		go func() {
 			defer func() {
 				waitDone.Done()
-				ClientCounter--
+				atomic.AddInt32(&ClientCounter, -1)
 			}()
 			handler.Handle(ctx, conn)
 		}()
