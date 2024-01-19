@@ -51,3 +51,38 @@ func TestListenAndServe(t *testing.T) {
 	closeChan <- struct{}{}
 	time.Sleep(time.Second)
 }
+
+func TestClientCounter(t *testing.T) {
+	var err error
+	closeChan := make(chan struct{})
+	listener, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	addr := listener.Addr().String()
+	go ListenAndServe(listener, MakeEchoHandler(), closeChan)
+
+	sleepUntil := time.Now().Add(3 * time.Second)
+	subtime := func() time.Duration {
+		return sleepUntil.Sub(time.Now())
+	}
+
+	for i := 0; i < 1000; i++ {
+		go func() {
+			conn, err := net.Dial("tcp", addr)
+			if err != nil {
+				t.Errorf(err.Error())
+			}
+			defer conn.Close()
+
+			time.Sleep(subtime())
+		}()
+		time.Sleep(5 * time.Microsecond)
+	}
+
+	time.Sleep(3 * time.Second)
+	if ClientCounter != 0 {
+		t.Errorf("client counter error: %d", ClientCounter)
+	}
+}
