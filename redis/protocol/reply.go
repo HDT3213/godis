@@ -50,14 +50,34 @@ func MakeMultiBulkReply(args [][]byte) *MultiBulkReply {
 
 // ToBytes marshal redis.Reply
 func (r *MultiBulkReply) ToBytes() []byte {
-	argLen := len(r.Args)
 	var buf bytes.Buffer
-	buf.WriteString("*" + strconv.Itoa(argLen) + CRLF)
+	//Calculate the length of buffer
+	argLen := len(r.Args)
+	bufLen := 1 + len(strconv.Itoa(argLen)) + 2
 	for _, arg := range r.Args {
 		if arg == nil {
-			buf.WriteString("$-1" + CRLF)
+			bufLen += 3 + 2
 		} else {
-			buf.WriteString("$" + strconv.Itoa(len(arg)) + CRLF + string(arg) + CRLF)
+			bufLen += 1 + len(strconv.Itoa(len(arg))) + 2 + len(arg) + 2
+		}
+	}
+	//Allocate memory
+	buf.Grow(bufLen)
+	//Write string step by step,avoid concat strings
+	buf.WriteString("*")
+	buf.WriteString(strconv.Itoa(argLen))
+	buf.WriteString(CRLF)
+	for _, arg := range r.Args {
+		if arg == nil {
+			buf.WriteString("$-1")
+			buf.WriteString(CRLF)
+		} else {
+			buf.WriteString("$")
+			buf.WriteString(strconv.Itoa(len(arg)))
+			buf.WriteString(CRLF)
+			//Write bytes,avoid slice of byte to string(slicebytetostring)
+			buf.Write(arg)
+			buf.WriteString(CRLF)
 		}
 	}
 	return buf.Bytes()
