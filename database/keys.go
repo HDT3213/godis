@@ -10,6 +10,7 @@ import (
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/lib/wildcard"
 	"github.com/hdt3213/godis/redis/protocol"
+	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -274,8 +275,8 @@ func execTTL(db *DB, args [][]byte) redis.Reply {
 		return protocol.MakeIntReply(-1)
 	}
 	expireTime, _ := raw.(time.Time)
-	ttl := expireTime.Sub(time.Now())
-	return protocol.MakeIntReply(int64(ttl / time.Second))
+	ttl := expireTime.Sub(time.Now()).Seconds()
+	return protocol.MakeIntReply(int64(math.Round(ttl)))
 }
 
 // execPTTL returns a key's time to live in milliseconds
@@ -291,8 +292,8 @@ func execPTTL(db *DB, args [][]byte) redis.Reply {
 		return protocol.MakeIntReply(-1)
 	}
 	expireTime, _ := raw.(time.Time)
-	ttl := expireTime.Sub(time.Now())
-	return protocol.MakeIntReply(int64(ttl / time.Millisecond))
+	ttl := expireTime.Sub(time.Now()).Milliseconds()
+	return protocol.MakeIntReply(int64(math.Round(float64(ttl))))
 }
 
 // execPersist removes expiration from a key
