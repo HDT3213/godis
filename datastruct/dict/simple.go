@@ -120,3 +120,25 @@ func (dict *SimpleDict) RandomDistinctKeys(limit int) []string {
 func (dict *SimpleDict) Clear() {
 	*dict = *MakeSimple()
 }
+
+// ScanKeys randomly returns keys of the given number, may contain duplicated key
+func (dict *SimpleDict) ScanKeys(cursor, count int, matchKey string) ([]string, int) {
+	nextCursor := 0
+	size := dict.Len()
+	if count >= size {
+		return dict.Keys(), nextCursor
+	}
+
+	if count == 0 {
+		count = 10
+	}
+
+	result := make([]string, count)
+	for i := cursor; i < count; i++ {
+		for k := range dict.m {
+			result[i] = k
+		}
+	}
+
+	return result, nextCursor
+}

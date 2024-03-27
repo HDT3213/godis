@@ -2,6 +2,7 @@ package dict
 
 import (
 	"github.com/hdt3213/godis/lib/utils"
+	"github.com/hdt3213/godis/lib/wildcard"
 	"sort"
 	"testing"
 )
@@ -52,4 +53,32 @@ func TestSimpleDict_PutIfExists(t *testing.T) {
 		t.Error("wrong value")
 		return
 	}
+}
+
+func TestSimpleDict_ScanKeys(t *testing.T) {
+	count := 1
+	d := MakeSimple()
+	for i := 0; i < 5; i++ {
+		value := utils.RandString(5)
+		key := "k" + value
+		ret := d.PutIfExists(key, value)
+		if ret != 0 {
+			t.Error("expect 0")
+			return
+		}
+	}
+	result, _ := d.ScanKeys(0, count, "k*")
+
+	pattern, err := wildcard.CompilePattern("k*")
+	if err != nil {
+		t.Error(err)
+		return
+	}
+
+	for _, s := range result {
+		if !pattern.IsMatch(s) {
+			t.Error("Scan command execution error")
+		}
+	}
+
 }

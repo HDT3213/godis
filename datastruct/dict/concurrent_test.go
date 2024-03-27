@@ -465,7 +465,7 @@ func TestConcurrentRemoveWithLock(t *testing.T) {
 	}
 }
 
-//change t.Error remove->forEach
+// change t.Error remove->forEach
 func TestConcurrentForEach(t *testing.T) {
 	d := MakeConcurrent(0)
 	size := 100
@@ -522,5 +522,33 @@ func TestConcurrentDict_Keys(t *testing.T) {
 	}
 	if len(d.Keys()) != size {
 		t.Errorf("expect %d keys, actual: %d", size, len(d.Keys()))
+	}
+}
+
+func TestScanKeys(t *testing.T) {
+	d := MakeConcurrent(0)
+	count := 100
+	for i := 0; i < count; i++ {
+		key := "k" + strconv.Itoa(i)
+		d.Put(key, i)
+	}
+	cursor := 0
+	matchKey := "*"
+	c := 20
+	returnKeys, _ := d.ScanKeys(cursor, c, matchKey)
+	if len(returnKeys) != c {
+		t.Errorf("scan command count error: %d, should be %d ", len(returnKeys), c)
+	}
+	matchKey = "k*"
+	returnKeys, _ = d.ScanKeys(cursor, c, matchKey)
+	if len(returnKeys) != c {
+		t.Errorf("scan command count error: %d, should be %d ", len(returnKeys), c)
+	}
+	matchKey = "s*"
+	returnKeys, _ = d.ScanKeys(cursor, c, matchKey)
+	for _, key := range returnKeys {
+		if key != "" {
+			t.Errorf("returnKeys should be empty")
+		}
 	}
 }
