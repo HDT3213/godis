@@ -186,7 +186,7 @@ func (dict *ConcurrentDict) PutIfAbsentWithLock(key string, val interface{}) (re
 	return 1
 }
 
-// PutIfExists puts value if the key is exist and returns the number of inserted key-value
+// PutIfExists puts value if the key is existed and returns the number of inserted key-value
 func (dict *ConcurrentDict) PutIfExists(key string, val interface{}) (result int) {
 	if dict == nil {
 		panic("dict is nil")
@@ -263,7 +263,7 @@ func (dict *ConcurrentDict) decreaseCount() int32 {
 }
 
 // ForEach traversal the dict
-// it may not visits new entry inserted during traversal
+// it may not visit new entry inserted during traversal
 func (dict *ConcurrentDict) ForEach(consumer Consumer) {
 	if dict == nil {
 		panic("dict is nil")
