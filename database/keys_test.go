@@ -313,3 +313,39 @@ func TestCopy(t *testing.T) {
 	result = testMDB.Exec(conn, utils.ToCmdLine("ttl", destKey))
 	asserts.AssertIntReplyGreaterThan(t, result, 0)
 }
+
+func TestScan(t *testing.T) {
+	testDB.Flush()
+	for i := 0; i < 3; i++ {
+		key := string(rune(i))
+		value := key
+		testDB.Exec(nil, utils.ToCmdLine("set", "a:"+key, value))
+	}
+
+	result := testDB.Exec(nil, utils.ToCmdLine("scan", "0"))
+	expected := "*2\r\n$1\r\n0\r\n*3\r\n$3\r\na:\u0000\r\n$3\r\na:\u0001\r\n$3\r\na:\u0002\r\n"
+	if string(result.ToBytes()) != expected {
+		t.Error("test failed")
+	}
+	result = testDB.Exec(nil, utils.ToCmdLine("scan", "0", "match", "a*"))
+	if string(result.ToBytes()) != expected {
+		t.Error("test failed")
+	}
+	testDB.Exec(nil, utils.ToCmdLine("scan", "0", "match", "*"))
+	result = testDB.Exec(nil, utils.ToCmdLine("scan", "0", "count", "2"))
+	expected = "*2\r\n$5\r\n28194\r\n*2\r\n$3\r\na:\u0000\r\n$3\r\na:\u0001\r\n"
+	if string(result.ToBytes()) != expected {
+		t.Error("test failed")
+	}
+	result = testDB.Exec(nil, utils.ToCmdLine("scan", "0", "count", "2", "match", "a*"))
+	if string(result.ToBytes()) != expected {
+		t.Error("test failed")
+	}
+
+	result = testDB.Exec(nil, utils.ToCmdLine("scan", "0", "match", "b*"))
+	expected = "*2\r\n$1\r\n0\r\n*0\r\n"
+	if string(result.ToBytes()) != expected {
+		t.Error("test failed")
+	}
+
+}

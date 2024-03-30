@@ -1,6 +1,7 @@
 package dict
 
 import (
+	"github.com/hdt3213/godis/lib/wildcard"
 	"math"
 	"math/rand"
 	"sort"
@@ -434,4 +435,61 @@ func (dict *ConcurrentDict) RWUnLocks(writeKeys []string, readKeys []string) {
 			mu.RUnlock()
 		}
 	}
+}
+
+// ScanKeys iteratively output all keys in the current db
+func (dict *ConcurrentDict) ScanKeys(cursor, count int, pattern string) ([]string, int) {
+	nextCursor := 0
+	errReturnCode := -1
+	size := dict.Len()
+	result := make([]string, count)
+	storeScanKeysTemp := make(map[string]struct{})
+	if pattern == "*" && count >= size {
+		return dict.Keys(), nextCursor
+	}
+
+	remainingShards := dict.table[cursor:]
+
+	matchKey, err := wildcard.CompilePattern(pattern)
+	if err != nil {
+		return []string{err.Error()}, errReturnCode
+	}
+
+	i := 0
+	for shardIndex, s := range remainingShards {
+		s.mutex.RLock()
+		f := func(m map[string]struct{}) bool {
+			defer s.mutex.RUnlock()
+			for key, _ := range s.m {
+				if key != "" {
+					if pattern != "*" {
+						if matchKey.IsMatch(key) {
+							m[key] = struct{}{}
+							i++
+						}
+					} else {
+						m[key] = struct{}{}
+						i++
+					}
+				}
+				if len(m) >= count {
+					return false
+				}
+			}
+			return true
+		}
+		nextCursor = shardIndex + cursor + 1
+		if !f(storeScanKeysTemp) {
+			break
+		}
+	}
+	j := 0
+	for k := range storeScanKeysTemp {
+		result[j] = k
+		j++
+	}
+	if nextCursor >= dict.shardCount {
+		nextCursor = 0
+	}
+	return result, nextCursor
 }

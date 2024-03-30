@@ -16,4 +16,5 @@ type Dict interface {
 	RandomKeys(limit int) []string
 	RandomDistinctKeys(limit int) []string
 	Clear()
+	ScanKeys(cursor, count int, matchKey string) ([]string, int)
 }
