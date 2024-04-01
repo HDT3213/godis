@@ -84,3 +84,19 @@ func ConvertRange(start int64, end int64, size int64) (int, int) {
 	}
 	return int(start), int(end)
 }
+
+// GetItoaLen Calculates the length of an integer after it is converted to a string
+func GetItoaLen(i int) int {
+	strLen := 0
+	if i < 0 {
+		strLen++
+	}
+	for {
+		strLen++
+		i = i / 10
+		if i == 0 {
+			break
+		}
+	}
+	return strLen
+}

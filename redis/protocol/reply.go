@@ -3,6 +3,7 @@ package protocol
 import (
 	"bytes"
 	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/lib/utils"
 	"strconv"
 )
 
@@ -53,12 +54,12 @@ func (r *MultiBulkReply) ToBytes() []byte {
 	var buf bytes.Buffer
 	//Calculate the length of buffer
 	argLen := len(r.Args)
-	bufLen := 1 + len(strconv.Itoa(argLen)) + 2
+	bufLen := 1 + utils.GetItoaLen(argLen) + 2
 	for _, arg := range r.Args {
 		if arg == nil {
 			bufLen += 3 + 2
 		} else {
-			bufLen += 1 + len(strconv.Itoa(len(arg))) + 2 + len(arg) + 2
+			bufLen += 1 + utils.GetItoaLen(len(arg)) + 2 + len(arg) + 2
 		}
 	}
 	//Allocate memory
