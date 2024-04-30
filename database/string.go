@@ -831,8 +831,7 @@ func getRandomKey(db *DB, args [][]byte) redis.Reply {
 	if len(k) == 0 {
 		return &protocol.NullBulkReply{}
 	}
-	var key []byte
-	return protocol.MakeBulkReply(strconv.AppendQuote(key, k[0]))
+	return protocol.MakeBulkReply([]byte(k[0]))
 }
 
 func init() {
