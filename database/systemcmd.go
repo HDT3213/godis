@@ -74,6 +74,11 @@ func isAuthenticated(c redis.Connection) bool {
 	return c.GetPassword() == config.Properties.RequirePass
 }
 
+func DbSize(c redis.Connection, db *Server) redis.Reply {
+	keys, _ := db.GetDBSize(c.GetDBIndex())
+	return protocol.MakeIntReply(int64(keys))
+}
+
 func GenGodisInfoString(section string, db *Server) []byte {
 	startUpTimeFromNow := getGodisRuninngTime()
 	switch section {
