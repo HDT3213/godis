@@ -5,7 +5,9 @@ import (
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/protocol/asserts"
+	"math/rand"
 	"testing"
+	"time"
 )
 
 func TestPing(t *testing.T) {
@@ -58,4 +60,17 @@ func TestInfo(t *testing.T) {
 	asserts.AssertErrReply(t, ret, "ERR wrong number of arguments for 'info' command")
 	ret = testServer.Exec(c, utils.ToCmdLine("INFO", "abc"))
 	asserts.AssertErrReply(t, ret, "Invalid section for 'info' command")
+}
+
+func TestDbSize(t *testing.T) {
+	c := connection.NewFakeConn()
+	rand.NewSource(time.Now().UnixNano())
+	randomNum := rand.Intn(10) + 1
+	for i := 0; i < randomNum; i++ {
+		key := utils.RandString(10)
+		value := utils.RandString(10)
+		testServer.Exec(c, utils.ToCmdLine("SET", key, value))
+	}
+	ret := testServer.Exec(c, utils.ToCmdLine("dbsize"))
+	asserts.AssertIntReply(t, ret, randomNum)
 }

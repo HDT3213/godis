@@ -19,6 +19,7 @@
     - keys
     - bgrewriteaof
     - copy
+    - dbsize
 - String
     - set
     - setnx

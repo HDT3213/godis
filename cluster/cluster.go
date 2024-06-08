@@ -155,6 +155,12 @@ func (cluster *Cluster) Exec(c redis.Connection, cmdLine [][]byte) (result redis
 		return protocol.MakeErrReply("NOAUTH Authentication required")
 	}
 
+	if cmdName == "dbsize" {
+		if ser, ok := cluster.db.(*database2.Server); ok {
+			return database2.DbSize(c, ser)
+		}
+	}
+
 	if cmdName == "multi" {
 		if len(cmdLine) != 1 {
 			return protocol.MakeArgNumErrReply(cmdName)

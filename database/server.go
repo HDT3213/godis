@@ -117,6 +117,9 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 	if cmdName == "info" {
 		return Info(server, cmdLine[1:])
 	}
+	if cmdName == "dbsize" {
+		return DbSize(c, server)
+	}
 	if cmdName == "slaveof" {
 		if c != nil && c.InMultiState() {
 			return protocol.MakeErrReply("cannot use slave of database within multi")
