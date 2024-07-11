@@ -4,13 +4,14 @@ import (
 	"bufio"
 	"bytes"
 	"errors"
-	"github.com/hdt3213/godis/interface/redis"
-	"github.com/hdt3213/godis/lib/logger"
-	"github.com/hdt3213/godis/redis/protocol"
 	"io"
 	"runtime/debug"
 	"strconv"
 	"strings"
+
+	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/lib/logger"
+	"github.com/hdt3213/godis/redis/protocol"
 )
 
 // Payload stores redis.Reply or error
@@ -155,6 +156,9 @@ func parseBulkString(header []byte, reader *bufio.Reader, ch chan<- *Payload) er
 // there is no CRLF between RDB and following AOF, therefore it needs to be treated differently
 func parseRDBBulkString(reader *bufio.Reader, ch chan<- *Payload) error {
 	header, err := reader.ReadBytes('\n')
+	if err != nil {
+		return errors.New("failed to read bytes")
+	}
 	header = bytes.TrimSuffix(header, []byte{'\r', '\n'})
 	if len(header) == 0 {
 		return errors.New("empty header")
