@@ -1,6 +1,7 @@
 package dict
 
 import (
+	"github.com/hdt3213/godis/lib/wildcard"
 	"math"
 	"math/rand"
 	"sort"
@@ -434,4 +435,48 @@ func (dict *ConcurrentDict) RWUnLocks(writeKeys []string, readKeys []string) {
 			mu.RUnlock()
 		}
 	}
+}
+
+func stringsToBytes(strSlice []string) [][]byte {
+	byteSlice := make([][]byte, len(strSlice))
+	for i, str := range strSlice {
+		byteSlice[i] = []byte(str)
+	}
+	return byteSlice
+}
+
+func (dict *ConcurrentDict) DictScan(cursor int, count int, pattern string) ([][]byte, int) {
+	size := dict.Len()
+	result := make([][]byte, 0)
+
+	if pattern == "*" && count >= size {
+		return stringsToBytes(dict.Keys()), 0
+	}
+
+	matchKey, err := wildcard.CompilePattern(pattern)
+	if err != nil {
+		return result, -1
+	}
+
+	shardCount := len(dict.table)
+	shardIndex := cursor
+
+	for shardIndex < shardCount {
+		shard := dict.table[shardIndex]
+		shard.mutex.RLock()
+		if len(result)+len(shard.m) > count && shardIndex > cursor {
+			shard.mutex.RUnlock()
+			return result, shardIndex
+		}
+
+		for key := range shard.m {
+			if pattern == "*" || matchKey.IsMatch(key) {
+				result = append(result, []byte(key))
+			}
+		}
+		shard.mutex.RUnlock()
+		shardIndex++
+	}
+
+	return result, 0
 }

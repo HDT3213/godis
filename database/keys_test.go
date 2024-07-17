@@ -313,3 +313,85 @@ func TestCopy(t *testing.T) {
 	result = testMDB.Exec(conn, utils.ToCmdLine("ttl", destKey))
 	asserts.AssertIntReplyGreaterThan(t, result, 0)
 }
+
+func TestScan(t *testing.T) {
+	testDB.Flush()
+	for i := 0; i < 3; i++ {
+		key := string(rune(i))
+		value := key
+		testDB.Exec(nil, utils.ToCmdLine("set", "a:"+key, value))
+	}
+	for i := 0; i < 3; i++ {
+		key := string(rune(i))
+		value := key
+		testDB.Exec(nil, utils.ToCmdLine("set", "b:"+key, value))
+	}
+
+	// test scan 0 when keys < 10
+	result := testDB.Exec(nil, utils.ToCmdLine("scan", "0"))
+	cursorStr := string(result.(*protocol.MultiRawReply).Replies[0].(*protocol.BulkReply).Arg)
+	cursor, err := strconv.Atoi(cursorStr)
+	if err == nil {
+		if cursor != 0 {
+			t.Errorf("expect cursor 0, actually %d", cursor)
+			return
+		}
+	} else {
+		t.Errorf("get scan result error")
+		return
+	}
+
+	// test scan 0 match a*
+	result = testDB.Exec(nil, utils.ToCmdLine("scan", "0", "match", "a*"))
+	returnKeys := result.(*protocol.MultiRawReply).Replies[1].(*protocol.MultiBulkReply).Args
+	for i := range returnKeys {
+		key := string(returnKeys[i])
+		if key[0] != 'a' {
+			t.Errorf("The key %s should match a*", key)
+			return
+		}
+	}
+
+	// test scan 0 type string
+	testDB.Exec(nil, utils.ToCmdLine("hset", "hashkey", "hashkey", "1"))
+	result = testDB.Exec(nil, utils.ToCmdLine("scan", "0", "type", "string"))
+	returnKeys = result.(*protocol.MultiRawReply).Replies[1].(*protocol.MultiBulkReply).Args
+	for i := range returnKeys {
+		key := string(returnKeys[i])
+		if key == "hashkey" {
+			t.Errorf("expect type string, found hash")
+			return
+		}
+	}
+
+	// test returned cursor
+	testDB.Flush()
+	for i := 0; i < 100; i++ {
+		key := string(rune(i))
+		value := key
+		testDB.Exec(nil, utils.ToCmdLine("set", "a"+key, value))
+	}
+	cursor = 0
+	resultByte := make([][]byte, 0)
+	for {
+		scanCursor := strconv.Itoa(cursor)
+		result = testDB.Exec(nil, utils.ToCmdLine("scan", scanCursor, "count", "20"))
+		cursorStr := string(result.(*protocol.MultiRawReply).Replies[0].(*protocol.BulkReply).Arg)
+		returnKeys = result.(*protocol.MultiRawReply).Replies[1].(*protocol.MultiBulkReply).Args
+		resultByte = append(resultByte, returnKeys...)
+		cursor, err = strconv.Atoi(cursorStr)
+		if err == nil {
+			if cursor == 0 {
+				break
+			}
+		} else {
+			t.Errorf("get scan result error")
+			return
+		}
+	}
+	resultByte = utils.RemoveDuplicates(resultByte)
+	if len(resultByte) != 100 {
+		t.Errorf("expect result num 100, actually %d", len(resultByte))
+		return
+	}
+}

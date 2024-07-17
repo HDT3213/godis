@@ -59,26 +59,36 @@ func execFlushDB(db *DB, args [][]byte) redis.Reply {
 	return &protocol.OkReply{}
 }
 
-// execType returns the type of entity, including: string, list, hash, set and zset
-func execType(db *DB, args [][]byte) redis.Reply {
-	key := string(args[0])
+// returns the type of entity, including: string, list, hash, set and zset
+func getType(db *DB, key string) string {
 	entity, exists := db.GetEntity(key)
 	if !exists {
-		return protocol.MakeStatusReply("none")
+		return "none"
 	}
 	switch entity.Data.(type) {
 	case []byte:
-		return protocol.MakeStatusReply("string")
+		return "string"
 	case list.List:
-		return protocol.MakeStatusReply("list")
+		return "list"
 	case dict.Dict:
-		return protocol.MakeStatusReply("hash")
+		return "hash"
 	case *set.Set:
-		return protocol.MakeStatusReply("set")
+		return "set"
 	case *sortedset.SortedSet:
-		return protocol.MakeStatusReply("zset")
+		return "zset"
 	}
-	return &protocol.UnknownErrReply{}
+	return ""
+}
+
+// execType returns the type of entity, including: string, list, hash, set and zset
+func execType(db *DB, args [][]byte) redis.Reply {
+	key := string(args[0])
+	result := getType(db, key)
+	if len(result) > 0 {
+		return protocol.MakeStatusReply(result)
+	} else {
+		return &protocol.UnknownErrReply{}
+	}
 }
 
 func prepareRename(args [][]byte) ([]string, []string) {
@@ -413,6 +423,57 @@ func execCopy(mdb *Server, conn redis.Connection, args [][]byte) redis.Reply {
 	return protocol.MakeIntReply(1)
 }
 
+// execScan return the result of the scan
+func execScan(db *DB, args [][]byte) redis.Reply {
+	var count int = 10
+	var pattern string = "*"
+	var scanType string = ""
+	if len(args) > 1 {
+		for i := 1; i < len(args); i++ {
+			arg := strings.ToLower(string(args[i]))
+			if arg == "count" {
+				count0, err := strconv.Atoi(string(args[i+1]))
+				if err != nil {
+					return &protocol.SyntaxErrReply{}
+				}
+				count = count0
+				i++
+			} else if arg == "match" {
+				pattern = string(args[i+1])
+				i++
+			} else if arg == "type" {
+				scanType = strings.ToLower(string(args[i+1]))
+				i++
+			} else {
+				return &protocol.SyntaxErrReply{}
+			}
+		}
+	}
+	cursor, err := strconv.Atoi(string(args[0]))
+	if err != nil {
+		return protocol.MakeErrReply("ERR invalid cursor")
+	}
+	keysReply, nextCursor := db.data.DictScan(cursor, count, pattern)
+	if nextCursor < 0 {
+		return protocol.MakeErrReply("Invalid argument")
+	}
+
+	if len(scanType) != 0 {
+		for i := 0; i < len(keysReply); {
+			if getType(db, string(keysReply[i])) != scanType {
+				keysReply = append(keysReply[:i], keysReply[i+1:]...)
+			} else {
+				i++
+			}
+		}
+	}
+	result := make([]redis.Reply, 2)
+	result[0] = protocol.MakeBulkReply([]byte(strconv.FormatInt(int64(nextCursor), 10)))
+	result[1] = protocol.MakeMultiBulkReply(keysReply)
+
+	return protocol.MakeMultiRawReply(result)
+}
+
 func init() {
 	registerCommand("Del", execDel, writeAllKeys, undoDel, -2, flagWrite).
 		attachCommandExtra([]string{redisFlagWrite}, 1, -1, 1)
@@ -443,5 +504,7 @@ func init() {
 	registerCommand("RenameNx", execRenameNx, prepareRename, undoRename, 3, flagReadOnly).
 		attachCommandExtra([]string{redisFlagWrite, redisFlagFast}, 1, 1, 1)
 	registerCommand("Keys", execKeys, noPrepare, nil, 2, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly, redisFlagSortForScript}, 1, 1, 1)
+	registerCommand("Scan", execScan, readAllKeys, nil, -2, flagReadOnly).
 		attachCommandExtra([]string{redisFlagReadonly, redisFlagSortForScript}, 1, 1, 1)
 }
