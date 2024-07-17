@@ -84,3 +84,20 @@ func ConvertRange(start int64, end int64, size int64) (int, int) {
 	}
 	return int(start), int(end)
 }
+
+// RemoveDuplicates removes duplicate byte slices from a 2D byte slice
+func RemoveDuplicates(input [][]byte) [][]byte {
+	uniqueMap := make(map[string]struct{})
+	var result [][]byte
+
+	for _, item := range input {
+		// Use bytes.Buffer to convert byte slice to string
+		key := string(item)
+		if _, exists := uniqueMap[key]; !exists {
+			uniqueMap[key] = struct{}{}
+			result = append(result, item)
+		}
+	}
+
+	return result
+}

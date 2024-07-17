@@ -465,7 +465,7 @@ func TestConcurrentRemoveWithLock(t *testing.T) {
 	}
 }
 
-//change t.Error remove->forEach
+// change t.Error remove->forEach
 func TestConcurrentForEach(t *testing.T) {
 	d := MakeConcurrent(0)
 	size := 100
@@ -522,5 +522,53 @@ func TestConcurrentDict_Keys(t *testing.T) {
 	}
 	if len(d.Keys()) != size {
 		t.Errorf("expect %d keys, actual: %d", size, len(d.Keys()))
+	}
+}
+
+func TestDictScan(t *testing.T) {
+	d := MakeConcurrent(0)
+	count := 100
+	for i := 0; i < count; i++ {
+		key := "kkk" + strconv.Itoa(i)
+		d.Put(key, i)
+	}
+	for i := 0; i < count; i++ {
+		key := "key" + strconv.Itoa(i)
+		d.Put(key, i)
+	}
+	cursor := 0
+	matchKey := "*"
+	c := 20
+	result := make([][]byte, 0)
+	var returnKeys [][]byte
+	for {
+		returnKeys, cursor = d.DictScan(cursor, c, matchKey)
+		result = append(result, returnKeys...)
+		if cursor == 0 {
+			break
+		}
+	}
+	result = utils.RemoveDuplicates(result)
+	if len(result) != count*2 {
+		t.Errorf("scan command result number error: %d, should be %d ", len(result), count*2)
+	}
+	matchKey = "key*"
+	cursor = 0
+	mresult := make([][]byte, 0)
+	for {
+		returnKeys, cursor = d.DictScan(cursor, c, matchKey)
+		mresult = append(mresult, returnKeys...)
+		if cursor == 0 {
+			break
+		}
+	}
+	mresult = utils.RemoveDuplicates(mresult)
+	if len(mresult) != count {
+		t.Errorf("scan command result number error: %d, should be %d ", len(mresult), count)
+	}
+	matchKey = "no*"
+	returnKeys, _ = d.DictScan(cursor, c, matchKey)
+	if len(returnKeys) != 0 {
+		t.Errorf("returnKeys should be empty")
 	}
 }

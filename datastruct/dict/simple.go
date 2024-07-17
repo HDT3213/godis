@@ -120,3 +120,7 @@ func (dict *SimpleDict) RandomDistinctKeys(limit int) []string {
 func (dict *SimpleDict) Clear() {
 	*dict = *MakeSimple()
 }
+
+func (dict *SimpleDict) DictScan(cursor int, count int, pattern string) ([][]byte, int) {
+	return stringsToBytes(dict.Keys()), 0
+}
