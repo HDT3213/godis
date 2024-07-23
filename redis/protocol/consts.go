@@ -2,8 +2,11 @@ package protocol
 
 import (
 	"bytes"
+
 	"github.com/hdt3213/godis/interface/redis"
 )
+
+//这个文件定义了一些固定的Redis响应类型，如OK、PONG以及其他响应格式。
 
 // PongReply is +PONG
 type PongReply struct{}

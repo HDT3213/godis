@@ -20,40 +20,41 @@ var banner = `
 `
 
 var defaultProperties = &config.ServerProperties{
-	Bind:           "0.0.0.0",
-	Port:           6399,
-	AppendOnly:     false,
-	AppendFilename: "",
-	MaxClients:     1000,
-	RunID:          utils.RandString(40),
+	Bind:           "0.0.0.0",            // 默认绑定的IP地址
+	Port:           6399,                 // 默认端口号
+	AppendOnly:     false,                // 是否开启追加模式
+	AppendFilename: "",                   // 追加模式的文件名
+	MaxClients:     1000,                 // 最大客户端连接数
+	RunID:          utils.RandString(40), // 生成一个随机的运行ID
 }
 
+// fileExists 检查文件是否存在且不是目录
 func fileExists(filename string) bool {
 	info, err := os.Stat(filename)
 	return err == nil && !info.IsDir()
 }
 
 func main() {
-	print(banner)
-	logger.Setup(&logger.Settings{
+	print(banner)                  // 打印启动标志
+	logger.Setup(&logger.Settings{ // 设置日志文件配置
 		Path:       "logs",
 		Name:       "godis",
 		Ext:        "log",
 		TimeFormat: "2006-01-02",
 	})
-	configFilename := os.Getenv("CONFIG")
+	configFilename := os.Getenv("CONFIG") // 获取环境变量中的配置文件名
 	if configFilename == "" {
-		if fileExists("redis.conf") {
-			config.SetupConfig("redis.conf")
+		if fileExists("redis.conf") { // 检查默认配置文件是否存在
+			config.SetupConfig("redis.conf") // 使用默认配置文件
 		} else {
-			config.Properties = defaultProperties
+			config.Properties = defaultProperties // 使用内置默认配置
 		}
 	} else {
-		config.SetupConfig(configFilename)
+		config.SetupConfig(configFilename) // 使用环境变量指定的配置文件
 	}
-	err := tcp.ListenAndServeWithSignal(&tcp.Config{
+	err := tcp.ListenAndServeWithSignal(&tcp.Config{ // 启动TCP服务器
 		Address: fmt.Sprintf("%s:%d", config.Properties.Bind, config.Properties.Port),
-	}, RedisServer.MakeHandler())
+	}, RedisServer.MakeHandler()) //调用我们的RedisServer.MakeHandler
 	if err != nil {
 		logger.Error(err)
 	}

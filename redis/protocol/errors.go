@@ -1,5 +1,7 @@
 package protocol
 
+// 这个文件定义了与错误处理相关的几种特殊的Redis响应类型。每种类型都具备将自身转换为Redis协议字节序列的能力。
+
 // UnknownErrReply represents UnknownErr
 type UnknownErrReply struct{}
 
