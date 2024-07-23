@@ -1,12 +1,12 @@
 package database
 
 import (
+	"github.com/hdt3213/godis/lib/utils"
+	"github.com/hdt3213/godis/redis/protocol"
+	"github.com/hdt3213/godis/redis/protocol/asserts"
 	"math/rand"
 	"strconv"
 	"testing"
-
-	"github.com/hdt3213/godis/lib/utils"
-	"github.com/hdt3213/godis/redis/protocol/asserts"
 )
 
 func TestZAdd(t *testing.T) {
@@ -761,4 +761,50 @@ func TestZRevRangeByLex(t *testing.T) {
 	// case30
 	result30 := testDB.Exec(nil, utils.ToCmdLine("ZRevRangeByLex", key, "+", "-", "limit", "2", "2"))
 	asserts.AssertMultiBulkReply(t, result30, []string{"c", "b"})
+}
+
+func TestZScan(t *testing.T) {
+	testDB.Flush()
+	zsetKey := "zsetkey"
+	expectKeyScore := make(map[string]float64)
+	for i := 0; i < 3; i++ {
+		key := string(rune(i))
+		expectKeyScore[key] = float64(i)
+		testDB.Exec(nil, utils.ToCmdLine("zadd", zsetKey, strconv.FormatInt(int64(i), 10), "a"+key))
+	}
+	for i := 0; i < 3; i++ {
+		key := string(rune(i))
+		expectKeyScore[key] = float64(i + 3)
+		testDB.Exec(nil, utils.ToCmdLine("zadd", zsetKey, strconv.FormatInt(int64(i), 10), "b"+key))
+	}
+
+	result := testDB.Exec(nil, utils.ToCmdLine("zscan", zsetKey, "0", "count", "10"))
+	cursorStr := string(result.(*protocol.MultiRawReply).Replies[0].(*protocol.BulkReply).Arg)
+	cursor, err := strconv.Atoi(cursorStr)
+	if err == nil {
+		if cursor != 0 {
+			t.Errorf("expect cursor 0, actually %d", cursor)
+			return
+		}
+	} else {
+		t.Errorf("get scan result error")
+		return
+	}
+
+	// test zscan 0 match a*
+	result = testDB.Exec(nil, utils.ToCmdLine("zscan", zsetKey, "0", "match", "a*"))
+	returnKeys := result.(*protocol.MultiRawReply).Replies[1].(*protocol.MultiBulkReply).Args
+	i := 0
+	for i < len(returnKeys) {
+		if i%2 != 0 {
+			i++
+			continue // pass score
+		}
+		key := string(returnKeys[i])
+		i++
+		if key[0] != 'a' {
+			t.Errorf("The key %s should match a*", key)
+			return
+		}
+	}
 }

@@ -1,15 +1,14 @@
 package database
 
 import (
-	"math"
-	"strconv"
-	"strings"
-
 	SortedSet "github.com/hdt3213/godis/datastruct/sortedset"
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
+	"math"
+	"strconv"
+	"strings"
 )
 
 func (db *DB) getAsSortedSet(key string) (*SortedSet.SortedSet, protocol.ErrorReply) {
@@ -796,6 +795,53 @@ func execZRevRangeByLex(db *DB, args [][]byte) redis.Reply {
 	return protocol.MakeMultiBulkReply(result)
 }
 
+func execZScan(db *DB, args [][]byte) redis.Reply {
+	var count int = 10
+	var pattern string = "*"
+	if len(args) > 2 {
+		for i := 2; i < len(args); i++ {
+			arg := strings.ToLower(string(args[i]))
+			if arg == "count" {
+				count0, err := strconv.Atoi(string(args[i+1]))
+				if err != nil {
+					return &protocol.SyntaxErrReply{}
+				}
+				count = count0
+				i++
+			} else if arg == "match" {
+				pattern = string(args[i+1])
+				i++
+			} else {
+				return &protocol.SyntaxErrReply{}
+			}
+		}
+	}
+	key := string(args[0])
+	// get entity
+	set, errReply := db.getAsSortedSet(key)
+	if errReply != nil {
+		return errReply
+	}
+	if set == nil {
+		return &protocol.EmptyMultiBulkReply{}
+	}
+	cursor, err := strconv.Atoi(string(args[1]))
+	if err != nil {
+		return protocol.MakeErrReply("ERR invalid cursor")
+	}
+
+	keysReply, nextCursor := set.ZSetScan(cursor, count, pattern)
+	if nextCursor < 0 {
+		return protocol.MakeErrReply("Invalid argument")
+	}
+
+	result := make([]redis.Reply, 2)
+	result[0] = protocol.MakeBulkReply([]byte(strconv.FormatInt(int64(nextCursor), 10)))
+	result[1] = protocol.MakeMultiBulkReply(keysReply)
+
+	return protocol.MakeMultiRawReply(result)
+}
+
 func init() {
 	registerCommand("ZAdd", execZAdd, writeFirstKey, undoZAdd, -4, flagWrite).
 		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM, redisFlagFast}, 1, 1, 1)
@@ -834,5 +880,7 @@ func init() {
 	registerCommand("ZRemRangeByLex", execZRemRangeByLex, writeFirstKey, rollbackFirstKey, 4, flagWrite).
 		attachCommandExtra([]string{redisFlagWrite}, 1, 1, 1)
 	registerCommand("ZRevRangeByLex", execZRevRangeByLex, readFirstKey, nil, -4, flagReadOnly).
+		attachCommandExtra([]string{redisFlagReadonly}, 1, 1, 1)
+	registerCommand("ZScan", execZScan, readFirstKey, nil, -2, flagReadOnly).
 		attachCommandExtra([]string{redisFlagReadonly}, 1, 1, 1)
 }

@@ -2,6 +2,8 @@ package sortedset
 
 import (
 	"strconv"
+
+	"github.com/hdt3213/godis/lib/wildcard"
 )
 
 // SortedSet is a set which keys sorted by bound score
@@ -235,4 +237,23 @@ func (sortedSet *SortedSet) RemoveByRank(start int64, stop int64) int64 {
 		delete(sortedSet.dict, element.Member)
 	}
 	return int64(len(removed))
+}
+
+func (sortedSet *SortedSet) ZSetScan(cursor int, count int, pattern string) ([][]byte, int) {
+	result := make([][]byte, 0)
+	matchKey, err := wildcard.CompilePattern(pattern)
+	if err != nil {
+		return result, -1
+	}
+	for k := range sortedSet.dict {
+		if pattern == "*" || matchKey.IsMatch(k) {
+			elem, exists := sortedSet.dict[k]
+			if !exists {
+				continue
+			}
+			result = append(result, []byte(k))
+			result = append(result, []byte(strconv.FormatFloat(elem.Score, 'f', 10, 64)))
+		}
+	}
+	return result, 0
 }

@@ -346,3 +346,48 @@ func TestUndoHIncr(t *testing.T) {
 	result := testDB.Exec(nil, utils.ToCmdLine("hget", key, field))
 	asserts.AssertBulkReply(t, result, "1")
 }
+
+func TestHScan(t *testing.T) {
+	testDB.Flush()
+	hashKey := "test:hash"
+	for i := 0; i < 3; i++ {
+		key := string(rune(i))
+		value := key
+		testDB.Exec(nil, utils.ToCmdLine("hset", hashKey, "a"+key, value))
+	}
+	for i := 0; i < 3; i++ {
+		key := string(rune(i))
+		value := key
+		testDB.Exec(nil, utils.ToCmdLine("hset", hashKey, "b"+key, value))
+	}
+
+	result := testDB.Exec(nil, utils.ToCmdLine("hscan", hashKey, "0", "count", "10"))
+	cursorStr := string(result.(*protocol.MultiRawReply).Replies[0].(*protocol.BulkReply).Arg)
+	cursor, err := strconv.Atoi(cursorStr)
+	if err == nil {
+		if cursor != 0 {
+			t.Errorf("expect cursor 0, actually %d", cursor)
+			return
+		}
+	} else {
+		t.Errorf("get scan result error")
+		return
+	}
+
+	// test hscan 0 match a*
+	result = testDB.Exec(nil, utils.ToCmdLine("hscan", hashKey, "0", "match", "a*"))
+	returnKeys := result.(*protocol.MultiRawReply).Replies[1].(*protocol.MultiBulkReply).Args
+	i := 0
+	for i < len(returnKeys) {
+		if i%2 != 0 {
+			i++
+			continue // pass value
+		}
+		key := string(returnKeys[i])
+		i++
+		if key[0] != 'a' {
+			t.Errorf("The key %s should match a*", key)
+			return
+		}
+	}
+}
