@@ -1,5 +1,9 @@
 package dict
 
+import (
+	"github.com/hdt3213/godis/lib/wildcard"
+)
+
 // SimpleDict wraps a map, it is not thread safe
 type SimpleDict struct {
 	m map[string]interface{}
@@ -122,5 +126,20 @@ func (dict *SimpleDict) Clear() {
 }
 
 func (dict *SimpleDict) DictScan(cursor int, count int, pattern string) ([][]byte, int) {
-	return stringsToBytes(dict.Keys()), 0
+	result := make([][]byte, 0)
+	matchKey, err := wildcard.CompilePattern(pattern)
+	if err != nil {
+		return result, -1
+	}
+	for k := range dict.m {
+		if pattern == "*" || matchKey.IsMatch(k) {
+			raw, exists := dict.Get(k)
+			if !exists {
+				continue
+			}
+			result = append(result, []byte(k))
+			result = append(result, raw.([]byte))
+		}
+	}
+	return result, 0
 }

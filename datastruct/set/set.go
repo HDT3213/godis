@@ -2,6 +2,7 @@ package set
 
 import (
 	"github.com/hdt3213/godis/datastruct/dict"
+	"github.com/hdt3213/godis/lib/wildcard"
 )
 
 // Set is a set of elements based on hash table
@@ -148,4 +149,21 @@ func (set *Set) RandomMembers(limit int) []string {
 // RandomDistinctMembers randomly returns keys of the given number, won't contain duplicated key
 func (set *Set) RandomDistinctMembers(limit int) []string {
 	return set.dict.RandomDistinctKeys(limit)
+}
+
+// Scan set with cursor and pattern
+func (set *Set) SetScan(cursor int, count int, pattern string) ([][]byte, int) {
+	result := make([][]byte, 0)
+	matchKey, err := wildcard.CompilePattern(pattern)
+	if err != nil {
+		return result, -1
+	}
+	set.ForEach(func(member string) bool {
+		if pattern == "*" || matchKey.IsMatch(member) {
+			result = append(result, []byte(member))
+		}
+		return true
+	})
+
+	return result, 0
 }
