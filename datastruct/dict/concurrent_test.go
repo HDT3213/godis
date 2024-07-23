@@ -1,10 +1,11 @@
 package dict
 
 import (
-	"github.com/hdt3213/godis/lib/utils"
 	"strconv"
 	"sync"
 	"testing"
+
+	"github.com/hdt3213/godis/lib/utils"
 )
 
 func TestConcurrentPut(t *testing.T) {
