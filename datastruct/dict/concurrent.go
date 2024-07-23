@@ -1,13 +1,14 @@
 package dict
 
 import (
-	"github.com/hdt3213/godis/lib/wildcard"
 	"math"
 	"math/rand"
 	"sort"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/hdt3213/godis/lib/wildcard"
 )
 
 // ConcurrentDict is thread safe map using sharding lock
@@ -89,8 +90,8 @@ func (dict *ConcurrentDict) Get(key string) (val interface{}, exists bool) {
 	hashCode := fnv32(key)
 	index := dict.spread(hashCode)
 	s := dict.getShard(index)
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
 	val, exists = s.m[key]
 	return
 }
