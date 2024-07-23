@@ -7,23 +7,24 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
-
-	"github.com/hdt3213/godis/lib/wildcard"
 )
 
-// ConcurrentDict is thread safe map using sharding lock
+// ConcurrentDict 是一个使用分片锁的线程安全的哈希表
 type ConcurrentDict struct {
-	table      []*shard
-	count      int32
-	shardCount int
+	table      []*shard // 分片的数组，每个分片持有一部分键值对
+	count      int32    // 键值对的总数量
+	shardCount int      // 分片的数量
 }
 
+// shard 代表单个分片，包含一个map和一个读写锁
 type shard struct {
-	m     map[string]interface{}
-	mutex sync.RWMutex
+	m     map[string]interface{} // 存储键值对的哈希表
+	mutex sync.RWMutex           // 保护map的读写锁
 }
 
+// computeCapacity 计算哈希表容量，确保为2的次幂，这有助于更快的计算索引
 func computeCapacity(param int) (size int) {
+	// 以下代码是经典的位操作技巧，用于找到大于等于param的最小2的次幂
 	if param <= 16 {
 		return 16
 	}
@@ -39,7 +40,7 @@ func computeCapacity(param int) (size int) {
 	return n + 1
 }
 
-// MakeConcurrent creates ConcurrentDict with the given shard count
+// MakeConcurrent 创建一个具有指定分片数量的ConcurrentDict
 func MakeConcurrent(shardCount int) *ConcurrentDict {
 	shardCount = computeCapacity(shardCount)
 	table := make([]*shard, shardCount)
@@ -56,8 +57,14 @@ func MakeConcurrent(shardCount int) *ConcurrentDict {
 	return d
 }
 
-const prime32 = uint32(16777619)
+/*
+这部分代码定义了 ConcurrentDict 和它的构造函数。
+通过指定分片数来创建字典，每个分片包含一个map和一个读写锁。这种设计可以减小锁的粒度，提高并发性能。
+*/
+//----------------------------------------------------------------------------------------------------
 
+const prime32 = uint32(16777619) // 用于哈希函数的质数基
+// fnv32 是一种哈希函数，使用FNV算法为给定的键生成32位哈希码
 func fnv32(key string) uint32 {
 	hash := uint32(2166136261)
 	for i := 0; i < len(key); i++ {
@@ -67,6 +74,7 @@ func fnv32(key string) uint32 {
 	return hash
 }
 
+// spread 将哈希码散列到一个合适的分片索引
 func (dict *ConcurrentDict) spread(hashCode uint32) uint32 {
 	if dict == nil {
 		panic("dict is nil")
@@ -75,6 +83,11 @@ func (dict *ConcurrentDict) spread(hashCode uint32) uint32 {
 	return (tableSize - 1) & hashCode
 }
 
+//fnv32 是基于 FNV (Fowler-Noll-Vo) 算法的哈希函数，适用于快速散列字符串。
+//spread 函数通过位运算快速定位哈希码应该映射到哪一个分片。
+//--------------------------------------------------------------------------------------------------------
+
+// getShard 根据索引获取对应的分片
 func (dict *ConcurrentDict) getShard(index uint32) *shard {
 	if dict == nil {
 		panic("dict is nil")
@@ -82,7 +95,7 @@ func (dict *ConcurrentDict) getShard(index uint32) *shard {
 	return dict.table[index]
 }
 
-// Get returns the binding value and whether the key is exist
+// Get 返回给定键的值以及是否存在该键
 func (dict *ConcurrentDict) Get(key string) (val interface{}, exists bool) {
 	if dict == nil {
 		panic("dict is nil")
@@ -90,12 +103,13 @@ func (dict *ConcurrentDict) Get(key string) (val interface{}, exists bool) {
 	hashCode := fnv32(key)
 	index := dict.spread(hashCode)
 	s := dict.getShard(index)
-	s.mutex.RLock()
-	defer s.mutex.RUnlock()
+	s.mutex.RLock()         // 对分片加读锁
+	defer s.mutex.RUnlock() // 读锁结束时解锁
 	val, exists = s.m[key]
 	return
 }
 
+// GetWithLock 是一个示例方法，显示如何不使用锁安全地获取值
 func (dict *ConcurrentDict) GetWithLock(key string) (val interface{}, exists bool) {
 	if dict == nil {
 		panic("dict is nil")
@@ -107,7 +121,7 @@ func (dict *ConcurrentDict) GetWithLock(key string) (val interface{}, exists boo
 	return
 }
 
-// Len returns the number of dict
+// Len 返回字典中键值对的数量
 func (dict *ConcurrentDict) Len() int {
 	if dict == nil {
 		panic("dict is nil")
@@ -115,7 +129,7 @@ func (dict *ConcurrentDict) Len() int {
 	return int(atomic.LoadInt32(&dict.count))
 }
 
-// Put puts key value into dict and returns the number of new inserted key-value
+// Put 将键值对放入字典中，并返回是否插入了新的键
 func (dict *ConcurrentDict) Put(key string, val interface{}) (result int) {
 	if dict == nil {
 		panic("dict is nil")
@@ -135,6 +149,7 @@ func (dict *ConcurrentDict) Put(key string, val interface{}) (result int) {
 	return 1
 }
 
+// PutWithLock 是一个示例方法，显示如何不使用锁安全地放入键值对
 func (dict *ConcurrentDict) PutWithLock(key string, val interface{}) (result int) {
 	if dict == nil {
 		panic("dict is nil")
@@ -152,7 +167,7 @@ func (dict *ConcurrentDict) PutWithLock(key string, val interface{}) (result int
 	return 1
 }
 
-// PutIfAbsent puts value if the key is not exists and returns the number of updated key-value
+// PutIfAbsent 尝试只在键不存在时插入键值对，并返回是否插入了键
 func (dict *ConcurrentDict) PutIfAbsent(key string, val interface{}) (result int) {
 	if dict == nil {
 		panic("dict is nil")
@@ -171,6 +186,7 @@ func (dict *ConcurrentDict) PutIfAbsent(key string, val interface{}) (result int
 	return 1
 }
 
+// PutIfAbsentWithLock 是一个示例方法，显示如何不使用锁安全地尝试插入键值对
 func (dict *ConcurrentDict) PutIfAbsentWithLock(key string, val interface{}) (result int) {
 	if dict == nil {
 		panic("dict is nil")
@@ -187,7 +203,7 @@ func (dict *ConcurrentDict) PutIfAbsentWithLock(key string, val interface{}) (re
 	return 1
 }
 
-// PutIfExists puts value if the key is existed and returns the number of inserted key-value
+// PutIfExists 尝试只在键存在时更新键值对，并返回是否更新了键
 func (dict *ConcurrentDict) PutIfExists(key string, val interface{}) (result int) {
 	if dict == nil {
 		panic("dict is nil")
@@ -205,6 +221,7 @@ func (dict *ConcurrentDict) PutIfExists(key string, val interface{}) (result int
 	return 0
 }
 
+// PutIfExistsWithLock 是一个示例方法，显示如何不使用锁安全地尝试更新键值对
 func (dict *ConcurrentDict) PutIfExistsWithLock(key string, val interface{}) (result int) {
 	if dict == nil {
 		panic("dict is nil")
@@ -220,7 +237,7 @@ func (dict *ConcurrentDict) PutIfExistsWithLock(key string, val interface{}) (re
 	return 0
 }
 
-// Remove removes the key and return the number of deleted key-value
+// Remove 删除键，并返回被删除的值及是否成功删除
 func (dict *ConcurrentDict) Remove(key string) (val interface{}, result int) {
 	if dict == nil {
 		panic("dict is nil")
@@ -239,6 +256,7 @@ func (dict *ConcurrentDict) Remove(key string) (val interface{}, result int) {
 	return nil, 0
 }
 
+// RemoveWithLock 是一个示例方法，显示如何不使用锁安全地删除键
 func (dict *ConcurrentDict) RemoveWithLock(key string) (val interface{}, result int) {
 	if dict == nil {
 		panic("dict is nil")
@@ -255,16 +273,18 @@ func (dict *ConcurrentDict) RemoveWithLock(key string) (val interface{}, result 
 	return val, 0
 }
 
+// addCount 增加字典中的键值对总数
 func (dict *ConcurrentDict) addCount() int32 {
 	return atomic.AddInt32(&dict.count, 1)
 }
 
+// decreaseCount 减少字典中的键值对总数
 func (dict *ConcurrentDict) decreaseCount() int32 {
 	return atomic.AddInt32(&dict.count, -1)
 }
 
-// ForEach traversal the dict
-// it may not visit new entry inserted during traversal
+// ForEach 遍历字典
+// 注意：遍历期间插入的新条目可能不会被访问
 func (dict *ConcurrentDict) ForEach(consumer Consumer) {
 	if dict == nil {
 		panic("dict is nil")
@@ -288,7 +308,7 @@ func (dict *ConcurrentDict) ForEach(consumer Consumer) {
 	}
 }
 
-// Keys returns all keys in dict
+// Keys 返回字典中所有的键
 func (dict *ConcurrentDict) Keys() []string {
 	keys := make([]string, dict.Len())
 	i := 0
@@ -304,7 +324,7 @@ func (dict *ConcurrentDict) Keys() []string {
 	return keys
 }
 
-// RandomKey returns a key randomly
+// RandomKey 随机返回一个键
 func (shard *shard) RandomKey() string {
 	if shard == nil {
 		panic("shard is nil")
@@ -318,7 +338,7 @@ func (shard *shard) RandomKey() string {
 	return ""
 }
 
-// RandomKeys randomly returns keys of the given number, may contain duplicated key
+// RandomKeys 随机返回指定数量的键，可能包含重复的键
 func (dict *ConcurrentDict) RandomKeys(limit int) []string {
 	size := dict.Len()
 	if limit >= size {
@@ -342,7 +362,7 @@ func (dict *ConcurrentDict) RandomKeys(limit int) []string {
 	return result
 }
 
-// RandomDistinctKeys randomly returns keys of the given number, won't contain duplicated key
+// RandomDistinctKeys 随机返回指定数量的不重复键
 func (dict *ConcurrentDict) RandomDistinctKeys(limit int) []string {
 	size := dict.Len()
 	if limit >= size {
@@ -374,7 +394,7 @@ func (dict *ConcurrentDict) RandomDistinctKeys(limit int) []string {
 	return arr
 }
 
-// Clear removes all keys in dict
+// Clear 清空字典中的所有键
 func (dict *ConcurrentDict) Clear() {
 	*dict = *MakeConcurrent(dict.shardCount)
 }
@@ -398,7 +418,7 @@ func (dict *ConcurrentDict) toLockIndices(keys []string, reverse bool) []uint32 
 	return indices
 }
 
-// RWLocks locks write keys and read keys together. allow duplicate keys
+// RWLocks 锁定写键和读键，允许重复键
 func (dict *ConcurrentDict) RWLocks(writeKeys []string, readKeys []string) {
 	keys := append(writeKeys, readKeys...)
 	indices := dict.toLockIndices(keys, false)
@@ -418,7 +438,7 @@ func (dict *ConcurrentDict) RWLocks(writeKeys []string, readKeys []string) {
 	}
 }
 
-// RWUnLocks unlocks write keys and read keys together. allow duplicate keys
+// RWUnLocks 解锁写键和读键，允许重复键
 func (dict *ConcurrentDict) RWUnLocks(writeKeys []string, readKeys []string) {
 	keys := append(writeKeys, readKeys...)
 	indices := dict.toLockIndices(keys, true)
@@ -436,48 +456,4 @@ func (dict *ConcurrentDict) RWUnLocks(writeKeys []string, readKeys []string) {
 			mu.RUnlock()
 		}
 	}
-}
-
-func stringsToBytes(strSlice []string) [][]byte {
-	byteSlice := make([][]byte, len(strSlice))
-	for i, str := range strSlice {
-		byteSlice[i] = []byte(str)
-	}
-	return byteSlice
-}
-
-func (dict *ConcurrentDict) DictScan(cursor int, count int, pattern string) ([][]byte, int) {
-	size := dict.Len()
-	result := make([][]byte, 0)
-
-	if pattern == "*" && count >= size {
-		return stringsToBytes(dict.Keys()), 0
-	}
-
-	matchKey, err := wildcard.CompilePattern(pattern)
-	if err != nil {
-		return result, -1
-	}
-
-	shardCount := len(dict.table)
-	shardIndex := cursor
-
-	for shardIndex < shardCount {
-		shard := dict.table[shardIndex]
-		shard.mutex.RLock()
-		if len(result)+len(shard.m) > count && shardIndex > cursor {
-			shard.mutex.RUnlock()
-			return result, shardIndex
-		}
-
-		for key := range shard.m {
-			if pattern == "*" || matchKey.IsMatch(key) {
-				result = append(result, []byte(key))
-			}
-		}
-		shard.mutex.RUnlock()
-		shardIndex++
-	}
-
-	return result, 0
 }
