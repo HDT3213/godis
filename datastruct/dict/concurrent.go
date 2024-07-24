@@ -25,6 +25,7 @@ type shard struct {
 }
 
 // computeCapacity 计算哈希表容量，确保为2的次幂，这有助于更快的计算索引
+// 这个函数的目的是确定一个接近于给定参数 param 但不小于它的2的次幂的数。这样做的好处主要有两点：
 func computeCapacity(param int) (size int) {
 	// 以下代码是经典的位操作技巧，用于找到大于等于param的最小2的次幂
 	if param <= 16 {
@@ -82,6 +83,9 @@ func (dict *ConcurrentDict) spread(hashCode uint32) uint32 {
 		panic("dict is nil")
 	}
 	tableSize := uint32(len(dict.table))
+
+	//因为表的大小是2的次幂，这个按位与操作等同于对表大小取模，但运算速度更快。
+	//当表大小是2的次幂时，tableSize - 1 的二进制表示中所有低位都是1，这使得按位与操作只保留 hashCode 的最低的几位。
 	return (tableSize - 1) & hashCode
 }
 
@@ -459,6 +463,10 @@ func (dict *ConcurrentDict) RWUnLocks(writeKeys []string, readKeys []string) {
 		}
 	}
 }
+
+// stringsToBytes 将字符串切片转换为字节切片的切片。
+// 输入：strSlice - 字符串切片
+// 输出：每个字符串转换为字节切片后的切片
 func stringsToBytes(strSlice []string) [][]byte {
 	byteSlice := make([][]byte, len(strSlice))
 	for i, str := range strSlice {
