@@ -107,7 +107,7 @@ func (server *Server) AddAof(dbIndex int, cmdLine CmdLine) {
 
 func (server *Server) bindPersister(aofHandler *aof.Persister) {
 	server.persister = aofHandler
-	// bind SaveCmdLine
+	// 给我们的redis数据库核心中的每一个db初始化 aof写入功能
 	for _, db := range server.dbSet {
 		singleDB := db.Load().(*DB)
 		singleDB.addAof = func(line CmdLine) {

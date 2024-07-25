@@ -39,7 +39,7 @@ func MakeHandler() *Handler {
 	if config.Properties.ClusterEnable {
 		db = cluster.MakeCluster() // 配置为集群模式
 	} else {
-		db = database2.NewStandaloneServer() // 单机模式
+		db = database2.NewStandaloneServer() // 单机模式 调用redis内核
 	}
 	return &Handler{
 		db: db,

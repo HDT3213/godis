@@ -19,23 +19,23 @@ import (
 	"github.com/hdt3213/godis/redis/protocol"
 )
 
-var godisVersion = "1.2.8" // do not modify
-
-// Server is a redis-server with full capabilities including multiple database, rdb loader, replication
+var godisVersion = "1.2.8" // 版本信息，不允许修改
+// Server 定义了一个全功能的 Redis 服务器，包括多个数据库，RDB 加载，复制等
+// redis内核
 type Server struct {
-	dbSet []*atomic.Value // *DB
+	dbSet []*atomic.Value // 数据库数组，使用 atomic.Value 以支持并发安全的存取。 实现我们的interface下面的DB接口
 
-	// handle publish/subscribe
+	// 处理发布/订阅机制
 	hub *pubsub.Hub
-	// handle aof persistence
+	// 处理 AOF 持久化
 	persister *aof.Persister
 
-	// for replication
+	// 主从复制相关字段
 	role         int32
 	slaveStatus  *slaveStatus
 	masterStatus *masterStatus
 
-	// hooks
+	// hooks ，用于键值事件的回调
 	insertCallback database.KeyEventCallback
 	deleteCallback database.KeyEventCallback
 }
@@ -45,18 +45,18 @@ func fileExists(filename string) bool {
 	return err == nil && !info.IsDir()
 }
 
-// NewStandaloneServer creates a standalone redis server, with multi database and all other funtions
+// NewStandaloneServer 创建一个独立的 Redis 服务器实例
 func NewStandaloneServer() *Server {
 	server := &Server{}
 	if config.Properties.Databases == 0 {
-		config.Properties.Databases = 16
+		config.Properties.Databases = 16 // 默认数据库数量
 	}
-	// creat tmp dir
+	// 创建临时目录
 	err := os.MkdirAll(config.GetTmpDir(), os.ModePerm)
 	if err != nil {
 		panic(fmt.Errorf("create tmp dir failed: %v", err))
 	}
-	// make db set
+	// 初始化数据库实例
 	server.dbSet = make([]*atomic.Value, config.Properties.Databases)
 	for i := range server.dbSet {
 		singleDB := makeDB()
@@ -65,9 +65,10 @@ func NewStandaloneServer() *Server {
 		holder.Store(singleDB)
 		server.dbSet[i] = holder
 	}
-	server.hub = pubsub.MakeHub()
-	// record aof
+	server.hub = pubsub.MakeHub() // 初始化 pub/sub hub
+	// 配置 AOF 持久化
 	validAof := false
+	//查看配置文件中是否打开持久化功能
 	if config.Properties.AppendOnly {
 		validAof = fileExists(config.Properties.AppendFilename)
 		aofHandler, err := NewPersister(server,
@@ -77,6 +78,7 @@ func NewStandaloneServer() *Server {
 		}
 		server.bindPersister(aofHandler)
 	}
+	// 如果配置了 RDB 且 AOF 未启用，尝试加载 RDB 文件
 	if config.Properties.RDBFilename != "" && !validAof {
 		// load rdb
 		err := server.loadRdbFile()
@@ -87,21 +89,24 @@ func NewStandaloneServer() *Server {
 	server.slaveStatus = initReplSlaveStatus()
 	server.initMaster()
 	server.startReplCron()
-	server.role = masterRole // The initialization process does not require atomicity
+	server.role = masterRole // 初始化为主节点
 	return server
 }
 
-// Exec executes command
-// parameter `cmdLine` contains command and its arguments, for example: "set key value"
+// Exec 执行来自客户端的命令，调用底层db的Exec方法，那用户发来的指令转交给底层的分db去执行
+// `cmdLine` 包含了命令及其参数，例如："set key value"
 func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.Reply) {
+	// 使用 defer 和 recover 来捕获和处理函数执行过程中可能发生的panic，确保服务器稳定性
 	defer func() {
 		if err := recover(); err != nil {
+			// 如果发生错误，记录错误并返回未知错误的响应
 			logger.Warn(fmt.Sprintf("error occurs: %v\n%s", err, string(debug.Stack())))
 			result = &protocol.UnknownErrReply{}
 		}
 	}()
-
+	// 将命令名称转换为小写，以忽略命令的大小写差异
 	cmdName := strings.ToLower(string(cmdLine[0]))
+	// 根据命令名分发处理不同的命令
 	// ping
 	if cmdName == "ping" {
 		return Ping(c, cmdLine[1:])
@@ -110,6 +115,7 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 	if cmdName == "auth" {
 		return Auth(c, cmdLine[1:])
 	}
+	// 检查是否已通过身份验证
 	if !isAuthenticated(c) {
 		return protocol.MakeErrReply("NOAUTH Authentication required")
 	}
@@ -121,9 +127,11 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 		return DbSize(c, server)
 	}
 	if cmdName == "slaveof" {
+		// 在multi状态中不允许改变主从配置
 		if c != nil && c.InMultiState() {
 			return protocol.MakeErrReply("cannot use slave of database within multi")
 		}
+		// 参数数量检查
 		if len(cmdLine) != 3 {
 			return protocol.MakeArgNumErrReply("SLAVEOF")
 		}
@@ -132,7 +140,7 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 		return execCommand(cmdLine[1:])
 	}
 
-	// read only slave
+	// 只读从节点的处理逻辑
 	role := atomic.LoadInt32(&server.role)
 	if role == slaveRole && !c.IsMaster() {
 		// only allow read only command, forbid all special commands except `auth` and `slaveof`
@@ -141,7 +149,7 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 		}
 	}
 
-	// special commands which cannot execute within transaction
+	// 无法在事务中执行的特殊命令
 	if cmdName == "subscribe" {
 		if len(cmdLine) < 2 {
 			return protocol.MakeArgNumErrReply("subscribe")
@@ -155,7 +163,7 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 		if !config.Properties.AppendOnly {
 			return protocol.MakeErrReply("AppendOnly is false, you can't rewrite aof file")
 		}
-		// aof.go imports router.go, router.go cannot import BGRewriteAOF from aof.go
+		// 这里注意：由于模块间的循环依赖问题，特意分开处理
 		return BGRewriteAOF(server, cmdLine[1:])
 	} else if cmdName == "rewriteaof" {
 		if !config.Properties.AppendOnly {
@@ -196,21 +204,22 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 	}
 	// todo: support multi database transaction
 
-	// normal commands
+	// 正常命令的处理，首先获取当前连接的数据库索引
 	dbIndex := c.GetDBIndex()
 	selectedDB, errReply := server.selectDB(dbIndex)
 	if errReply != nil {
 		return errReply
 	}
+	// 在选定的数据库上执行命令
 	return selectedDB.Exec(c, cmdLine)
 }
 
-// AfterClientClose does some clean after client close connection
+// AfterClientClose 处理客户端关闭连接后的清理工作
 func (server *Server) AfterClientClose(c redis.Connection) {
 	pubsub.UnsubscribeAll(server.hub, c)
 }
 
-// Close graceful shutdown database
+// Close 优雅关闭数据库
 func (server *Server) Close() {
 	// stop slaveStatus first
 	server.slaveStatus.close()
@@ -220,6 +229,7 @@ func (server *Server) Close() {
 	server.stopMaster()
 }
 
+// execSelect 处理 select 命令，选择一个数据库
 func execSelect(c redis.Connection, mdb *Server, args [][]byte) redis.Reply {
 	dbIndex, err := strconv.Atoi(string(args[0]))
 	if err != nil {
@@ -228,6 +238,7 @@ func execSelect(c redis.Connection, mdb *Server, args [][]byte) redis.Reply {
 	if dbIndex >= len(mdb.dbSet) || dbIndex < 0 {
 		return protocol.MakeErrReply("ERR DB index is out of range")
 	}
+	// 选择数据库并返回成功响应
 	c.SelectDB(dbIndex)
 	return protocol.MakeOkReply()
 }
@@ -239,39 +250,49 @@ func (server *Server) execFlushDB(dbIndex int) redis.Reply {
 	return server.flushDB(dbIndex)
 }
 
-// flushDB flushes the selected database
+// flushDB 清空选定的数据库
+// dbIndex 为数据库索引
 func (server *Server) flushDB(dbIndex int) redis.Reply {
+	// 检查数据库索引是否有效
 	if dbIndex >= len(server.dbSet) || dbIndex < 0 {
 		return protocol.MakeErrReply("ERR DB index is out of range")
 	}
+	// 创建一个新的数据库实例
 	newDB := makeDB()
+	// 用新的数据库实例替换旧的数据库实例
 	server.loadDB(dbIndex, newDB)
 	return &protocol.OkReply{}
 }
 
+// loadDB 加载指定索引的数据库
 func (server *Server) loadDB(dbIndex int, newDB *DB) redis.Reply {
 	if dbIndex >= len(server.dbSet) || dbIndex < 0 {
 		return protocol.MakeErrReply("ERR DB index is out of range")
 	}
+	// 获取旧的数据库实例
 	oldDB := server.mustSelectDB(dbIndex)
+	// 将新数据库的索引和AOF持久化设置从旧数据库继承
 	newDB.index = dbIndex
 	newDB.addAof = oldDB.addAof // inherit oldDB
+	// 存储新的数据库实例
 	server.dbSet[dbIndex].Store(newDB)
 	return &protocol.OkReply{}
 }
 
-// flushAll flushes all databases.
+// flushAll 清空所有数据库
 func (server *Server) flushAll() redis.Reply {
+	// 遍历所有数据库并清空
 	for i := range server.dbSet {
 		server.flushDB(i)
 	}
+	// 如果开启了AOF持久化，记录这一操作
 	if server.persister != nil {
 		server.persister.SaveCmdLine(0, utils.ToCmdLine("FlushAll"))
 	}
 	return &protocol.OkReply{}
 }
 
-// selectDB returns the database with the given index, or an error if the index is out of range.
+// selectDB 选择给定索引的数据库，如果索引无效则返回错误
 func (server *Server) selectDB(dbIndex int) (*DB, *protocol.StandardErrReply) {
 	if dbIndex >= len(server.dbSet) || dbIndex < 0 {
 		return nil, protocol.MakeErrReply("ERR DB index is out of range")
@@ -279,7 +300,7 @@ func (server *Server) selectDB(dbIndex int) (*DB, *protocol.StandardErrReply) {
 	return server.dbSet[dbIndex].Load().(*DB), nil
 }
 
-// mustSelectDB is like selectDB, but panics if an error occurs.
+// mustSelectDB 类似 selectDB，但如果发生错误会引发panic
 func (server *Server) mustSelectDB(dbIndex int) *DB {
 	selectedDB, err := server.selectDB(dbIndex)
 	if err != nil {
@@ -288,16 +309,17 @@ func (server *Server) mustSelectDB(dbIndex int) *DB {
 	return selectedDB
 }
 
-// ForEach traverses all the keys in the given database
+// ForEach 遍历给定数据库中的所有键
 func (server *Server) ForEach(dbIndex int, cb func(key string, data *database.DataEntity, expiration *time.Time) bool) {
 	server.mustSelectDB(dbIndex).ForEach(cb)
 }
 
-// GetEntity returns the data entity to the given key
+// GetEntity 返回给定键的数据实体
 func (server *Server) GetEntity(dbIndex int, key string) (*database.DataEntity, bool) {
 	return server.mustSelectDB(dbIndex).GetEntity(key)
 }
 
+// GetExpiration 获取给定键的过期时间
 func (server *Server) GetExpiration(dbIndex int, key string) *time.Time {
 	raw, ok := server.mustSelectDB(dbIndex).ttlMap.Get(key)
 	if !ok {
@@ -307,7 +329,7 @@ func (server *Server) GetExpiration(dbIndex int, key string) *time.Time {
 	return &expireTime
 }
 
-// ExecMulti executes multi commands transaction Atomically and Isolated
+// ExecMulti 在一个事务中执行多个命令，保证原子性和隔离性
 func (server *Server) ExecMulti(conn redis.Connection, watching map[string]uint32, cmdLines []CmdLine) redis.Reply {
 	selectedDB, errReply := server.selectDB(conn.GetDBIndex())
 	if errReply != nil {
@@ -316,22 +338,22 @@ func (server *Server) ExecMulti(conn redis.Connection, watching map[string]uint3
 	return selectedDB.ExecMulti(conn, watching, cmdLines)
 }
 
-// RWLocks lock keys for writing and reading
+// RWLocks 对写入和读取的键加锁
 func (server *Server) RWLocks(dbIndex int, writeKeys []string, readKeys []string) {
 	server.mustSelectDB(dbIndex).RWLocks(writeKeys, readKeys)
 }
 
-// RWUnLocks unlock keys for writing and reading
+// RWUnLocks 解锁写入和读取的键
 func (server *Server) RWUnLocks(dbIndex int, writeKeys []string, readKeys []string) {
 	server.mustSelectDB(dbIndex).RWUnLocks(writeKeys, readKeys)
 }
 
-// GetUndoLogs return rollback commands
+// GetUndoLogs 返回指定命令的回滚命令
 func (server *Server) GetUndoLogs(dbIndex int, cmdLine [][]byte) []CmdLine {
 	return server.mustSelectDB(dbIndex).GetUndoLogs(cmdLine)
 }
 
-// ExecWithLock executes normal commands, invoker should provide locks
+// ExecWithLock 在持有锁的情况下执行常规命令
 func (server *Server) ExecWithLock(conn redis.Connection, cmdLine [][]byte) redis.Reply {
 	db, errReply := server.selectDB(conn.GetDBIndex())
 	if errReply != nil {
@@ -340,13 +362,13 @@ func (server *Server) ExecWithLock(conn redis.Connection, cmdLine [][]byte) redi
 	return db.execWithLock(cmdLine)
 }
 
-// BGRewriteAOF asynchronously rewrites Append-Only-File
+// BGRewriteAOF 异步重写追加只写文件
 func BGRewriteAOF(db *Server, args [][]byte) redis.Reply {
 	go db.persister.Rewrite()
 	return protocol.MakeStatusReply("Background append only file rewriting started")
 }
 
-// RewriteAOF start Append-Only-File rewriting and blocked until it finished
+// RewriteAOF 开始重写追加只写文件，并阻塞直到完成
 func RewriteAOF(db *Server, args [][]byte) redis.Reply {
 	err := db.persister.Rewrite()
 	if err != nil {
@@ -355,7 +377,7 @@ func RewriteAOF(db *Server, args [][]byte) redis.Reply {
 	return protocol.MakeOkReply()
 }
 
-// SaveRDB start RDB writing and blocked until it finished
+// SaveRDB 开始RDB写入，并阻塞直到完成
 func SaveRDB(db *Server, args [][]byte) redis.Reply {
 	if db.persister == nil {
 		return protocol.MakeErrReply("please enable aof before using save")
@@ -371,7 +393,7 @@ func SaveRDB(db *Server, args [][]byte) redis.Reply {
 	return protocol.MakeOkReply()
 }
 
-// BGSaveRDB asynchronously save RDB
+// BGSaveRDB 异步保存RDB
 func BGSaveRDB(db *Server, args [][]byte) redis.Reply {
 	if db.persister == nil {
 		return protocol.MakeErrReply("please enable aof before using save")
@@ -394,12 +416,13 @@ func BGSaveRDB(db *Server, args [][]byte) redis.Reply {
 	return protocol.MakeStatusReply("Background saving started")
 }
 
-// GetDBSize returns keys count and ttl key count
+// GetDBSize 返回数据库的键数和有TTL的键数
 func (server *Server) GetDBSize(dbIndex int) (int, int) {
 	db := server.mustSelectDB(dbIndex)
 	return db.data.Len(), db.ttlMap.Len()
 }
 
+// startReplCron 开启一个定时任务处理主从复制
 func (server *Server) startReplCron() {
 	go func(mdb *Server) {
 		ticker := time.Tick(time.Second * 10)
@@ -410,7 +433,7 @@ func (server *Server) startReplCron() {
 	}(server)
 }
 
-// GetAvgTTL Calculate the average expiration time of keys
+// GetAvgTTL 计算给定数量随机键的平均过期时间
 func (server *Server) GetAvgTTL(dbIndex, randomKeyCount int) int64 {
 	var ttlCount int64
 	db := server.mustSelectDB(dbIndex)
@@ -430,6 +453,7 @@ func (server *Server) GetAvgTTL(dbIndex, randomKeyCount int) int64 {
 	return ttlCount / int64(len(keys))
 }
 
+// SetKeyInsertedCallback 设置键插入事件的回调函数
 func (server *Server) SetKeyInsertedCallback(cb database.KeyEventCallback) {
 	server.insertCallback = cb
 	for i := range server.dbSet {
@@ -439,6 +463,7 @@ func (server *Server) SetKeyInsertedCallback(cb database.KeyEventCallback) {
 
 }
 
+// SetKeyDeletedCallback 设置键删除事件的回调函数
 func (server *Server) SetKeyDeletedCallback(cb database.KeyEventCallback) {
 	server.deleteCallback = cb
 	for i := range server.dbSet {

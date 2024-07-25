@@ -1,9 +1,10 @@
 package database
 
 import (
+	"strings"
+
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/redis/protocol"
-	"strings"
 )
 
 const (

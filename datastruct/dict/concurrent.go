@@ -18,7 +18,7 @@ type ConcurrentDict struct {
 	shardCount int      // 分片的数量
 }
 
-// shard 代表单个分片，包含一个map和一个读写锁
+// shard 代表单个分片，包含一个map和一个读写锁，该map中有多个锁
 type shard struct {
 	m     map[string]interface{} // 存储键值对的哈希表
 	mutex sync.RWMutex           // 保护map的读写锁

@@ -11,10 +11,10 @@ type Dict interface {
 	PutIfAbsent(key string, val interface{}) (result int) // 如果键不存在，则插入
 	PutIfExists(key string, val interface{}) (result int) // 如果键存在，则插入
 	Remove(key string) (val interface{}, result int)      // 移除键
-	ForEach(consumer Consumer)                            // 遍历字典
+	ForEach(consumer Consumer)                            // 遍历字典,传进去的函数是Consumer
 	Keys() []string                                       // 返回所有键的列表
 	RandomKeys(limit int) []string                        // 随机返回一定数量的键
-	RandomDistinctKeys(limit int) []string
-	Clear() // 清除字典中的所有元素
+	RandomDistinctKeys(limit int) []string                //返回一些不重复的键
+	Clear()                                               // 清除字典中的所有元素
 	DictScan(cursor int, count int, pattern string) ([][]byte, int)
 }

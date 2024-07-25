@@ -1,23 +1,24 @@
 package database
 
 import (
+	"strings"
+
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/redis/protocol"
-	"strings"
 )
 
-var cmdTable = make(map[string]*command)
+var cmdTable = make(map[string]*command) //存储我们的命令的map，key：指令  对应的command结构体
 
 type command struct {
-	name     string
-	executor ExecFunc
+	name     string   //指令名称
+	executor ExecFunc //没一个command里面有一个执行方法
 	// prepare returns related keys command
 	prepare PreFunc
 	// undo generates undo-log before command actually executed, in case the command needs to be rolled back
 	undo UndoFunc
 	// arity means allowed number of cmdArgs, arity < 0 means len(args) >= -arity.
 	// for example: the arity of `get` is 2, `mget` is -2
-	arity int
+	arity int //命令的参数的数量
 	flags int
 	extra *commandExtra
 }
@@ -36,7 +37,7 @@ const (
 	flagSpecial  // command invoked in Exec
 )
 
-// registerCommand registers a normal command, which only read or modify a limited number of keys
+// 通过该方法注册指令的方法
 func registerCommand(name string, executor ExecFunc, prepare PreFunc, rollback UndoFunc, arity int, flags int) *command {
 	name = strings.ToLower(name)
 	cmd := &command{
