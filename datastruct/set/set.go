@@ -21,6 +21,17 @@ func Make(members ...string) *Set {
 	return set
 }
 
+// MakeConcurrentSafe creates a new set which is concurrent safe
+func MakeConcurrentSafe(members ...string) *Set {
+	set := &Set{
+		dict: dict.MakeConcurrent(1),
+	}
+	for _, member := range members {
+		set.Add(member)
+	}
+	return set
+}
+
 // Add adds member into set
 func (set *Set) Add(val string) int {
 	return set.dict.Put(val, nil)

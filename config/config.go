@@ -40,15 +40,10 @@ type ServerProperties struct {
 	SlaveAnnouncePort int    `cfg:"slave-announce-port"`
 	SlaveAnnounceIP   string `cfg:"slave-announce-ip"`
 	ReplTimeout       int    `cfg:"repl-timeout"`
+	
 	ClusterEnable     bool   `cfg:"cluster-enable"`
 	ClusterAsSeed     bool   `cfg:"cluster-as-seed"`
 	ClusterSeed       string `cfg:"cluster-seed"`
-	ClusterConfigFile string `cfg:"cluster-config-file"`
-
-	// for cluster mode configuration
-	ClusterEnabled string   `cfg:"cluster-enabled"` // Not used at present.
-	Peers          []string `cfg:"peers"`
-	Self           string   `cfg:"self"`
 
 	// config file path
 	CfPath string `cfg:"cf,omitempty"`

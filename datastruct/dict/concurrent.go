@@ -40,6 +40,18 @@ func computeCapacity(param int) (size int) {
 
 // MakeConcurrent creates ConcurrentDict with the given shard count
 func MakeConcurrent(shardCount int) *ConcurrentDict {
+	if shardCount == 1 {
+		table := []*shard{
+			{
+				m: make(map[string]interface{}),
+			},
+		}
+		return &ConcurrentDict{
+			count:      0,
+			table:      table,
+			shardCount: shardCount,
+		}
+	}
 	shardCount = computeCapacity(shardCount)
 	table := make([]*shard, shardCount)
 	for i := 0; i < shardCount; i++ {
@@ -66,10 +78,14 @@ func fnv32(key string) uint32 {
 	return hash
 }
 
-func (dict *ConcurrentDict) spread(hashCode uint32) uint32 {
+func (dict *ConcurrentDict) spread(key string) uint32 {
 	if dict == nil {
 		panic("dict is nil")
 	}
+	if len(dict.table) == 1 {
+		return 0
+	}
+	hashCode := fnv32(key)
 	tableSize := uint32(len(dict.table))
 	return (tableSize - 1) & hashCode
 }
@@ -86,8 +102,7 @@ func (dict *ConcurrentDict) Get(key string) (val interface{}, exists bool) {
 	if dict == nil {
 		panic("dict is nil")
 	}
-	hashCode := fnv32(key)
-	index := dict.spread(hashCode)
+	index := dict.spread(key)
 	s := dict.getShard(index)
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -99,8 +114,7 @@ func (dict *ConcurrentDict) GetWithLock(key string) (val interface{}, exists boo
 	if dict == nil {
 		panic("dict is nil")
 	}
-	hashCode := fnv32(key)
-	index := dict.spread(hashCode)
+	index := dict.spread(key)
 	s := dict.getShard(index)
 	val, exists = s.m[key]
 	return
@@ -119,8 +133,7 @@ func (dict *ConcurrentDict) Put(key string, val interface{}) (result int) {
 	if dict == nil {
 		panic("dict is nil")
 	}
-	hashCode := fnv32(key)
-	index := dict.spread(hashCode)
+	index := dict.spread(key)
 	s := dict.getShard(index)
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -138,8 +151,7 @@ func (dict *ConcurrentDict) PutWithLock(key string, val interface{}) (result int
 	if dict == nil {
 		panic("dict is nil")
 	}
-	hashCode := fnv32(key)
-	index := dict.spread(hashCode)
+	index := dict.spread(key)
 	s := dict.getShard(index)
 
 	if _, ok := s.m[key]; ok {
@@ -156,8 +168,7 @@ func (dict *ConcurrentDict) PutIfAbsent(key string, val interface{}) (result int
 	if dict == nil {
 		panic("dict is nil")
 	}
-	hashCode := fnv32(key)
-	index := dict.spread(hashCode)
+	index := dict.spread(key)
 	s := dict.getShard(index)
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -174,8 +185,7 @@ func (dict *ConcurrentDict) PutIfAbsentWithLock(key string, val interface{}) (re
 	if dict == nil {
 		panic("dict is nil")
 	}
-	hashCode := fnv32(key)
-	index := dict.spread(hashCode)
+	index := dict.spread(key)
 	s := dict.getShard(index)
 
 	if _, ok := s.m[key]; ok {
@@ -191,8 +201,7 @@ func (dict *ConcurrentDict) PutIfExists(key string, val interface{}) (result int
 	if dict == nil {
 		panic("dict is nil")
 	}
-	hashCode := fnv32(key)
-	index := dict.spread(hashCode)
+	index := dict.spread(key)
 	s := dict.getShard(index)
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -208,8 +217,7 @@ func (dict *ConcurrentDict) PutIfExistsWithLock(key string, val interface{}) (re
 	if dict == nil {
 		panic("dict is nil")
 	}
-	hashCode := fnv32(key)
-	index := dict.spread(hashCode)
+	index := dict.spread(key)
 	s := dict.getShard(index)
 
 	if _, ok := s.m[key]; ok {
@@ -224,8 +232,7 @@ func (dict *ConcurrentDict) Remove(key string) (val interface{}, result int) {
 	if dict == nil {
 		panic("dict is nil")
 	}
-	hashCode := fnv32(key)
-	index := dict.spread(hashCode)
+	index := dict.spread(key)
 	s := dict.getShard(index)
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
@@ -242,8 +249,7 @@ func (dict *ConcurrentDict) RemoveWithLock(key string) (val interface{}, result 
 	if dict == nil {
 		panic("dict is nil")
 	}
-	hashCode := fnv32(key)
-	index := dict.spread(hashCode)
+	index := dict.spread(key)
 	s := dict.getShard(index)
 
 	if val, ok := s.m[key]; ok {
@@ -381,7 +387,7 @@ func (dict *ConcurrentDict) Clear() {
 func (dict *ConcurrentDict) toLockIndices(keys []string, reverse bool) []uint32 {
 	indexMap := make(map[uint32]struct{})
 	for _, key := range keys {
-		index := dict.spread(fnv32(key))
+		index := dict.spread(key)
 		indexMap[index] = struct{}{}
 	}
 	indices := make([]uint32, 0, len(indexMap))
@@ -403,7 +409,7 @@ func (dict *ConcurrentDict) RWLocks(writeKeys []string, readKeys []string) {
 	indices := dict.toLockIndices(keys, false)
 	writeIndexSet := make(map[uint32]struct{})
 	for _, wKey := range writeKeys {
-		idx := dict.spread(fnv32(wKey))
+		idx := dict.spread(wKey)
 		writeIndexSet[idx] = struct{}{}
 	}
 	for _, index := range indices {
@@ -423,7 +429,7 @@ func (dict *ConcurrentDict) RWUnLocks(writeKeys []string, readKeys []string) {
 	indices := dict.toLockIndices(keys, true)
 	writeIndexSet := make(map[uint32]struct{})
 	for _, wKey := range writeKeys {
-		idx := dict.spread(fnv32(wKey))
+		idx := dict.spread(wKey)
 		writeIndexSet[idx] = struct{}{}
 	}
 	for _, index := range indices {
