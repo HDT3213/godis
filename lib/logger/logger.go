@@ -46,6 +46,11 @@ var (
 	levelFlags = []string{"DEBUG", "INFO", "WARN", "ERROR", "FATAL"}
 )
 
+// ILogger defines the methods that any logger should implement
+type ILogger interface {
+	Output(level logLevel, callerDepth int, msg string)
+}
+
 // Logger is Logger
 type Logger struct {
 	logFile   *os.File
@@ -54,7 +59,7 @@ type Logger struct {
 	entryPool *sync.Pool
 }
 
-var DefaultLogger = NewStdoutLogger()
+var DefaultLogger ILogger = NewStdoutLogger()
 
 // NewStdoutLogger creates a logger which print msg to stdout
 func NewStdoutLogger() *Logger {
