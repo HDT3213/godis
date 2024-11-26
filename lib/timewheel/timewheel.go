@@ -3,6 +3,7 @@ package timewheel
 import (
 	"container/list"
 	"github.com/hdt3213/godis/lib/logger"
+	"sync"
 	"time"
 )
 
@@ -11,7 +12,7 @@ type location struct {
 	etask *list.Element
 }
 
-// TimeWheel can execute job after waiting given duration
+// TimeWheel can execute jobs after a given delay
 type TimeWheel struct {
 	interval time.Duration
 	ticker   *time.Ticker
@@ -23,6 +24,8 @@ type TimeWheel struct {
 	addTaskChannel    chan task
 	removeTaskChannel chan string
 	stopChannel       chan bool
+
+	mu sync.RWMutex
 }
 
 type task struct {
@@ -48,7 +51,6 @@ func New(interval time.Duration, slotNum int) *TimeWheel {
 		stopChannel:       make(chan bool),
 	}
 	tw.initSlots()
-
 	return tw
 }
 
@@ -58,7 +60,7 @@ func (tw *TimeWheel) initSlots() {
 	}
 }
 
-// Start starts ticker for time wheel
+// Start starts the time wheel
 func (tw *TimeWheel) Start() {
 	tw.ticker = time.NewTicker(tw.interval)
 	go tw.start()
@@ -69,7 +71,7 @@ func (tw *TimeWheel) Stop() {
 	tw.stopChannel <- true
 }
 
-// AddJob add new job into pending queue
+// AddJob adds a new job to the pending queue
 func (tw *TimeWheel) AddJob(delay time.Duration, key string, job func()) {
 	if delay < 0 {
 		return
@@ -103,16 +105,21 @@ func (tw *TimeWheel) start() {
 }
 
 func (tw *TimeWheel) tickHandler() {
+	tw.mu.Lock()
 	l := tw.slots[tw.currentPos]
 	if tw.currentPos == tw.slotNum-1 {
 		tw.currentPos = 0
 	} else {
 		tw.currentPos++
 	}
+	tw.mu.Unlock()
+
 	go tw.scanAndRunTask(l)
 }
 
 func (tw *TimeWheel) scanAndRunTask(l *list.List) {
+	var tasksToRemove []string
+	tw.mu.RLock() // Read lock for accessing the list
 	for e := l.Front(); e != nil; {
 		task := e.Value.(*task)
 		if task.circle > 0 {
@@ -121,38 +128,49 @@ func (tw *TimeWheel) scanAndRunTask(l *list.List) {
 			continue
 		}
 
-		go func() {
+		go func(job func()) {
 			defer func() {
 				if err := recover(); err != nil {
 					logger.Error(err)
 				}
 			}()
-			job := task.job
 			job()
-		}()
-		next := e.Next()
-		l.Remove(e)
+		}(task.job)
+
 		if task.key != "" {
-			delete(tw.timer, task.key)
+			tasksToRemove = append(tasksToRemove, task.key)
 		}
+		next := e.Next()
+		l.Remove(e) // Safe as this is a local operation
 		e = next
 	}
+	tw.mu.RUnlock()
+
+	// Remove tasks from the timer after the scan
+	tw.mu.Lock()
+	for _, key := range tasksToRemove {
+		delete(tw.timer, key)
+	}
+	tw.mu.Unlock()
 }
 
 func (tw *TimeWheel) addTask(task *task) {
 	pos, circle := tw.getPositionAndCircle(task.delay)
 	task.circle = circle
 
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+
+	if task.key != "" {
+		if _, ok := tw.timer[task.key]; ok {
+			tw.removeTaskInternal(task.key) // Internal version avoids double lock
+		}
+	}
+
 	e := tw.slots[pos].PushBack(task)
 	loc := &location{
 		slot:  pos,
 		etask: e,
-	}
-	if task.key != "" {
-		_, ok := tw.timer[task.key]
-		if ok {
-			tw.removeTask(task.key)
-		}
 	}
 	tw.timer[task.key] = loc
 }
@@ -160,13 +178,18 @@ func (tw *TimeWheel) addTask(task *task) {
 func (tw *TimeWheel) getPositionAndCircle(d time.Duration) (pos int, circle int) {
 	delaySeconds := int(d.Seconds())
 	intervalSeconds := int(tw.interval.Seconds())
-	circle = int(delaySeconds / intervalSeconds / tw.slotNum)
-	pos = int(tw.currentPos+delaySeconds/intervalSeconds) % tw.slotNum
-
+	circle = delaySeconds / intervalSeconds / tw.slotNum
+	pos = (tw.currentPos + delaySeconds/intervalSeconds) % tw.slotNum
 	return
 }
 
 func (tw *TimeWheel) removeTask(key string) {
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+	tw.removeTaskInternal(key)
+}
+
+func (tw *TimeWheel) removeTaskInternal(key string) {
 	pos, ok := tw.timer[key]
 	if !ok {
 		return
