@@ -20,11 +20,11 @@ type Settings struct {
 	TimeFormat string `yaml:"time-format"`
 }
 
-type logLevel int
+type LogLevel int
 
 // Output levels
 const (
-	DEBUG logLevel = iota
+	DEBUG LogLevel = iota
 	INFO
 	WARNING
 	ERROR
@@ -39,7 +39,7 @@ const (
 
 type logEntry struct {
 	msg   string
-	level logLevel
+	level LogLevel
 }
 
 var (
@@ -48,7 +48,7 @@ var (
 
 // ILogger defines the methods that any logger should implement
 type ILogger interface {
-	Output(level logLevel, callerDepth int, msg string)
+	Output(level LogLevel, callerDepth int, msg string)
 }
 
 // Logger is Logger
@@ -134,7 +134,7 @@ func Setup(settings *Settings) {
 }
 
 // Output sends a msg to logger
-func (logger *Logger) Output(level logLevel, callerDepth int, msg string) {
+func (logger *Logger) Output(level LogLevel, callerDepth int, msg string) {
 	var formattedMsg string
 	_, file, line, ok := runtime.Caller(callerDepth)
 	if ok {
