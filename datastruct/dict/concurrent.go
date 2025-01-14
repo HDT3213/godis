@@ -89,8 +89,6 @@ func (dict *ConcurrentDict) Get(key string) (val interface{}, exists bool) {
 	hashCode := fnv32(key)
 	index := dict.spread(hashCode)
 	s := dict.getShard(index)
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
 	val, exists = s.m[key]
 	return
 }
@@ -102,6 +100,8 @@ func (dict *ConcurrentDict) GetWithLock(key string) (val interface{}, exists boo
 	hashCode := fnv32(key)
 	index := dict.spread(hashCode)
 	s := dict.getShard(index)
+	s.mutex.RLock()
+	defer s.mutex.RUnlock()
 	val, exists = s.m[key]
 	return
 }
@@ -122,8 +122,6 @@ func (dict *ConcurrentDict) Put(key string, val interface{}) (result int) {
 	hashCode := fnv32(key)
 	index := dict.spread(hashCode)
 	s := dict.getShard(index)
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
 
 	if _, ok := s.m[key]; ok {
 		s.m[key] = val
@@ -141,6 +139,8 @@ func (dict *ConcurrentDict) PutWithLock(key string, val interface{}) (result int
 	hashCode := fnv32(key)
 	index := dict.spread(hashCode)
 	s := dict.getShard(index)
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
 	if _, ok := s.m[key]; ok {
 		s.m[key] = val
@@ -159,8 +159,6 @@ func (dict *ConcurrentDict) PutIfAbsent(key string, val interface{}) (result int
 	hashCode := fnv32(key)
 	index := dict.spread(hashCode)
 	s := dict.getShard(index)
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
 
 	if _, ok := s.m[key]; ok {
 		return 0
@@ -177,6 +175,8 @@ func (dict *ConcurrentDict) PutIfAbsentWithLock(key string, val interface{}) (re
 	hashCode := fnv32(key)
 	index := dict.spread(hashCode)
 	s := dict.getShard(index)
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
 	if _, ok := s.m[key]; ok {
 		return 0
@@ -227,8 +227,6 @@ func (dict *ConcurrentDict) Remove(key string) (val interface{}, result int) {
 	hashCode := fnv32(key)
 	index := dict.spread(hashCode)
 	s := dict.getShard(index)
-	s.mutex.Lock()
-	defer s.mutex.Unlock()
 
 	if val, ok := s.m[key]; ok {
 		delete(s.m, key)
@@ -245,6 +243,8 @@ func (dict *ConcurrentDict) RemoveWithLock(key string) (val interface{}, result 
 	hashCode := fnv32(key)
 	index := dict.spread(hashCode)
 	s := dict.getShard(index)
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
 
 	if val, ok := s.m[key]; ok {
 		delete(s.m, key)
