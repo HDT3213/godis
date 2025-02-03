@@ -7,6 +7,7 @@ import (
 	dbimpl "github.com/hdt3213/godis/database"
 	"github.com/hdt3213/godis/datastruct/set"
 	"github.com/hdt3213/godis/interface/database"
+	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
 )
@@ -129,4 +130,17 @@ func NewCluster(cfg *Config) (*Cluster, error) {
 	cluster.injectInsertCallback()
 	cluster.injectDeleteCallback()
 	return cluster, nil
+}
+
+// AfterClientClose does some clean after client close connection
+func (cluster *Cluster) AfterClientClose(c redis.Connection) {
+	
+}
+
+func (cluster *Cluster) Close() {
+	cluster.db.Close()
+	err := cluster.raftNode.Close()
+	if err != nil {
+		panic(err)
+	}
 }

@@ -6,6 +6,9 @@ import (
 	"time"
 
 	"github.com/hdt3213/godis/cluster/raft"
+	"github.com/hdt3213/godis/lib/utils"
+	"github.com/hdt3213/godis/redis/connection"
+	"github.com/hdt3213/godis/redis/protocol"
 )
 
 func TestClusterBootstrap(t *testing.T) {
@@ -16,6 +19,9 @@ func TestClusterBootstrap(t *testing.T) {
 	defer func() {
 		os.RemoveAll(leaderDir)
 	}()
+	RegisterDefaultCmd("get")
+	RegisterDefaultCmd("set")
+
 	// connection stub
 	connections := NewInMemConnectionFactory()
 	leaderCfg := &Config{
@@ -34,6 +40,20 @@ func TestClusterBootstrap(t *testing.T) {
 		return
 	}
 	connections.nodes[leaderCfg.RedisAdvertiseAddr] = leader
+
+	// set key-values for test
+	testEntries := make(map[string]string)
+	c := connection.NewFakeConn()
+	for i := 0; i < 1000; i++ {
+		key := utils.RandString(10)
+		value := utils.RandString(10)
+		testEntries[key] = value
+		result := leader.Exec(c, utils.ToCmdLine("set", key, value))
+		if !protocol.IsOKReply(result) {
+			t.Errorf("command [set] failed: %s", string(result.ToBytes()))
+			return
+		}
+	}
 
 	// start follower
 	followerDir := "test/1"
@@ -98,6 +118,17 @@ func TestClusterBootstrap(t *testing.T) {
 			break
 		} else {
 			time.Sleep(time.Second)
+		}
+	}
+
+	// set key-values for test
+	for key, value := range testEntries {
+		c := connection.NewFakeConn()
+		result := leader.Exec(c, utils.ToCmdLine("get", key))
+		result2 := result.(*protocol.BulkReply)
+		if string(result2.Arg) != value {
+			t.Errorf("command [get] failed: %s", string(result.ToBytes()))
+			return
 		}
 	}
 }

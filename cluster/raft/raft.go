@@ -187,3 +187,8 @@ func (node *Node) Propose(event *LogEntry) (uint64, error) {
 	}
 	return future.Index(), nil
 }
+
+func (node *Node) Close() error {
+	future := node.inner.Shutdown()
+	return fmt.Errorf("raft shutdown %v", future.Error())
+}
