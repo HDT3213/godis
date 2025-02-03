@@ -1,24 +1,27 @@
 package database
 
 import (
+	"io/ioutil"
+	"os"
+	"path/filepath"
+	"runtime"
+	"testing"
+	"time"
+
 	"github.com/hdt3213/godis/aof"
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/protocol/asserts"
-	"io/ioutil"
-	"path/filepath"
-	"runtime"
-	"testing"
-	"time"
 )
 
 func TestLoadRDB(t *testing.T) {
 	_, b, _, _ := runtime.Caller(0)
 	projectRoot := filepath.Dir(filepath.Dir(b))
+	os.Chdir(projectRoot)
 	config.Properties = &config.ServerProperties{
 		AppendOnly:  false,
-		RDBFilename: filepath.Join(projectRoot, "test.rdb"), // set working directory to project root
+		RDBFilename: "test.rdb", // set working directory to project root
 	}
 	conn := connection.NewFakeConn()
 	rdbDB := NewStandaloneServer()
@@ -38,7 +41,7 @@ func TestLoadRDB(t *testing.T) {
 	// test no rdb file
 	config.Properties = &config.ServerProperties{
 		AppendOnly:  false,
-		RDBFilename: filepath.Join(projectRoot, "none", "test.rdb"), // set working directory to project root
+		RDBFilename:  "noexists.rdb", 
 	}
 	rdbDB = NewStandaloneServer()
 	result = rdbDB.Exec(conn, utils.ToCmdLine("Get", "str"))
