@@ -30,11 +30,12 @@ func TestLoadRDB(t *testing.T) {
 	asserts.AssertMultiBulkReply(t, result, []string{"1", "2", "3", "4"})
 	result = rdbDB.Exec(conn, utils.ToCmdLine("HGetAll", "hash"))
 	asserts.AssertMultiBulkReply(t, result, []string{"1", "1"})
-	result = rdbDB.Exec(conn, utils.ToCmdLine("ZRange", "zset", "0", "1", "WITHSCORES"))
-	asserts.AssertMultiBulkReply(t, result, []string{"1", "1"})
+	result = rdbDB.Exec(conn, utils.ToCmdLine("ZRange", "zset", "0", "-1", "WITHSCORES"))
+	asserts.AssertMultiBulkReply(t, result, []string{"0", "1", "1", "1"})
 	result = rdbDB.Exec(conn, utils.ToCmdLine("SCard", "set"))
 	asserts.AssertIntReply(t, result, 1)
 
+	// test no rdb file
 	config.Properties = &config.ServerProperties{
 		AppendOnly:  false,
 		RDBFilename: filepath.Join(projectRoot, "none", "test.rdb"), // set working directory to project root

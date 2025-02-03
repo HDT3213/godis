@@ -10,6 +10,7 @@ import (
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
+	rdbcore "github.com/hdt3213/rdb/core"
 )
 
 type Cluster struct {
@@ -134,7 +135,7 @@ func NewCluster(cfg *Config) (*Cluster, error) {
 
 // AfterClientClose does some clean after client close connection
 func (cluster *Cluster) AfterClientClose(c redis.Connection) {
-	
+
 }
 
 func (cluster *Cluster) Close() {
@@ -143,4 +144,9 @@ func (cluster *Cluster) Close() {
 	if err != nil {
 		panic(err)
 	}
+}
+
+// LoadRDB real implementation of loading rdb file
+func (cluster *Cluster) LoadRDB(dec *rdbcore.Decoder) error {
+	return cluster.db.LoadRDB(dec)
 }

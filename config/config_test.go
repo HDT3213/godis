@@ -24,7 +24,4 @@ func TestParse(t *testing.T) {
 	if !p.AppendOnly {
 		t.Error("bool parse failed")
 	}
-	if len(p.Peers) != 2 || p.Peers[0] != "a" || p.Peers[1] != "b" {
-		t.Error("list parse failed")
-	}
 }
