@@ -63,6 +63,10 @@ func MakeClient(addr string) (*Client, error) {
 	}, nil
 }
 
+func (client *Client) RemoteAddress() string {
+	return client.addr
+}
+
 // Start starts asynchronous goroutines
 func (client *Client) Start() {
 	client.ticker = time.NewTicker(10 * time.Second)

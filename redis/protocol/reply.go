@@ -2,8 +2,10 @@ package protocol
 
 import (
 	"bytes"
-	"github.com/hdt3213/godis/interface/redis"
+	"errors"
 	"strconv"
+
+	"github.com/hdt3213/godis/interface/redis"
 )
 
 var (
@@ -174,6 +176,17 @@ func MakeErrReply(status string) *StandardErrReply {
 // IsErrorReply returns true if the given protocol is error
 func IsErrorReply(reply redis.Reply) bool {
 	return reply.ToBytes()[0] == '-'
+}
+
+func Try2ErrorReply(reply redis.Reply) error {
+	str := string(reply.ToBytes())
+	if len(str) == 0 {
+		return errors.New("empty reply")
+	}
+	if str[0] != '-' {
+		return nil
+	}
+	return errors.New(str[1:])
 }
 
 // ToBytes marshal redis.Reply

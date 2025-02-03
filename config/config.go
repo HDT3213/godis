@@ -40,16 +40,12 @@ type ServerProperties struct {
 	SlaveAnnouncePort int    `cfg:"slave-announce-port"`
 	SlaveAnnounceIP   string `cfg:"slave-announce-ip"`
 	ReplTimeout       int    `cfg:"repl-timeout"`
+
 	ClusterEnable     bool   `cfg:"cluster-enable"`
 	ClusterAsSeed     bool   `cfg:"cluster-as-seed"`
 	ClusterSeed       string `cfg:"cluster-seed"`
-	ClusterConfigFile string `cfg:"cluster-config-file"`
-
-	// for cluster mode configuration
-	ClusterEnabled string   `cfg:"cluster-enabled"` // Not used at present.
-	Peers          []string `cfg:"peers"`
-	Self           string   `cfg:"self"`
-
+	RaftListenAddr    string `cfg:"raft-listen-address"`
+	RaftAdvertiseAddr string `cfg:"raft-advertise-address"`
 	// config file path
 	CfPath string `cfg:"cf,omitempty"`
 }
@@ -59,7 +55,10 @@ type ServerInfo struct {
 }
 
 func (p *ServerProperties) AnnounceAddress() string {
-	return p.AnnounceHost + ":" + strconv.Itoa(p.Port)
+	if p.AnnounceHost != "" {
+		return p.AnnounceHost + ":" + strconv.Itoa(p.Port)
+	}
+	return p.Bind + ":" + strconv.Itoa(p.Port)
 }
 
 // Properties holds global config properties

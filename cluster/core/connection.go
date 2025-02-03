@@ -1,8 +1,10 @@
-package cluster
+package core
 
 import (
 	"errors"
 	"fmt"
+	"net"
+
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/datastruct/dict"
 	"github.com/hdt3213/godis/interface/redis"
@@ -12,8 +14,26 @@ import (
 	"github.com/hdt3213/godis/redis/client"
 	"github.com/hdt3213/godis/redis/parser"
 	"github.com/hdt3213/godis/redis/protocol"
-	"net"
 )
+
+// ConnectionFactory manages connection with peer nodes in cluster
+type ConnectionFactory interface {
+	BorrowPeerClient(peerAddr string) (peerClient, error)
+	ReturnPeerClient(peerClient peerClient) error
+	NewStream(peerAddr string, cmdLine CmdLine) (peerStream, error)
+	Close() error
+}
+
+// peerClient represents a
+type peerClient interface {
+	RemoteAddress() string
+	Send(args [][]byte) redis.Reply
+}
+
+type peerStream interface {
+	Stream() <-chan *parser.Payload
+	Close() error
+}
 
 type defaultClientFactory struct {
 	nodeConnections dict.Dict // map[string]*pool.Pool
@@ -24,25 +44,36 @@ var connectionPoolConfig = pool.Config{
 	MaxActive: 16,
 }
 
+func NewFactory() ConnectionFactory {
+	return &defaultClientFactory{
+		nodeConnections: dict.MakeSimple(),
+	}
+}
+
+// NewPeerClient creats a new client, no need to return this client
+func (factory *defaultClientFactory) NewPeerClient(peerAddr string) (peerClient, error) {
+	c, err := client.MakeClient(peerAddr)
+	if err != nil {
+		return nil, err
+	}
+	c.Start()
+	// all peers of cluster should use the same password
+	if config.Properties.RequirePass != "" {
+		authResp := c.Send(utils.ToCmdLine("AUTH", config.Properties.RequirePass))
+		if !protocol.IsOKReply(authResp) {
+			return nil, fmt.Errorf("auth failed, resp: %s", string(authResp.ToBytes()))
+		}
+	}
+	return c, nil
+}
+
 // GetPeerClient gets a client with peer form pool
-func (factory *defaultClientFactory) GetPeerClient(peerAddr string) (peerClient, error) {
+func (factory *defaultClientFactory) BorrowPeerClient(peerAddr string) (peerClient, error) {
 	var connectionPool *pool.Pool
 	raw, ok := factory.nodeConnections.Get(peerAddr)
 	if !ok {
 		creator := func() (interface{}, error) {
-			c, err := client.MakeClient(peerAddr)
-			if err != nil {
-				return nil, err
-			}
-			c.Start()
-			// all peers of cluster should use the same password
-			if config.Properties.RequirePass != "" {
-				authResp := c.Send(utils.ToCmdLine("AUTH", config.Properties.RequirePass))
-				if !protocol.IsOKReply(authResp) {
-					return nil, fmt.Errorf("auth failed, resp: %s", string(authResp.ToBytes()))
-				}
-			}
-			return c, nil
+			return factory.NewPeerClient(peerAddr)
 		}
 		finalizer := func(x interface{}) {
 			logger.Debug("destroy client")
@@ -68,9 +99,14 @@ func (factory *defaultClientFactory) GetPeerClient(peerAddr string) (peerClient,
 	return conn, nil
 }
 
+func (cluster *Cluster) BorrowLeaderClient() (peerClient, error) {
+	leaderAddr := cluster.raftNode.GetLeaderRedisAddress()
+	return cluster.connections.BorrowPeerClient(leaderAddr)
+}
+
 // ReturnPeerClient returns client to pool
-func (factory *defaultClientFactory) ReturnPeerClient(peer string, peerClient peerClient) error {
-	raw, ok := factory.nodeConnections.Get(peer)
+func (factory *defaultClientFactory) ReturnPeerClient(peerClient peerClient) error {
+	raw, ok := factory.nodeConnections.Get(peerClient.RemoteAddress())
 	if !ok {
 		return errors.New("connection pool not found")
 	}
@@ -140,3 +176,4 @@ func (factory *defaultClientFactory) Close() error {
 	})
 	return nil
 }
+

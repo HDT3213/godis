@@ -164,7 +164,7 @@ func GenGodisInfoString(section string, db *Server) []byte {
 
 // getGodisRunningMode return godis running mode
 func getGodisRunningMode() string {
-	if config.Properties.ClusterEnabled == "yes" {
+	if config.Properties.ClusterEnable {
 		return config.ClusterMode
 	} else {
 		return config.StandaloneMode
