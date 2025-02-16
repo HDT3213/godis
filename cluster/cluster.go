@@ -5,7 +5,7 @@ import (
 	"os"
 	"path"
 
-	_ "github.com/hdt3213/godis/cluster/commands" // register nodes
+	_ "github.com/hdt3213/godis/cluster/commands" // register commands
 	"github.com/hdt3213/godis/cluster/core"
 	"github.com/hdt3213/godis/cluster/raft"
 	"github.com/hdt3213/godis/config"

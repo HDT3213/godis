@@ -164,6 +164,7 @@ func (db *DB) GetUndoLogs(cmdLine [][]byte) []CmdLine {
 }
 
 // GetRelatedKeys analysis related keys
+// returns related write keys and read keys
 func GetRelatedKeys(cmdLine [][]byte) ([]string, []string) {
 	cmdName := strings.ToLower(string(cmdLine[0]))
 	cmd, ok := cmdTable[cmdName]
