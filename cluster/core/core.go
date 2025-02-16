@@ -21,6 +21,7 @@ type Cluster struct {
 
 	slotsManager    *slotsManager
 	rebalanceManger *rebalanceManager
+	transactions    *TransactionManager
 }
 
 type Config struct {
@@ -127,6 +128,7 @@ func NewCluster(cfg *Config) (*Cluster, error) {
 		config:          cfg,
 		rebalanceManger: newRebalanceManager(),
 		slotsManager:    newSlotsManager(),
+		transactions:    newTransactionManager(),
 	}
 	cluster.injectInsertCallback()
 	cluster.injectDeleteCallback()

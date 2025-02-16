@@ -152,7 +152,6 @@ func execFinishExport(cluster *Cluster, c redis.Connection, cmdLine CmdLine) red
 	}
 	logger.Infof("finishing migration task %s, got task info", taskId)
 
-
 	// transport dirty keys within lock, lock will be released while migration done
 	var lockedSlots []uint32
 	defer func() {
@@ -170,7 +169,6 @@ func execFinishExport(cluster *Cluster, c redis.Connection, cmdLine CmdLine) red
 		slotManager.finishExportingWithinLock()
 	}
 	logger.Infof("finishing migration task %s, dirty keys transported", taskId)
-
 
 	// propose migrate finish
 	leaderConn, err := cluster.BorrowLeaderClient()
