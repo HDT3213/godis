@@ -1,6 +1,8 @@
 package geohash
 
-import "math"
+import (
+	"math"
+)
 
 const (
 	dr          = math.Pi / 180.0
@@ -86,8 +88,11 @@ func GetNeighbours(latitude, longitude, radiusMeters float64) [][2]uint64 {
 	precision := estimatePrecisionByRadius(radiusMeters, latitude)
 
 	center, box := encode0(latitude, longitude, precision)
-	height := box[0][1] - box[0][0]
-	width := box[1][1] - box[1][0]
+	// Width represents the range difference in the longitudinal direction
+	// Height represents the range difference in the latitudinal direction
+	// Conforming to the conventional representation of geographic coordinates.
+	width := box[0][1] - box[0][0]
+	height := box[1][1] - box[1][0]
 	centerLng := (box[0][1] + box[0][0]) / 2
 	centerLat := (box[1][1] + box[1][0]) / 2
 	maxLat := ensureValidLat(centerLat + height)
