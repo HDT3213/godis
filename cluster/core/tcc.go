@@ -79,7 +79,7 @@ func execCommit(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Rep
 	}
 	cluster.transactions.mu.Unlock()
 
-	resp := cluster.db.Exec(c, tx.realCmdLine)
+	resp := cluster.db.ExecWithLock(c, tx.realCmdLine)
 
 	// unlock regardless of result
 	cluster.db.RWUnLocks(0, tx.writeKeys, tx.readKeys)
@@ -88,7 +88,8 @@ func execCommit(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Rep
 		// do not delete transaction, waiting rollback
 		return resp
 	}
-	// todo delete transaction after deadline
+
+	// todo: delete transaction after deadline
 	// cluster.transactions.mu.Lock()
 	// delete(cluster.transactions.txs, txId)
 	// cluster.transactions.mu.Unlock()
@@ -115,7 +116,7 @@ func execRollback(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.R
 	cluster.db.RWLocks(0, tx.writeKeys, tx.readKeys)
 	for i := len(tx.undoLogs) - 1; i >= 0; i--  {
 		cmdline := tx.undoLogs[i]
-		cluster.db.Exec(c, cmdline)
+		cluster.db.ExecWithLock(c, cmdline)
 	}
 	cluster.db.RWUnLocks(0, tx.writeKeys, tx.readKeys)
 
