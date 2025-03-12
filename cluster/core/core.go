@@ -22,6 +22,11 @@ type Cluster struct {
 	slotsManager    *slotsManager
 	rebalanceManger *rebalanceManager
 	transactions    *TransactionManager
+
+	// allow inject route implementation
+	getSlotImpl  func(key string) uint32
+	pickNodeImpl func(slotID uint32) string
+	id_          string // for tests only
 }
 
 type Config struct {
@@ -32,6 +37,9 @@ type Config struct {
 }
 
 func (c *Cluster) SelfID() string {
+	if c.raftNode == nil {
+		return c.id_
+	}
 	return c.raftNode.Cfg.ID()
 }
 
@@ -129,6 +137,12 @@ func NewCluster(cfg *Config) (*Cluster, error) {
 		rebalanceManger: newRebalanceManager(),
 		slotsManager:    newSlotsManager(),
 		transactions:    newTransactionManager(),
+	}
+	cluster.pickNodeImpl = func(slotID uint32) string {
+		return defaultPickNodeImpl(cluster, slotID)
+	}
+	cluster.getSlotImpl = func(key string) uint32 {
+		return defaultGetSlotImpl(cluster, key)
 	}
 	cluster.injectInsertCallback()
 	cluster.injectDeleteCallback()

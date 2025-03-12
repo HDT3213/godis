@@ -52,15 +52,23 @@ func GetPartitionKey(key string) string {
 	return key[beg+1 : end]
 }
 
-func GetSlot(key string) uint32 {
+func defaultGetSlotImpl(cluster *Cluster, key string) uint32 {
 	partitionKey := GetPartitionKey(key)
 	return crc32.ChecksumIEEE([]byte(partitionKey)) % uint32(SlotCount)
+}
+
+func (cluster *Cluster) GetSlot(key string) uint32 {
+	return cluster.getSlotImpl(key)
+}
+
+func defaultPickNodeImpl(cluster *Cluster, slotID uint32) string {
+	return cluster.raftNode.FSM.PickNode(slotID)
 }
 
 // pickNode returns the node id hosting the given slot.
 // If the slot is migrating, return the node which is exporting the slot
 func (cluster *Cluster) PickNode(slotID uint32) string {
-	return cluster.raftNode.FSM.PickNode(slotID)
+	return cluster.pickNodeImpl(slotID)
 }
 
 // format: raft.committedindex

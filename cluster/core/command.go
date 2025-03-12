@@ -62,7 +62,7 @@ func RegisterDefaultCmd(name string) {
 // relay command to responsible peer, and return its protocol to client
 func DefaultFunc(cluster *Cluster, c redis.Connection, args [][]byte) redis.Reply {
 	key := string(args[1])
-	slotId := GetSlot(key)
+	slotId := cluster.GetSlot(key)
 	peer := cluster.PickNode(slotId)
 	if peer == cluster.SelfID() {
 		// to self db

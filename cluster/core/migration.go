@@ -46,7 +46,7 @@ func (sm *slotStatus) finishExportingWithinLock() {
 
 func (cluster *Cluster) injectInsertCallback() {
 	cb := func(dbIndex int, key string, entity *database.DataEntity) {
-		slotIndex := GetSlot(key)
+		slotIndex := cluster.GetSlot(key)
 		slotManager := cluster.slotsManager.getSlot(slotIndex)
 		slotManager.mu.Lock()
 		defer slotManager.mu.Unlock()
@@ -60,7 +60,7 @@ func (cluster *Cluster) injectInsertCallback() {
 
 func (cluster *Cluster) injectDeleteCallback() {
 	cb := func(dbIndex int, key string, entity *database.DataEntity) {
-		slotIndex := GetSlot(key)
+		slotIndex := cluster.GetSlot(key)
 		slotManager := cluster.slotsManager.getSlot(slotIndex)
 		slotManager.mu.Lock()
 		defer slotManager.mu.Unlock()
