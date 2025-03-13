@@ -10,22 +10,8 @@ import (
 func init() {
 	core.RegisterCmd("mset_", execMSetInLocal)
 	core.RegisterCmd("mset", execMSet)
-
-}
-
-type CmdLine = [][]byte
-
-// node -> keys on the node
-type RouteMap map[string][]string
-
-func getRouteMap(cluster *core.Cluster, keys []string) RouteMap {
-	m := make(RouteMap)
-	for _, key := range keys {
-		slot := cluster.GetSlot(key)
-		node := cluster.PickNode(slot)
-		m[node] = append(m[node], key)
-	}
-	return m
+	core.RegisterCmd("mget_", execMGetInLocal)
+	core.RegisterCmd("mget", execMGet)
 }
 
 // execMSetInLocal executes msets in local node
@@ -37,13 +23,26 @@ func execMSetInLocal(cluster *core.Cluster, c redis.Connection, cmdLine CmdLine)
 	return cluster.LocalExec(c, cmdLine)
 }
 
+// execMSetInLocal executes msets in local node
+func execMGetInLocal(cluster *core.Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
+	if len(cmdLine) < 2 {
+		return protocol.MakeArgNumErrReply("mget")
+	}
+	cmdLine[0] = []byte("mget")
+	return cluster.LocalExec(c, cmdLine)
+}
+
 func execMSet(cluster *core.Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 	if len(cmdLine) < 3 || len(cmdLine)%2 != 1 {
 		return protocol.MakeArgNumErrReply("mset")
 	}
 	var keys []string
+	keyValues := make(map[string][]byte)
 	for i := 1; i < len(cmdLine); i += 2 {
-		keys = append(keys, string(cmdLine[i]))
+		key := string(cmdLine[i])
+		value := cmdLine[i+1]
+		keyValues[key] = value
+		keys = append(keys, key)
 	}
 	routeMap := getRouteMap(cluster, keys)
 	if len(routeMap) == 1 {
@@ -53,56 +52,77 @@ func execMSet(cluster *core.Cluster, c redis.Connection, cmdLine CmdLine) redis.
 			return cluster.Relay(node, c, cmdLine)
 		}
 	}
-	return execMSetSlow(cluster, c, cmdLine, routeMap)
-}
 
-func requestRollback(cluster *core.Cluster, c redis.Connection, txId string, routeMap RouteMap) {
-	rollbackCmd := utils.ToCmdLine("rollback", txId)
-	for node := range routeMap {
-		cluster.Relay(node, c, rollbackCmd)
-	}
-}
-
-// execMSetSlow execute mset through tcc
-func execMSetSlow(cluster *core.Cluster, c redis.Connection, cmdLine CmdLine, routeMap RouteMap) redis.Reply {
-	txId := utils.RandString(6)
-
-	keyValues := make(map[string][]byte)
-	for i := 1; i < len(cmdLine); i += 2 {
-		key := string(cmdLine[i])
-		value := cmdLine[i+1]
-		keyValues[key] = value
-	}
-
-	// make prepare requests
-	nodePrepareCmdMap := make(map[string]CmdLine)
+	// tcc
+	cmdLineMap := make(map[string]CmdLine)
 	for node, keys := range routeMap {
-		prepareCmd := utils.ToCmdLine("prepare", txId, "mset")
+		nodeCmdLine := utils.ToCmdLine("mset")
 		for _, key := range keys {
-			value := keyValues[key]
-			prepareCmd = append(prepareCmd, []byte(key), value)
+			val := keyValues[key]
+			nodeCmdLine = append(nodeCmdLine, []byte(key), val)
 		}
-		nodePrepareCmdMap[node] = prepareCmd
+		cmdLineMap[node] = nodeCmdLine
 	}
-
-	// send prepare request
-	for node, prepareCmd := range nodePrepareCmdMap {
-		reply := cluster.Relay(node, c, prepareCmd)
-		if protocol.IsErrorReply(reply) {
-			requestRollback(cluster, c, txId, routeMap)
-			return protocol.MakeErrReply("prepare failed")
-		}
+	tx := &TccTx{
+		rawCmdLine: cmdLine,
+		routeMap:   routeMap,
+		cmdLines:   cmdLineMap,
 	}
-
-	// send commit request
-	commiteCmd := utils.ToCmdLine("commit", txId)
-	for node := range nodePrepareCmdMap {
-		reply := cluster.Relay(node, c, commiteCmd)
-		if protocol.IsErrorReply(reply) {
-			requestRollback(cluster, c, txId, routeMap)
-			return protocol.MakeErrReply("commit failed")
-		}
+	_, err := doTcc(cluster, c, tx)
+	if err != nil {
+		return err
 	}
-
 	return protocol.MakeOkReply()
+}
+
+func execMGet(cluster *core.Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
+	if len(cmdLine) < 2 {
+		return protocol.MakeArgNumErrReply("mget")
+	}
+	keys := make([]string, 0, len(cmdLine)-1)
+	for i := 1; i < len(cmdLine); i++ {
+		keys = append(keys, string(cmdLine[i]))
+	}
+	routeMap := getRouteMap(cluster, keys)
+	if len(routeMap) == 1 {
+		// only one node, do it fast
+		for node := range routeMap {
+			cmdLine[0] = []byte("mget_")
+			return cluster.Relay(node, c, cmdLine)
+		}
+	}
+
+	// tcc
+	cmdLineMap := make(map[string]CmdLine)
+	for node, keys := range routeMap {
+		cmdLineMap[node] = utils.ToCmdLine2("mget", keys...)
+	}
+	tx := &TccTx{
+		rawCmdLine: cmdLine,
+		routeMap:   routeMap,
+		cmdLines:   cmdLineMap,
+	}
+	nodeResults, err := doTcc(cluster, c, tx)
+	if err != nil {
+		return err
+	}
+	keyValues := make(map[string][]byte, len(cmdLine)-1)
+	for node, ret := range nodeResults {
+		nodeCmdLine := cmdLineMap[node]
+		result := ret.(*protocol.MultiBulkReply)
+		if len(result.Args) != len(nodeCmdLine) - 1 {
+			return protocol.MakeErrReply("wrong response from node " + node)
+		}
+		for i := 1; i < len(nodeCmdLine); i++ {
+			key := string(nodeCmdLine[i])
+			value := result.Args[i-1]
+			keyValues[key] = value
+		}
+	}
+	result := make([][]byte, 0, len(cmdLine)-1)
+	for i := 1; i < len(cmdLine); i++ {
+		value := keyValues[string(cmdLine[i])]
+		result = append(result, value)
+	}
+	return protocol.MakeMultiBulkReply(result)
 }

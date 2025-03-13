@@ -6,6 +6,7 @@ import (
 	"github.com/hdt3213/godis/cluster/core"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/connection"
+	"github.com/hdt3213/godis/redis/protocol/asserts"
 )
 
 func TestMset(t *testing.T) {
@@ -16,5 +17,7 @@ func TestMset(t *testing.T) {
 	c := connection.NewFakeConn()
 	// 1, 2 will be routed to node1 and node2, see MakeTestCluster
 	res := execMSet(node1, c, utils.ToCmdLine("mset", "1", "1", "2", "2"))
-	println(res)
+	asserts.AssertStatusReply(t, res, "OK")
+	res2 := execMGet(node1, c, utils.ToCmdLine("mget", "1", "2"))
+	asserts.AssertMultiBulkReply(t, res2, []string{"1", "2"})
 }
