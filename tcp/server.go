@@ -84,7 +84,7 @@ func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan
 		}
 		// handle
 		logger.Info("accept link")
-		ClientCounter++
+		atomic.AddInt32(&ClientCounter, 1)
 		waitDone.Add(1)
 		go func() {
 			defer func() {
