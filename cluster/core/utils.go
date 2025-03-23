@@ -39,6 +39,11 @@ func (cluster *Cluster) LocalExec(c redis.Connection, cmdLine [][]byte) redis.Re
 	return cluster.db.Exec(c, cmdLine)
 }
 
+// LocalExec executes command at local node
+func (cluster *Cluster) LocalExecWithinLock(c redis.Connection, cmdLine [][]byte) redis.Reply {
+	return cluster.db.ExecWithLock(c, cmdLine)
+}
+
 // GetPartitionKey extract hashtag
 func GetPartitionKey(key string) string {
 	beg := strings.Index(key, "{")

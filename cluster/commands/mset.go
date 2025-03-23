@@ -123,7 +123,7 @@ func execMGet(cluster *core.Cluster, c redis.Connection, cmdLine CmdLine) redis.
 	for node, ret := range nodeResults {
 		nodeCmdLine := cmdLineMap[node]
 		result := ret.(*protocol.MultiBulkReply)
-		if len(result.Args) != len(nodeCmdLine) - 1 {
+		if len(result.Args) != len(nodeCmdLine)-1 {
 			return protocol.MakeErrReply("wrong response from node " + node)
 		}
 		for i := 1; i < len(nodeCmdLine); i++ {
@@ -143,12 +143,12 @@ func execMGet(cluster *core.Cluster, c redis.Connection, cmdLine CmdLine) redis.
 const someKeysExistsErr = "Some Keys Exists"
 
 func init() {
-	core.RegisterPreCheck("msetnx", msetNxPrecheck)
+	core.RegisterPrepareFunc("msetnx", msetNxPrecheck)
 }
 
 func msetNxPrecheck(cluster *core.Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 	var keys []string
-	for i := 1; i < len(cmdLine); i+=2 {
+	for i := 1; i < len(cmdLine); i += 2 {
 		keys = append(keys, string(cmdLine[i]))
 	}
 	exists := cluster.LocalExists(keys)

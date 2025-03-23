@@ -60,22 +60,22 @@ func execPrepare(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Re
 	cluster.transactions.txs[txId] = tx
 	cluster.transactions.mu.Unlock()
 
-	// pre-execute check
-	validator := preChecks[string(realCmdLine[0])]
-	if validator != nil {
-		validateResult := validator(cluster, c, realCmdLine)
-		if protocol.IsErrorReply(validateResult) {
-			return validateResult
-		}
-	}
-
 	// prepare lock and undo locks
 	tx.writeKeys, tx.readKeys = database.GetRelatedKeys(realCmdLine)
 	cluster.db.RWLocks(0, tx.writeKeys, tx.readKeys)
 	tx.undoLogs = cluster.db.GetUndoLogs(0, realCmdLine)
 	tx.realCmdLine = realCmdLine
 
-	return protocol.MakeOkReply()
+	// execute prepare func
+	prepareFunc := prepareFuncs[strings.ToLower(string(realCmdLine[0]))]
+	var result redis.Reply
+	if prepareFunc != nil {
+		result = prepareFunc(cluster, c, realCmdLine)
+	} else {
+		result = protocol.MakeOkReply()
+	}
+
+	return result
 }
 
 func execCommit(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
@@ -128,7 +128,7 @@ func execRollback(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.R
 
 	// rollback
 	cluster.db.RWLocks(0, tx.writeKeys, tx.readKeys)
-	for i := len(tx.undoLogs) - 1; i >= 0; i--  {
+	for i := len(tx.undoLogs) - 1; i >= 0; i-- {
 		cmdline := tx.undoLogs[i]
 		cluster.db.ExecWithLock(c, cmdline)
 	}
@@ -142,13 +142,10 @@ func execRollback(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.R
 	return protocol.MakeOkReply()
 }
 
-// PreCheckFunc do validation during tcc preparing period
-type PreCheckFunc func(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply
+var prepareFuncs = make(map[string]CmdFunc)
 
-var preChecks = make(map[string]PreCheckFunc)
-
-// RegisterCmd add tcc preparing validator 
-func RegisterPreCheck(name string, fn PreCheckFunc) {
+// RegisterCmd add tcc preparing validator
+func RegisterPrepareFunc(name string, fn CmdFunc) {
 	name = strings.ToLower(name)
-	preChecks[name] = fn
+	prepareFuncs[name] = fn
 }
