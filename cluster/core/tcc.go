@@ -74,7 +74,10 @@ func execPrepare(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Re
 	} else {
 		result = protocol.MakeOkReply()
 	}
-
+	if protocol.IsErrorReply(result) {
+		// prepare for rollback
+		cluster.db.RWUnLocks(0, tx.writeKeys, tx.readKeys)
+	}
 	return result
 }
 
@@ -145,6 +148,8 @@ func execRollback(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.R
 var prepareFuncs = make(map[string]CmdFunc)
 
 // RegisterCmd add tcc preparing validator
+// prepareFunc will be executed within lock
+// If prepareFunc returns an error reply, the transaction should be rolledback-
 func RegisterPrepareFunc(name string, fn CmdFunc) {
 	name = strings.ToLower(name)
 	prepareFuncs[name] = fn
