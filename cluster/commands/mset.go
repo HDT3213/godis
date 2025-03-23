@@ -1,6 +1,8 @@
 package commands
 
 import (
+	"strings"
+
 	"github.com/hdt3213/godis/cluster/core"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/utils"
@@ -12,6 +14,8 @@ func init() {
 	core.RegisterCmd("mset", execMSet)
 	core.RegisterCmd("mget_", execMGetInLocal)
 	core.RegisterCmd("mget", execMGet)
+	core.RegisterCmd("msetnx_", execMSetNxInLocal)
+	core.RegisterCmd("msetnx", execMSet)
 }
 
 // execMSetInLocal executes msets in local node
@@ -29,6 +33,15 @@ func execMGetInLocal(cluster *core.Cluster, c redis.Connection, cmdLine CmdLine)
 		return protocol.MakeArgNumErrReply("mget")
 	}
 	cmdLine[0] = []byte("mget")
+	return cluster.LocalExec(c, cmdLine)
+}
+
+// execMSetInLocal executes msets in local node
+func execMSetNxInLocal(cluster *core.Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
+	if len(cmdLine) < 3 {
+		return protocol.MakeArgNumErrReply("msetnx")
+	}
+	cmdLine[0] = []byte("msetnx")
 	return cluster.LocalExec(c, cmdLine)
 }
 
@@ -125,4 +138,68 @@ func execMGet(cluster *core.Cluster, c redis.Connection, cmdLine CmdLine) redis.
 		result = append(result, value)
 	}
 	return protocol.MakeMultiBulkReply(result)
+}
+
+const someKeysExistsErr = "Some Keys Exists"
+
+func init() {
+	core.RegisterPreCheck("msetnx", msetNxPrecheck)
+}
+
+func msetNxPrecheck(cluster *core.Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
+	var keys []string
+	for i := 1; i < len(cmdLine); i+=2 {
+		keys = append(keys, string(cmdLine[i]))
+	}
+	exists := cluster.LocalExists(keys)
+	if len(exists) > 0 {
+		return protocol.MakeErrReply(someKeysExistsErr)
+	}
+	return protocol.MakeOkReply()
+}
+
+func execMSetNx(cluster *core.Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
+	if len(cmdLine) < 3 || len(cmdLine)%2 != 1 {
+		return protocol.MakeArgNumErrReply("mset")
+	}
+	var keys []string
+	keyValues := make(map[string][]byte)
+	for i := 1; i < len(cmdLine); i += 2 {
+		key := string(cmdLine[i])
+		value := cmdLine[i+1]
+		keyValues[key] = value
+		keys = append(keys, key)
+	}
+	routeMap := getRouteMap(cluster, keys)
+	if len(routeMap) == 1 {
+		// only one node, do it fast
+		for node := range routeMap {
+			cmdLine[0] = []byte("msetnx_")
+			return cluster.Relay(node, c, cmdLine)
+		}
+	}
+
+	// tcc
+	cmdLineMap := make(map[string]CmdLine)
+	for node, keys := range routeMap {
+		nodeCmdLine := utils.ToCmdLine("msetnx")
+		for _, key := range keys {
+			val := keyValues[key]
+			nodeCmdLine = append(nodeCmdLine, []byte(key), val)
+		}
+		cmdLineMap[node] = nodeCmdLine
+	}
+	tx := &TccTx{
+		rawCmdLine: cmdLine,
+		routeMap:   routeMap,
+		cmdLines:   cmdLineMap,
+	}
+	_, err := doTcc(cluster, c, tx)
+	if err != nil {
+		if strings.Contains(err.Error(), someKeysExistsErr) {
+			return protocol.MakeIntReply(0)
+		}
+		return err
+	}
+	return protocol.MakeIntReply(1)
 }

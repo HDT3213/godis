@@ -79,3 +79,15 @@ func execRaftCommittedIndex(cluster *Cluster, c redis.Connection, cmdLine CmdLin
 	}
 	return protocol.MakeIntReply(int64(index))
 }
+
+// LocalExists returns existed ones from `keys` in local node
+func (cluster *Cluster) LocalExists(keys []string) []string {
+	var exists []string
+	for _, key := range keys {
+		_, ok := cluster.db.GetEntity(0, key)
+		if ok {
+			exists = append(exists, key)
+		}
+	}
+	return exists
+}

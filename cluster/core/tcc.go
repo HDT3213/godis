@@ -1,12 +1,18 @@
 package core
 
 import (
+	"strings"
 	"sync"
+	"time"
 
 	"github.com/hdt3213/godis/database"
 	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/lib/timewheel"
 	"github.com/hdt3213/godis/redis/protocol"
 )
+
+// transaction info will be deleted after transactionTTL since commit
+const transactionTTL = time.Minute
 
 type TransactionManager struct {
 	txs map[string]*TCC
@@ -54,7 +60,14 @@ func execPrepare(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Re
 	cluster.transactions.txs[txId] = tx
 	cluster.transactions.mu.Unlock()
 
-	// todo: pre-execute check
+	// pre-execute check
+	validator := preChecks[string(realCmdLine[0])]
+	if validator != nil {
+		validateResult := validator(cluster, c, realCmdLine)
+		if protocol.IsErrorReply(validateResult) {
+			return validateResult
+		}
+	}
 
 	// prepare lock and undo locks
 	tx.writeKeys, tx.readKeys = database.GetRelatedKeys(realCmdLine)
@@ -89,11 +102,12 @@ func execCommit(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Rep
 		return resp
 	}
 
-	// todo: delete transaction after deadline
-	// cluster.transactions.mu.Lock()
-	// delete(cluster.transactions.txs, txId)
-	// cluster.transactions.mu.Unlock()
-
+	// delete transaction after deadline
+	timewheel.At(time.Now().Add(transactionTTL), txId, func() {
+		cluster.transactions.mu.Lock()
+		delete(cluster.transactions.txs, txId)
+		cluster.transactions.mu.Unlock()
+	})
 	return resp
 }
 
@@ -126,4 +140,15 @@ func execRollback(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.R
 	cluster.transactions.mu.Unlock()
 
 	return protocol.MakeOkReply()
+}
+
+// PreCheckFunc do validation during tcc preparing period
+type PreCheckFunc func(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply
+
+var preChecks = make(map[string]PreCheckFunc)
+
+// RegisterCmd add tcc preparing validator 
+func RegisterPreCheck(name string, fn PreCheckFunc) {
+	name = strings.ToLower(name)
+	preChecks[name] = fn
 }
