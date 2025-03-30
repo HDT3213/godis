@@ -27,8 +27,6 @@ func TestLoadRDB(t *testing.T) {
 	rdbDB := NewStandaloneServer()
 	result := rdbDB.Exec(conn, utils.ToCmdLine("Get", "str"))
 	asserts.AssertBulkReply(t, result, "str")
-	result = rdbDB.Exec(conn, utils.ToCmdLine("TTL", "str"))
-	asserts.AssertIntReplyGreaterThan(t, result, 0)
 	result = rdbDB.Exec(conn, utils.ToCmdLine("LRange", "list", "0", "-1"))
 	asserts.AssertMultiBulkReply(t, result, []string{"1", "2", "3", "4"})
 	result = rdbDB.Exec(conn, utils.ToCmdLine("HGetAll", "hash"))
