@@ -24,6 +24,7 @@ type TCC struct {
 	undoLogs    []CmdLine
 	writeKeys   []string
 	readKeys    []string
+	hasLock     bool
 }
 
 func newTransactionManager() *TransactionManager {
@@ -65,6 +66,7 @@ func execPrepare(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Re
 	cluster.db.RWLocks(0, tx.writeKeys, tx.readKeys)
 	tx.undoLogs = cluster.db.GetUndoLogs(0, realCmdLine)
 	tx.realCmdLine = realCmdLine
+	tx.hasLock = true
 
 	// execute prepare func
 	prepareFunc := prepareFuncs[strings.ToLower(string(realCmdLine[0]))]
@@ -77,6 +79,7 @@ func execPrepare(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Re
 	if protocol.IsErrorReply(result) {
 		// prepare for rollback
 		cluster.db.RWUnLocks(0, tx.writeKeys, tx.readKeys)
+		tx.hasLock = false
 	}
 	return result
 }
@@ -99,6 +102,7 @@ func execCommit(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Rep
 
 	// unlock regardless of result
 	cluster.db.RWUnLocks(0, tx.writeKeys, tx.readKeys)
+	tx.hasLock = false
 
 	if protocol.IsErrorReply(resp) {
 		// do not delete transaction, waiting rollback
@@ -130,7 +134,10 @@ func execRollback(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.R
 	cluster.transactions.mu.Unlock()
 
 	// rollback
-	cluster.db.RWLocks(0, tx.writeKeys, tx.readKeys)
+	if !tx.hasLock {
+		cluster.db.RWLocks(0, tx.writeKeys, tx.readKeys)
+		tx.hasLock = true
+	}
 	for i := len(tx.undoLogs) - 1; i >= 0; i-- {
 		cmdline := tx.undoLogs[i]
 		cluster.db.ExecWithLock(c, cmdline)
