@@ -407,6 +407,7 @@ func execHIncrByFloat(db *DB, args [][]byte) redis.Reply {
 	value, exists := dict.Get(field)
 	if !exists {
 		dict.Put(field, args[2])
+		db.addAof(utils.ToCmdLine3("hincrbyfloat", args...))
 		return protocol.MakeBulkReply(args[2])
 	}
 	val, err := strconv.ParseFloat(string(value.([]byte)), 64)
