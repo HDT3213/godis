@@ -103,6 +103,27 @@ func execLPop(db *DB, args [][]byte) redis.Reply {
 		return &protocol.NullBulkReply{}
 	}
 
+	if len(args) == 2 {
+		count64, err := strconv.ParseInt(string(args[1]), 10, 64)
+		if err != nil {
+			return protocol.MakeErrReply("ERR value is not an integer or out of range")
+		}
+		count := int(count64)
+		if count > list.Len() {
+			count = list.Len()
+		}
+		vals := make([][]byte, count)
+		for i := 0; i < count; i++ {
+			val := list.Remove(0).([]byte)
+			vals[i] = val
+		}
+		if list.Len() == 0 {
+			db.Remove(key)
+		}
+		db.addAof(utils.ToCmdLine3("lpop", args...))
+		return protocol.MakeMultiBulkReply(vals)
+	}
+
 	val, _ := list.Remove(0).([]byte)
 	if list.Len() == 0 {
 		db.Remove(key)
@@ -121,6 +142,26 @@ func undoLPop(db *DB, args [][]byte) []CmdLine {
 	}
 	if list == nil || list.Len() == 0 {
 		return nil
+	}
+	if len(args) == 2 {
+		count64, err := strconv.ParseInt(string(args[1]), 10, 64)
+		if err != nil {
+			return nil
+		}
+		count := int(count64)
+		if count > list.Len() {
+			count = list.Len()
+		}
+		vals := list.Range(0, count)
+		var cmds []CmdLine
+		for i := len(vals) - 1; i >= 0; i-- {
+			cmds = append(cmds, CmdLine{
+				lPushCmd,
+				args[0],
+				vals[i].([]byte),
+			})
+		}
+		return cmds
 	}
 	element, _ := list.Get(0).([]byte)
 	return []CmdLine{
@@ -366,6 +407,27 @@ func execRPop(db *DB, args [][]byte) redis.Reply {
 		return &protocol.NullBulkReply{}
 	}
 
+	if len(args) == 2 {
+		count64, err := strconv.ParseInt(string(args[1]), 10, 64)
+		if err != nil {
+			return protocol.MakeErrReply("ERR value is not an integer or out of range")
+		}
+		count := int(count64)
+		if count > list.Len() {
+			count = list.Len()
+		}
+		vals := make([][]byte, count)
+		for i := 0; i < count; i++ {
+			val := list.RemoveLast().([]byte)
+			vals[i] = val
+		}
+		if list.Len() == 0 {
+			db.Remove(key)
+		}
+		db.addAof(utils.ToCmdLine3("rpop", args...))
+		return protocol.MakeMultiBulkReply(vals)
+	}
+
 	val, _ := list.RemoveLast().([]byte)
 	if list.Len() == 0 {
 		db.Remove(key)
@@ -384,6 +446,26 @@ func undoRPop(db *DB, args [][]byte) []CmdLine {
 	}
 	if list == nil || list.Len() == 0 {
 		return nil
+	}
+	if len(args) == 2 {
+		count64, err := strconv.ParseInt(string(args[1]), 10, 64)
+		if err != nil {
+			return nil
+		}
+		count := int(count64)
+		if count > list.Len() {
+			count = list.Len()
+		}
+		vals := list.Range(list.Len()-count, list.Len())
+		var cmds []CmdLine
+		for i := 0; i < count; i++ {
+			cmds = append(cmds, CmdLine{
+				rPushCmd,
+				args[0],
+				vals[i].([]byte),
+			})
+		}
+		return cmds
 	}
 	element, _ := list.Get(list.Len() - 1).([]byte)
 	return []CmdLine{
@@ -614,9 +696,9 @@ func init() {
 		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM, redisFlagFast}, 1, 1, 1)
 	registerCommand("RPushX", execRPushX, writeFirstKey, undoRPush, -3, flagWrite).
 		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM, redisFlagFast}, 1, 1, 1)
-	registerCommand("LPop", execLPop, writeFirstKey, undoLPop, 2, flagWrite).
+	registerCommand("LPop", execLPop, writeFirstKey, undoLPop, -2, flagWrite).
 		attachCommandExtra([]string{redisFlagWrite, redisFlagFast}, 1, 1, 1)
-	registerCommand("RPop", execRPop, writeFirstKey, undoRPop, 2, flagWrite).
+	registerCommand("RPop", execRPop, writeFirstKey, undoRPop, -2, flagWrite).
 		attachCommandExtra([]string{redisFlagWrite, redisFlagFast}, 1, 1, 1)
 	registerCommand("RPopLPush", execRPopLPush, prepareRPopLPush, undoRPopLPush, 3, flagWrite).
 		attachCommandExtra([]string{redisFlagWrite, redisFlagDenyOOM}, 1, 1, 1)
