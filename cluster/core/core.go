@@ -22,6 +22,9 @@ type Cluster struct {
 	slotsManager    *slotsManager
 	rebalanceManger *rebalanceManager
 	transactions    *TransactionManager
+	replicaManager  *replicaManager
+
+	closeChan chan struct{}
 
 	// allow inject route implementation
 	getSlotImpl  func(key string) uint32
@@ -137,6 +140,8 @@ func NewCluster(cfg *Config) (*Cluster, error) {
 		rebalanceManger: newRebalanceManager(),
 		slotsManager:    newSlotsManager(),
 		transactions:    newTransactionManager(),
+		replicaManager:  newReplicaManager(),
+		closeChan: make(chan struct{}),
 	}
 	cluster.pickNodeImpl = func(slotID uint32) string {
 		return defaultPickNodeImpl(cluster, slotID)
@@ -155,6 +160,7 @@ func (cluster *Cluster) AfterClientClose(c redis.Connection) {
 }
 
 func (cluster *Cluster) Close() {
+	close(cluster.closeChan)
 	cluster.db.Close()
 	err := cluster.raftNode.Close()
 	if err != nil {

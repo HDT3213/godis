@@ -18,13 +18,19 @@ import (
 // If the target node crashes during migrating, the migration will be canceled.
 // All related commands will be routed to the source node
 type FSM struct {
-	mu         sync.RWMutex
-	Node2Slot  map[string][]uint32       // nodeID -> slotIDs, slotIDs is in ascending order and distinct
-	Slot2Node  map[uint32]string         // slotID -> nodeID
-	Migratings map[string]*MigratingTask // taskId -> task
+	mu           sync.RWMutex
+	Node2Slot    map[string][]uint32       // nodeID -> slotIDs, slotIDs is in ascending order and distinct
+	Slot2Node    map[uint32]string         // slotID -> nodeID
+	Migratings   map[string]*MigratingTask // taskId -> task
+	MasterSlaves map[string]*MasterSlave   // masterId -> MasterSlave
 }
 
-// MigratingTask
+type MasterSlave struct {
+	MasterId string
+	Slaves   []string
+}
+
+// MigratingTask is a running migrating task
 // It is immutable
 type MigratingTask struct {
 	ID         string
@@ -35,10 +41,18 @@ type MigratingTask struct {
 	Slots []uint32
 }
 
-// InitTask
+// InitTask assigns all slots to seed node while starting a new cluster
+// It is designed to init the FSM for a new cluster
 type InitTask struct {
 	Leader    string
 	SlotCount int
+}
+
+// ReplicaChangeTask represents a failover or joinery/quitting of slaves
+type ReplicaChangeTask struct {
+	OldMasterId string
+	NewMasterId    string
+	Slaves         []string
 }
 
 // implements FSM.Apply after you created a new raft event
@@ -46,6 +60,7 @@ const (
 	EventStartMigrate = iota + 1
 	EventFinishMigrate
 	EventSeedStart
+	EventReplicaChange
 )
 
 // LogEntry is an entry in raft log, stores a change of cluster
@@ -53,6 +68,7 @@ type LogEntry struct {
 	Event         int
 	MigratingTask *MigratingTask `json:"MigratingTask,omitempty"`
 	InitTask      *InitTask
+	ReplicaChange *ReplicaChangeTask
 }
 
 // Apply is called once a log entry is committed by a majority of the cluster.
@@ -82,6 +98,13 @@ func (fsm *FSM) Apply(log *raft.Log) interface{} {
 			slots[i] = uint32(i)
 		}
 		fsm.Node2Slot[entry.InitTask.Leader] = slots
+	} else if entry.Event == EventReplicaChange {
+		change := entry.ReplicaChange
+		delete(fsm.MasterSlaves, change.OldMasterId)
+		fsm.MasterSlaves[change.NewMasterId] = &MasterSlave{
+			MasterId: change.NewMasterId,
+			Slaves:   change.Slaves,
+		}
 	}
 
 	return nil

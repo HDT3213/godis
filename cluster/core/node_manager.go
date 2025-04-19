@@ -43,6 +43,8 @@ func execJoin(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply
 	redisAddr := string(cmdLine[1])
 	raftAddr := string(cmdLine[2])
 	err := cluster.raftNode.HandleJoin(redisAddr, raftAddr)
+	// todo: record in replicaManager
+
 	if err != nil {
 		return protocol.MakeErrReply(err.Error())
 	}

@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/hashicorp/raft"
@@ -130,33 +129,9 @@ func (node *Node) BootstrapCluster(slotCount int) error {
 	return err
 }
 
-func (node *Node) Shutdown() error {
+func (node *Node) Close() error {
 	future := node.inner.Shutdown()
-	return future.Error()
-}
-
-func (node *Node) State() raft.RaftState {
-	return node.inner.State()
-}
-
-func (node *Node) CommittedIndex() (uint64, error) {
-	stats := node.inner.Stats()
-	committedIndex0 := stats["commit_index"]
-	return strconv.ParseUint(committedIndex0, 10, 64)
-}
-
-func (node *Node) GetLeaderRedisAddress() string {
-	// redis advertise address used as leader id
-	_, id := node.inner.LeaderWithID()
-	return string(id)
-}
-
-func (node *Node) GetNodes() ([]raft.Server, error) {
-	configFuture := node.inner.GetConfiguration()
-	if err := configFuture.Error(); err != nil {
-		return nil, fmt.Errorf("failed to get raft configuration: %v", err)
-	}
-	return configFuture.Configuration().Servers, nil
+	return fmt.Errorf("raft shutdown %v", future.Error())
 }
 
 // HandleJoin handles join request, node must be leader
@@ -186,9 +161,4 @@ func (node *Node) Propose(event *LogEntry) (uint64, error) {
 		return 0, fmt.Errorf("raft propose failed: %v", err)
 	}
 	return future.Index(), nil
-}
-
-func (node *Node) Close() error {
-	future := node.inner.Shutdown()
-	return fmt.Errorf("raft shutdown %v", future.Error())
 }
