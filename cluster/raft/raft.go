@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/hashicorp/raft"
@@ -22,6 +21,13 @@ type Node struct {
 	stableStore   raft.StableStore
 	snapshotStore raft.SnapshotStore
 	transport     raft.Transport
+	watcher       watcher
+}
+
+type watcher struct {
+	watch         func(*FSM)
+	currentMaster string
+	onFailover    func(newMaster string)
 }
 
 type RaftConfig struct {
@@ -74,9 +80,12 @@ func StartNode(cfg *RaftConfig) (*Node, error) {
 	}
 
 	storage := &FSM{
-		Node2Slot:  make(map[string][]uint32),
-		Slot2Node:  make(map[uint32]string),
-		Migratings: make(map[string]*MigratingTask),
+		Node2Slot:    make(map[string][]uint32),
+		Slot2Node:    make(map[uint32]string),
+		Migratings:   make(map[string]*MigratingTask),
+		MasterSlaves: make(map[string]*MasterSlave),
+		SlaveMasters: make(map[string]string),
+		Failovers:    make(map[string]*FailoverTask),
 	}
 
 	logStore := boltDB
@@ -85,8 +94,7 @@ func StartNode(cfg *RaftConfig) (*Node, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	return &Node{
+	node := &Node{
 		Cfg:           cfg,
 		inner:         inner,
 		FSM:           storage,
@@ -94,7 +102,9 @@ func StartNode(cfg *RaftConfig) (*Node, error) {
 		stableStore:   stableStore,
 		snapshotStore: snapshotStore,
 		transport:     transport,
-	}, nil
+	}
+	node.setupWatch()
+	return node, nil
 }
 
 func (node *Node) HasExistingState() (bool, error) {
@@ -130,37 +140,13 @@ func (node *Node) BootstrapCluster(slotCount int) error {
 	return err
 }
 
-func (node *Node) Shutdown() error {
+func (node *Node) Close() error {
 	future := node.inner.Shutdown()
-	return future.Error()
+	return fmt.Errorf("raft shutdown %v", future.Error())
 }
 
-func (node *Node) State() raft.RaftState {
-	return node.inner.State()
-}
-
-func (node *Node) CommittedIndex() (uint64, error) {
-	stats := node.inner.Stats()
-	committedIndex0 := stats["commit_index"]
-	return strconv.ParseUint(committedIndex0, 10, 64)
-}
-
-func (node *Node) GetLeaderRedisAddress() string {
-	// redis advertise address used as leader id
-	_, id := node.inner.LeaderWithID()
-	return string(id)
-}
-
-func (node *Node) GetNodes() ([]raft.Server, error) {
-	configFuture := node.inner.GetConfiguration()
-	if err := configFuture.Error(); err != nil {
-		return nil, fmt.Errorf("failed to get raft configuration: %v", err)
-	}
-	return configFuture.Configuration().Servers, nil
-}
-
-// HandleJoin handles join request, node must be leader
-func (node *Node) HandleJoin(redisAddr, raftAddr string) error {
+// AddToRaft handles join request, node must be leader
+func (node *Node) AddToRaft(redisAddr, raftAddr string) error {
 	configFuture := node.inner.GetConfiguration()
 	if err := configFuture.Error(); err != nil {
 		return fmt.Errorf("failed to get raft configuration: %v", err)
@@ -173,6 +159,23 @@ func (node *Node) HandleJoin(redisAddr, raftAddr string) error {
 	}
 	future := node.inner.AddVoter(id, raft.ServerAddress(raftAddr), 0, 0)
 	return future.Error()
+}
+
+func (node *Node) HandleEvict(redisAddr string) error {
+	configFuture := node.inner.GetConfiguration()
+	if err := configFuture.Error(); err != nil {
+		return fmt.Errorf("failed to get raft configuration: %v", err)
+	}
+	id := raft.ServerID(redisAddr)
+	for _, srv := range configFuture.Configuration().Servers {
+		if srv.ID == id {
+			err := node.inner.RemoveServer(srv.ID, 0, 0).Error()
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func (node *Node) Propose(event *LogEntry) (uint64, error) {
@@ -188,7 +191,21 @@ func (node *Node) Propose(event *LogEntry) (uint64, error) {
 	return future.Index(), nil
 }
 
-func (node *Node) Close() error {
-	future := node.inner.Shutdown()
-	return fmt.Errorf("raft shutdown %v", future.Error())
+func (node *Node) setupWatch() {
+	node.watcher.watch = func(f *FSM) {
+		newMaster := f.SlaveMasters[node.Self()]
+		if newMaster != node.watcher.currentMaster {
+			node.watcher.currentMaster = newMaster
+			if node.watcher.onFailover != nil {
+				node.watcher.onFailover(newMaster)
+			}
+		}
+	}
+}
+
+// SetOnFailover sets onFailover callback
+// After a failover, onFailover will receive the new master
+func (node *Node) SetOnFailover(fn func(newMaster string)) {
+	node.watcher.currentMaster = node.FSM.getMaster(node.Self())
+	node.watcher.onFailover = fn
 }

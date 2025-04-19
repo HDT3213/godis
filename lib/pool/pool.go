@@ -42,6 +42,7 @@ func New(factory func() (interface{}, error), finalizer func(x interface{}), cfg
 // getOnNoIdle try to create a new connection or waiting for connection being returned
 // invoker should have pool.mu
 func (pool *Pool) getOnNoIdle() (interface{}, error) {
+	pool.mu.Lock()
 	if pool.activeCount >= pool.MaxActive {
 		// waiting for connection being returned
 		req := make(chan interface{}, 1)
@@ -74,10 +75,10 @@ func (pool *Pool) Get() (interface{}, error) {
 		pool.mu.Unlock()
 		return nil, ErrClosed
 	}
+	pool.mu.Unlock()
 
 	select {
 	case item := <-pool.idles:
-		pool.mu.Unlock()
 		return item, nil
 	default:
 		// no pooled item, create one

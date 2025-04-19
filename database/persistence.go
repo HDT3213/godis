@@ -105,8 +105,8 @@ func (server *Server) AddAof(dbIndex int, cmdLine CmdLine) {
 	}
 }
 
-func (server *Server) bindPersister(aofHandler *aof.Persister) {
-	server.persister = aofHandler
+func (server *Server) bindPersister(persister *aof.Persister) {
+	server.persister = persister
 	// bind SaveCmdLine
 	for _, db := range server.dbSet {
 		singleDB := db.Load().(*DB)

@@ -46,6 +46,7 @@ type ServerProperties struct {
 	ClusterSeed       string `cfg:"cluster-seed"`
 	RaftListenAddr    string `cfg:"raft-listen-address"`
 	RaftAdvertiseAddr string `cfg:"raft-advertise-address"`
+	MasterInCluster   string `cfg:"master-in-cluster"`
 	// config file path
 	CfPath string `cfg:"cf,omitempty"`
 }

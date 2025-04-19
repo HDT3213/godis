@@ -3,7 +3,6 @@ package raft
 import (
 	"encoding/json"
 	"io"
-	"sort"
 	"sync"
 
 	"github.com/hashicorp/raft"
@@ -18,13 +17,22 @@ import (
 // If the target node crashes during migrating, the migration will be canceled.
 // All related commands will be routed to the source node
 type FSM struct {
-	mu         sync.RWMutex
-	Node2Slot  map[string][]uint32       // nodeID -> slotIDs, slotIDs is in ascending order and distinct
-	Slot2Node  map[uint32]string         // slotID -> nodeID
-	Migratings map[string]*MigratingTask // taskId -> task
+	mu           sync.RWMutex
+	Node2Slot    map[string][]uint32       // nodeID -> slotIDs, slotIDs is in ascending order and distinct
+	Slot2Node    map[uint32]string         // slotID -> nodeID
+	Migratings   map[string]*MigratingTask // taskId -> task
+	MasterSlaves map[string]*MasterSlave   // masterId -> MasterSlave
+	SlaveMasters map[string]string         // slaveId -> masterId
+	Failovers    map[string]*FailoverTask  // taskId -> task
+	changed      func(*FSM)                // called while fsm changed, within readlock
 }
 
-// MigratingTask
+type MasterSlave struct {
+	MasterId string
+	Slaves   []string
+}
+
+// MigratingTask is a running migrating task
 // It is immutable
 type MigratingTask struct {
 	ID         string
@@ -35,10 +43,23 @@ type MigratingTask struct {
 	Slots []uint32
 }
 
-// InitTask
+// InitTask assigns all slots to seed node while starting a new cluster
+// It is designed to init the FSM for a new cluster
 type InitTask struct {
 	Leader    string
 	SlotCount int
+}
+
+// FailoverTask represents a failover or joinery/quitting of slaves
+type FailoverTask struct {
+	ID          string
+	OldMasterId string
+	NewMasterId string
+}
+
+type JoinTask struct {
+	NodeId string
+	Master string
 }
 
 // implements FSM.Apply after you created a new raft event
@@ -46,6 +67,9 @@ const (
 	EventStartMigrate = iota + 1
 	EventFinishMigrate
 	EventSeedStart
+	EventStartFailover
+	EventFinishFailover
+	EventJoin
 )
 
 // LogEntry is an entry in raft log, stores a change of cluster
@@ -53,6 +77,8 @@ type LogEntry struct {
 	Event         int
 	MigratingTask *MigratingTask `json:"MigratingTask,omitempty"`
 	InitTask      *InitTask
+	FailoverTask  *FailoverTask
+	JoinTask      *JoinTask
 }
 
 // Apply is called once a log entry is committed by a majority of the cluster.
@@ -82,52 +108,33 @@ func (fsm *FSM) Apply(log *raft.Log) interface{} {
 			slots[i] = uint32(i)
 		}
 		fsm.Node2Slot[entry.InitTask.Leader] = slots
+		fsm.addNode(entry.InitTask.Leader, "")
+	} else if entry.Event == EventStartFailover {
+		task := entry.FailoverTask
+		fsm.Failovers[task.ID] = task
+	} else if entry.Event == EventFinishFailover {
+		task := entry.FailoverTask
+		// change route
+		fsm.failover(task.OldMasterId, task.NewMasterId)
+		slots := fsm.Node2Slot[task.OldMasterId]
+		fsm.addSlots(task.NewMasterId, slots)
+		fsm.removeSlots(task.OldMasterId, slots)
+		delete(fsm.Failovers, task.ID)
+	} else if entry.Event == EventJoin {
+		task := entry.JoinTask
+		fsm.addNode(task.NodeId, task.Master)
 	}
-
+	if fsm.changed != nil {
+		fsm.changed(fsm)
+	}
 	return nil
-}
-
-func (fsm *FSM) addSlots(nodeID string, slots []uint32) {
-	for _, slotId := range slots {
-		/// update node2Slot
-		index := sort.Search(len(fsm.Node2Slot[nodeID]), func(i int) bool {
-			return fsm.Node2Slot[nodeID][i] >= slotId
-		})
-		if !(index < len(fsm.Node2Slot[nodeID]) && fsm.Node2Slot[nodeID][index] == slotId) {
-			// not found in node's slots, insert
-			fsm.Node2Slot[nodeID] = append(fsm.Node2Slot[nodeID][:index],
-				append([]uint32{slotId}, fsm.Node2Slot[nodeID][index:]...)...)
-		}
-		/// update slot2Node
-		fsm.Slot2Node[slotId] = nodeID
-	}
-}
-
-func (fsm *FSM) removeSlots(nodeID string, slots []uint32) {
-	for _, slotId := range slots {
-		/// update node2slot
-		index := sort.Search(len(fsm.Node2Slot[nodeID]), func(i int) bool { return fsm.Node2Slot[nodeID][i] >= slotId })
-		// found slot remove
-		for index < len(fsm.Node2Slot[nodeID]) && fsm.Node2Slot[nodeID][index] == slotId {
-			fsm.Node2Slot[nodeID] = append(fsm.Node2Slot[nodeID][:index], fsm.Node2Slot[nodeID][index+1:]...)
-		}
-		// update slot2node
-		if fsm.Slot2Node[slotId] == nodeID {
-			delete(fsm.Slot2Node, slotId)
-		}
-	}
-}
-
-func (fsm *FSM) GetMigratingTask(taskId string) *MigratingTask {
-	fsm.mu.RLock()
-	defer fsm.mu.RUnlock()
-	return fsm.Migratings[taskId]
 }
 
 // FSMSnapshot stores necessary data to restore FSM
 type FSMSnapshot struct {
-	Slot2Node  map[uint32]string // slotID -> nodeID
-	Migratings map[string]*MigratingTask
+	Slot2Node    map[uint32]string // slotID -> nodeID
+	Migratings   map[string]*MigratingTask
+	MasterSlaves map[string]*MasterSlave
 }
 
 func (snapshot *FSMSnapshot) Persist(sink raft.SnapshotSink) error {
@@ -161,9 +168,14 @@ func (fsm *FSM) Snapshot() (raft.FSMSnapshot, error) {
 	for k, v := range fsm.Migratings {
 		migratings[k] = v
 	}
+	masterSlaves := make(map[string]*MasterSlave)
+	for k, v := range fsm.MasterSlaves {
+		masterSlaves[k] = v
+	}
 	return &FSMSnapshot{
-		Slot2Node:  slot2Node,
-		Migratings: migratings,
+		Slot2Node:    slot2Node,
+		Migratings:   migratings,
+		MasterSlaves: masterSlaves,
 	}, nil
 }
 
@@ -181,23 +193,18 @@ func (fsm *FSM) Restore(src io.ReadCloser) error {
 	}
 	fsm.Slot2Node = snapshot.Slot2Node
 	fsm.Migratings = snapshot.Migratings
+	fsm.MasterSlaves = snapshot.MasterSlaves
 	fsm.Node2Slot = make(map[string][]uint32)
 	for slot, node := range snapshot.Slot2Node {
 		fsm.Node2Slot[node] = append(fsm.Node2Slot[node], slot)
 	}
+	for master, slaves := range snapshot.MasterSlaves {
+		for _, slave := range slaves.Slaves {
+			fsm.SlaveMasters[slave] = master
+		}
+	}
+	if fsm.changed != nil {
+		fsm.changed(fsm)
+	}
 	return nil
-}
-
-// PickNode returns node hosting slot, ignore migrating
-func (fsm *FSM) PickNode(slot uint32) string {
-	fsm.mu.RLock()
-	defer fsm.mu.RUnlock()
-	return fsm.Slot2Node[slot]
-}
-
-// WithReadLock allow invoker do something complicated with read lock
-func (fsm *FSM) WithReadLock(fn func(fsm *FSM)) {
-	fsm.mu.RLock()
-	defer fsm.mu.RUnlock()
-	fn(fsm)
 }

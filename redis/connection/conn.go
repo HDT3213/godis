@@ -57,7 +57,9 @@ func (c *Connection) RemoteAddr() string {
 // Close disconnect with the client
 func (c *Connection) Close() error {
 	c.sendingData.WaitWithTimeout(10 * time.Second)
-	_ = c.conn.Close()
+	if c.conn != nil { // may be a fake conn for tests
+		_ = c.conn.Close()
+	}
 	c.subs = nil
 	c.password = ""
 	c.queue = nil
@@ -219,6 +221,7 @@ func (c *Connection) IsSlave() bool {
 	return c.flags&flagSlave > 0
 }
 
+// SetMaster marks c as a connection with master
 func (c *Connection) SetMaster() {
 	c.flags |= flagMaster
 }

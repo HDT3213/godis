@@ -85,7 +85,7 @@ func NewStandaloneServer() *Server {
 		}
 	}
 	server.slaveStatus = initReplSlaveStatus()
-	server.initMaster()
+	server.initMasterStatus()
 	server.startReplCron()
 	server.role = masterRole // The initialization process does not require atomicity
 	return server

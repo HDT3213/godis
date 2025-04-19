@@ -23,10 +23,10 @@ func init() {
 	RegisterCmd(migrationChangeRouteCommand, execMigrationChangeRoute)
 }
 
-// execJoin handles cluster-join command
-// format: cluster-join redisAddress (advertised)raftAddress
+// execJoin handles cluster-join command as raft leader
+// format: cluster-join redisAddress(advertised), raftAddress, masterId
 func execJoin(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
-	if len(cmdLine) != 3 {
+	if len(cmdLine) < 3 {
 		return protocol.MakeArgNumErrReply(joinClusterCommand)
 	}
 	state := cluster.raftNode.State()
@@ -42,10 +42,26 @@ func execJoin(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply
 	// self node is leader
 	redisAddr := string(cmdLine[1])
 	raftAddr := string(cmdLine[2])
-	err := cluster.raftNode.HandleJoin(redisAddr, raftAddr)
+	err := cluster.raftNode.AddToRaft(redisAddr, raftAddr)
 	if err != nil {
 		return protocol.MakeErrReply(err.Error())
 	}
+	master := ""
+	if len(cmdLine) == 4 {
+		master = string(cmdLine[3])
+	}
+	_, err = cluster.raftNode.Propose(&raft.LogEntry{
+		Event: raft.EventJoin,
+		JoinTask: &raft.JoinTask{
+			NodeId: redisAddr,
+			Master: master,
+		},
+	})
+	if err != nil {
+		// todo: remove the node from raft
+		return protocol.MakeErrReply(err.Error())
+	}
+
 	// join sucees, rebalance node
 	return protocol.MakeOkReply()
 }
@@ -114,17 +130,14 @@ func (cluster *Cluster) triggerMigrationTask(task *raft.MigratingTask) error {
 }
 
 func (cluster *Cluster) makeRebalancePlan() ([]*raft.MigratingTask, error) {
-	nodes, err := cluster.raftNode.GetNodes()
-	if err != nil {
-		return nil, err
-	}
-	avgSlot := int(math.Ceil(float64(SlotCount) / float64(len(nodes))))
+
 	var migratings []*raft.MigratingTask
 	cluster.raftNode.FSM.WithReadLock(func(fsm *raft.FSM) {
+		avgSlot := int(math.Ceil(float64(SlotCount) / float64(len(fsm.MasterSlaves))))
 		var exportingNodes []string
 		var importingNodes []string
-		for _, node := range nodes {
-			nodeId := string(node.ID)
+		for _, ms := range fsm.MasterSlaves {
+			nodeId := ms.MasterId
 			nodeSlots := fsm.Node2Slot[nodeId]
 			if len(nodeSlots) > avgSlot+1 {
 				exportingNodes = append(exportingNodes, nodeId)
@@ -200,7 +213,7 @@ func (cluster *Cluster) waitCommitted(peer string, logIndex uint64) error {
 // format: cluster.migration.changeroute taskid
 func execMigrationChangeRoute(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Reply {
 	if len(cmdLine) != 2 {
-		return protocol.MakeArgNumErrReply(joinClusterCommand)
+		return protocol.MakeArgNumErrReply(migrationChangeRouteCommand)
 	}
 	state := cluster.raftNode.State()
 	if state != raft.Leader {

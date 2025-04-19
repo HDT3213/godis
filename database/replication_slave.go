@@ -272,6 +272,11 @@ func (server *Server) psyncHandshake() (bool, error) {
 	if err != nil {
 		return false, errors.New("send failed " + err.Error())
 	}
+	return server.parsePsyncHandshake()
+}
+
+func (server *Server) parsePsyncHandshake() (bool, error) {
+	var err error
 	psyncPayload := <-server.slaveStatus.masterChan
 	if psyncPayload.Err != nil {
 		return false, errors.New("read response failed: " + psyncPayload.Err.Error())

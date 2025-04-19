@@ -311,7 +311,7 @@ func (server *Server) execPSync(c redis.Connection, args [][]byte) redis.Reply {
 			if err == nil {
 				return
 			}
-			if err != nil && err != cannotPartialSync {
+			if err != cannotPartialSync {
 				server.removeSlave(slave)
 				logger.Errorf("masterTryPartialSyncWithSlave error: %v", err)
 				return
@@ -422,7 +422,7 @@ func (listener *replAofListener) Callback(cmdLines []CmdLine) {
 	}
 }
 
-func (server *Server) initMaster() {
+func (server *Server) initMasterStatus() {
 	server.masterStatus = &masterStatus{
 		mu:           sync.RWMutex{},
 		replId:       utils.RandHexString(40),

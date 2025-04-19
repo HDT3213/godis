@@ -22,6 +22,9 @@ type Cluster struct {
 	slotsManager    *slotsManager
 	rebalanceManger *rebalanceManager
 	transactions    *TransactionManager
+	replicaManager  *replicaManager
+
+	closeChan chan struct{}
 
 	// allow inject route implementation
 	getSlotImpl  func(key string) uint32
@@ -33,7 +36,9 @@ type Config struct {
 	raft.RaftConfig
 	StartAsSeed    bool
 	JoinAddress    string
+	Master         string
 	connectionStub ConnectionFactory // for test
+	noCron         bool // for test
 }
 
 func (c *Cluster) SelfID() string {
@@ -123,7 +128,11 @@ func NewCluster(cfg *Config) (*Cluster, error) {
 			if err != nil {
 				return nil, err
 			}
-			result := conn.Send(utils.ToCmdLine(joinClusterCommand, cfg.RedisAdvertiseAddr, cfg.RaftAdvertiseAddr))
+			joinCmdLine := utils.ToCmdLine(joinClusterCommand, cfg.RedisAdvertiseAddr, cfg.RaftAdvertiseAddr)
+			if cfg.Master != "" {
+				joinCmdLine = append(joinCmdLine, []byte(cfg.Master))
+			}
+			result := conn.Send(joinCmdLine)
 			if err := protocol.Try2ErrorReply(result); err != nil {
 				return nil, err
 			}
@@ -137,6 +146,8 @@ func NewCluster(cfg *Config) (*Cluster, error) {
 		rebalanceManger: newRebalanceManager(),
 		slotsManager:    newSlotsManager(),
 		transactions:    newTransactionManager(),
+		replicaManager:  newReplicaManager(),
+		closeChan:       make(chan struct{}),
 	}
 	cluster.pickNodeImpl = func(slotID uint32) string {
 		return defaultPickNodeImpl(cluster, slotID)
@@ -146,6 +157,8 @@ func NewCluster(cfg *Config) (*Cluster, error) {
 	}
 	cluster.injectInsertCallback()
 	cluster.injectDeleteCallback()
+	cluster.registerOnFailover()
+	go cluster.clusterCron()
 	return cluster, nil
 }
 
@@ -155,6 +168,7 @@ func (cluster *Cluster) AfterClientClose(c redis.Connection) {
 }
 
 func (cluster *Cluster) Close() {
+	close(cluster.closeChan)
 	cluster.db.Close()
 	err := cluster.raftNode.Close()
 	if err != nil {

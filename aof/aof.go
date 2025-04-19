@@ -259,6 +259,9 @@ func (persister *Persister) Fsync() {
 
 // Close gracefully stops aof persistence procedure
 func (persister *Persister) Close() {
+	if persister == nil {
+		return
+	}
 	if persister.aofFile != nil {
 		close(persister.aofChan)
 		<-persister.aofFinished // wait for aof finished

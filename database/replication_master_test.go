@@ -11,13 +11,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hdt3213/godis/aof"
 	"github.com/hdt3213/godis/config"
-	rdb "github.com/hdt3213/rdb/parser"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/parser"
 	"github.com/hdt3213/godis/redis/protocol"
 	"github.com/hdt3213/godis/redis/protocol/asserts"
+	rdb "github.com/hdt3213/rdb/parser"
 )
 
 func mockServer() *Server {
@@ -31,7 +32,7 @@ func mockServer() *Server {
 		server.dbSet[i] = holder
 	}
 	server.slaveStatus = initReplSlaveStatus()
-	server.initMaster()
+	server.initMasterStatus()
 	return server
 }
 
@@ -212,6 +213,7 @@ func TestReplicationMasterRewriteRDB(t *testing.T) {
 		Databases:      16,
 		AppendOnly:     true,
 		AppendFilename: aofFilename,
+		AppendFsync:    aof.FsyncAlways,
 	}
 	master := mockServer()
 	aofHandler, err := NewPersister(master, config.Properties.AppendFilename, true, config.Properties.AppendFsync)

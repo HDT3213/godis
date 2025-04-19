@@ -30,6 +30,7 @@ func MakeCluster() *Cluster {
 		},
 		StartAsSeed: config.Properties.ClusterAsSeed,
 		JoinAddress: config.Properties.ClusterSeed,
+		Master:      config.Properties.MasterInCluster,
 	})
 	if err != nil {
 		logger.Error(err.Error())
