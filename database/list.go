@@ -152,16 +152,14 @@ func undoLPop(db *DB, args [][]byte) []CmdLine {
 		if count > list.Len() {
 			count = list.Len()
 		}
+		elements := make([][]byte, count)
 		vals := list.Range(0, count)
-		var cmds []CmdLine
-		for i := len(vals) - 1; i >= 0; i-- {
-			cmds = append(cmds, CmdLine{
-				lPushCmd,
-				args[0],
-				vals[i].([]byte),
-			})
+		for i := 0; i < count; i++ {
+			elements[count-i-1] = vals[i].([]byte)
 		}
-		return cmds
+		cmd := CmdLine{lPushCmd, args[0]}
+		cmd = append(cmd, elements...)
+		return []CmdLine{cmd}
 	}
 	element, _ := list.Get(0).([]byte)
 	return []CmdLine{
@@ -456,16 +454,14 @@ func undoRPop(db *DB, args [][]byte) []CmdLine {
 		if count > list.Len() {
 			count = list.Len()
 		}
+		elements := make([][]byte, count)
 		vals := list.Range(list.Len()-count, list.Len())
-		var cmds []CmdLine
 		for i := 0; i < count; i++ {
-			cmds = append(cmds, CmdLine{
-				rPushCmd,
-				args[0],
-				vals[i].([]byte),
-			})
+			elements[i] = vals[i].([]byte)
 		}
-		return cmds
+		cmd := CmdLine{rPushCmd, args[0]}
+		cmd = append(cmd, elements...)
+		return []CmdLine{cmd}
 	}
 	element, _ := list.Get(list.Len() - 1).([]byte)
 	return []CmdLine{
