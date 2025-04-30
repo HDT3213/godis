@@ -25,7 +25,6 @@ func execDel(cluster *core.Cluster, c redis.Connection, cmdLine CmdLine) redis.R
 		return protocol.MakeArgNumErrReply("del")
 	}
 	var keys []string
-	keyValues := make(map[string][]byte)
 	for i := 1; i < len(cmdLine); i++ {
 		key := string(cmdLine[i])
 		keys = append(keys, key)
@@ -44,8 +43,7 @@ func execDel(cluster *core.Cluster, c redis.Connection, cmdLine CmdLine) redis.R
 	for node, keys := range routeMap {
 		nodeCmdLine := utils.ToCmdLine("del")
 		for _, key := range keys {
-			val := keyValues[key]
-			nodeCmdLine = append(nodeCmdLine, []byte(key), val)
+			nodeCmdLine = append(nodeCmdLine, []byte(key))
 		}
 		cmdLineMap[node] = nodeCmdLine
 	}
