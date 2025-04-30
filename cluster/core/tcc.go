@@ -55,7 +55,7 @@ func execPrepare(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Re
 	tx := cluster.transactions.txs[txId]
 	if tx != nil {
 		cluster.transactions.mu.Unlock()
-		return protocol.MakeErrReply("transction existed")
+		return protocol.MakeErrReply("transaction existed")
 	}
 	tx = &TCC{}
 	cluster.transactions.txs[txId] = tx
@@ -92,11 +92,10 @@ func execCommit(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.Rep
 
 	cluster.transactions.mu.Lock()
 	tx := cluster.transactions.txs[txId]
-	if tx == nil {
-		cluster.transactions.mu.Unlock()
-		return protocol.MakeErrReply("transction not found")
-	}
 	cluster.transactions.mu.Unlock()
+	if tx == nil {
+		return protocol.MakeErrReply("transaction not found")
+	}
 
 	resp := cluster.db.ExecWithLock(c, tx.realCmdLine)
 
@@ -127,11 +126,10 @@ func execRollback(cluster *Cluster, c redis.Connection, cmdLine CmdLine) redis.R
 	// get transaction
 	cluster.transactions.mu.Lock()
 	tx := cluster.transactions.txs[txId]
-	if tx == nil {
-		cluster.transactions.mu.Unlock()
-		return protocol.MakeErrReply("transction not found")
-	}
 	cluster.transactions.mu.Unlock()
+	if tx == nil {
+		return protocol.MakeErrReply("transaction not found")
+	}
 
 	// rollback
 	if !tx.hasLock {
