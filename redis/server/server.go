@@ -15,6 +15,7 @@ import (
 	"github.com/hdt3213/godis/config"
 	database2 "github.com/hdt3213/godis/database"
 	"github.com/hdt3213/godis/interface/database"
+	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/sync/atomic"
 	"github.com/hdt3213/godis/redis/connection"
@@ -51,6 +52,7 @@ func (h *Handler) closeClient(client *connection.Connection) {
 	h.db.AfterClientClose(client)
 	h.activeConn.Delete(client)
 }
+
 
 // Handle receives and executes redis commands
 func (h *Handler) Handle(ctx context.Context, conn net.Conn) {

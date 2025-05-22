@@ -1,11 +1,12 @@
 package connection
 
 import (
-	"github.com/hdt3213/godis/lib/logger"
-	"github.com/hdt3213/godis/lib/sync/wait"
 	"net"
 	"sync"
 	"time"
+
+	"github.com/hdt3213/godis/lib/logger"
+	"github.com/hdt3213/godis/lib/sync/wait"
 )
 
 const (
@@ -82,6 +83,7 @@ func NewConn(conn net.Conn) *Connection {
 	c.conn = conn
 	return c
 }
+
 
 // Write sends response to client over tcp connection
 func (c *Connection) Write(b []byte) (int, error) {

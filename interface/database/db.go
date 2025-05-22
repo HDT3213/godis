@@ -15,7 +15,6 @@ type DB interface {
 	Exec(client redis.Connection, cmdLine [][]byte) redis.Reply
 	AfterClientClose(c redis.Connection)
 	Close()
-	LoadRDB(dec *core.Decoder) error
 }
 
 // KeyEventCallback will be called back on key event, such as key inserted or deleted
@@ -25,6 +24,7 @@ type KeyEventCallback func(dbIndex int, key string, entity *DataEntity)
 // DBEngine is the embedding storage engine exposing more methods for complex application
 type DBEngine interface {
 	DB
+	LoadRDB(dec *core.Decoder) error
 	ExecWithLock(conn redis.Connection, cmdLine [][]byte) redis.Reply
 	ExecMulti(conn redis.Connection, watching map[string]uint32, cmdLines []CmdLine) redis.Reply
 	GetUndoLogs(dbIndex int, cmdLine [][]byte) []CmdLine

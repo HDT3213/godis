@@ -4,11 +4,17 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/hdt3213/godis/cluster"
 	"github.com/hdt3213/godis/config"
+	database2 "github.com/hdt3213/godis/database"
+	"github.com/hdt3213/godis/gnet"
+	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/utils"
-	RedisServer "github.com/hdt3213/godis/redis/server"
-	"github.com/hdt3213/godis/tcp"
+
+	// RedisServer "github.com/hdt3213/godis/redis/server"
+	// "github.com/hdt3213/godis/tcp"
+	gnetv2 "github.com/panjf2000/gnet/v2"
 )
 
 var banner = `
@@ -51,10 +57,23 @@ func main() {
 	} else {
 		config.SetupConfig(configFilename)
 	}
-	err := tcp.ListenAndServeWithSignal(&tcp.Config{
-		Address: fmt.Sprintf("%s:%d", config.Properties.Bind, config.Properties.Port),
-	}, RedisServer.MakeHandler())
+	listenAddr := fmt.Sprintf("%s:%d", config.Properties.Bind, config.Properties.Port)
+	// err := tcp.ListenAndServeWithSignal(&tcp.Config{
+	// 	Address: fmt.Sprintf("%s:%d", config.Properties.Bind, config.Properties.Port),
+	// }, RedisServer.MakeHandler())
+	// if err != nil {
+	// 	logger.Error(err)
+	// }
+
+	var db database.DB
+	if config.Properties.ClusterEnable {
+		db = cluster.MakeCluster()
+	} else {
+		db = database2.NewStandaloneServer()
+	}
+	server := gnet.NewGnetServer(db)
+	err := gnetv2.Run(server, "tcp://" + listenAddr, gnetv2.WithMulticore(true))	
 	if err != nil {
-		logger.Error(err)
+		logger.Errorf("start server failed: %v", err)
 	}
 }
