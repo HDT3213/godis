@@ -256,7 +256,11 @@ func geoRadius0(sortedSet *sortedset.SortedSet, lat float64, lng float64, radius
 		upper := &sortedset.ScoreBorder{Value: float64(area[1])}
 		elements := sortedSet.Range(lower, upper, 0, -1, true)
 		for _, elem := range elements {
-			members = append(members, []byte(elem.Member))
+			elemLat, elemLng := geohash.Decode(uint64(elem.Score))
+			dis := geohash.Distance(lat, lng, elemLat, elemLng)
+			if dis <= radius {
+				members = append(members, []byte(elem.Member))
+			}
 		}
 	}
 	return protocol.MakeMultiBulkReply(members)
