@@ -59,7 +59,7 @@ func (h *EchoHandler) Handle(ctx context.Context, conn net.Conn) {
 		msg, err := reader.ReadString('\n')
 		if err != nil {
 			if err == io.EOF {
-				logger.Info("connection close")
+				// logger.Info("connection close")
 				h.activeConn.Delete(client)
 			} else {
 				logger.Warn(err)

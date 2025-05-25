@@ -83,7 +83,7 @@ func ListenAndServe(listener net.Listener, handler tcp.Handler, closeChan <-chan
 			break
 		}
 		// handle
-		logger.Info("accept link")
+		// logger.Info("accept link")
 		ClientCounter++
 		waitDone.Add(1)
 		go func() {
