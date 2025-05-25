@@ -1,4 +1,4 @@
-package server
+package std
 
 /*
  * A tcp.Handler implements redis protocol
@@ -13,14 +13,14 @@ import (
 
 	"github.com/hdt3213/godis/cluster"
 	"github.com/hdt3213/godis/config"
-	database2 "github.com/hdt3213/godis/database"
-	"github.com/hdt3213/godis/interface/database"
-	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/database"
+	idatabase "github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/sync/atomic"
 	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/parser"
 	"github.com/hdt3213/godis/redis/protocol"
+	"github.com/hdt3213/godis/tcp"
 )
 
 var (
@@ -30,21 +30,27 @@ var (
 // Handler implements tcp.Handler and serves as a redis server
 type Handler struct {
 	activeConn sync.Map // *client -> placeholder
-	db         database.DB
+	db         idatabase.DB
 	closing    atomic.Boolean // refusing new client and new request
 }
 
 // MakeHandler creates a Handler instance
 func MakeHandler() *Handler {
-	var db database.DB
+	var db idatabase.DB
 	if config.Properties.ClusterEnable {
 		db = cluster.MakeCluster()
 	} else {
-		db = database2.NewStandaloneServer()
+		db = database.NewStandaloneServer()
 	}
 	return &Handler{
 		db: db,
 	}
+}
+
+func Serve(addr string, handler *Handler) error {
+	return tcp.ListenAndServeWithSignal(&tcp.Config{
+		Address: addr,
+	}, handler)
 }
 
 func (h *Handler) closeClient(client *connection.Connection) {

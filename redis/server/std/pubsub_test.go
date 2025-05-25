@@ -1,4 +1,4 @@
-package server
+package std
 
 import (
 	"github.com/hdt3213/godis/lib/utils"

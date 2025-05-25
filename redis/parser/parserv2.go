@@ -1,4 +1,4 @@
-package gnet
+package parser
 
 import (
 	"errors"
@@ -7,7 +7,7 @@ import (
 	"strings"
 )
 
-func Parse(r io.Reader) ([][]byte, error) {
+func ParseV2(r io.Reader) ([][]byte, error) {
 	// 读取起始字符 '*'
 	buf := make([]byte, 1)
 	_, err := io.ReadFull(r, buf)

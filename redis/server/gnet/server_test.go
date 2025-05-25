@@ -1,23 +1,24 @@
-package server
+package gnet
 
 import (
 	"bufio"
-	"github.com/hdt3213/godis/tcp"
 	"net"
 	"testing"
-	"time"
+
+	"github.com/hdt3213/godis/database"
 )
 
 func TestListenAndServe(t *testing.T) {
 	var err error
-	closeChan := make(chan struct{})
 	listener, err := net.Listen("tcp", ":0")
 	if err != nil {
 		t.Error(err)
 		return
 	}
 	addr := listener.Addr().String()
-	go tcp.ListenAndServe(listener, MakeHandler(), closeChan)
+	db := database.NewStandaloneServer()
+	server := NewGnetServer(db)
+	go server.Run(addr)
 
 	conn, err := net.Dial("tcp", addr)
 	if err != nil {
@@ -39,6 +40,6 @@ func TestListenAndServe(t *testing.T) {
 		t.Error("get wrong response")
 		return
 	}
-	closeChan <- struct{}{}
-	time.Sleep(time.Second)
+	conn.Close()
+	server.Close()
 }

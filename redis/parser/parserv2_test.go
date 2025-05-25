@@ -1,4 +1,4 @@
-package gnet
+package parser
 
 import (
 	"bytes"
@@ -18,12 +18,26 @@ func BenchmarkParseSETCommand(b *testing.B) {
 
 			for i := 0; i < subB.N; i++ {
 				reader := bytes.NewReader(cmd)
-				_, err := Parse(reader)
+				_, err := ParseV2(reader)
 				if err != nil {
-					subB.Fatalf("解析失败: %v", err)
+					subB.Fatalf("parse failed: %v", err)
 				}
 			}
 		})
+	}
+}
+
+func TestParseV2(t *testing.T) {
+	value := bytes.Repeat([]byte("a"), 100)
+	data := []byte(fmt.Sprintf("*3\r\n$3\r\nSET\r\n$3\r\nkey\r\n$%d\r\n%s\r\n", len(value), value))
+	cmdLine, err := ParseV2(bytes.NewBuffer(data))
+	if err != nil {
+		t.Error(err)
+		return
+	}
+	if len(cmdLine) != 3 || string(cmdLine[0]) != "SET" || string(cmdLine[1]) != "key" || string(cmdLine[2]) != string(value) {
+		t.Error("parse error")
+		return
 	}
 }
 

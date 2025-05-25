@@ -11,18 +11,16 @@ Godis 是一个用 Go 语言实现的 Redis 服务器。本项目旨在为尝试
 
 关键功能:
 - 支持 string, list, hash, set, sorted set, bitmap 数据结构
+- 并行内核，提供更优秀的性能
 - 自动过期功能(TTL)
 - 发布订阅
 - 地理位置
-- AOF 持久化及 AOF 重写
-- 加载和导出 RDB 文件
-- 主从复制 (测试中)
-- Multi 命令开启的事务具有`原子性`和`隔离性`. 若在执行过程中遇到错误, godis 会回滚已执行的命令
+- AOF 持久化、RDB 持久化、aof-use-rdb-preamble 混合持久化
+- 主从复制
+- Multi 命令开启的事务具有**原子性**和隔离性. 若在执行过程中遇到错误, godis 会回滚已执行的命令
 - 内置集群模式. 集群对客户端是透明的, 您可以像使用单机版 redis 一样使用 godis 集群
   - 使用 raft 算法维护集群元数据(测试中)
   - `MSET`, `MSETNX`, `DEL`, `Rename`, `RenameNX`  命令在集群模式下原子性执行, 允许 key 在集群的不同节点上
-  - 在集群模式下支持在同一个 slot 内执行事务
-- 并行引擎, 无需担心您的操作会阻塞整个服务器.
 
 可以在[我的博客](https://www.cnblogs.com/Finley/category/1598973.html)了解更多关于
 Godis 的信息。
@@ -33,6 +31,9 @@ Godis 的信息。
 
 ```bash
 ./godis-darwin
+```
+
+```bash
 ./godis-linux
 ```
 
@@ -74,45 +75,33 @@ redis-cli -p 6399
 
 环境:
 
-Go version：1.17
-
-System: macOS Catalina 10.15.7
-
-CPU: 2.6GHz 6-Core Intel Core i7
-
-Memory: 16 GB 2667 MHz DDR4
+Go version: 1.23
+System: MacOS Monterey 12.5 M2 Air
 
 redis-benchmark 测试结果:
 
 ```
-PING_INLINE: 87260.03 requests per second
-PING_BULK: 89206.06 requests per second
-SET: 85034.02 requests per second
-GET: 87565.68 requests per second
-INCR: 91157.70 requests per second
-LPUSH: 90334.23 requests per second
-RPUSH: 90334.23 requests per second
-LPOP: 90334.23 requests per second
-RPOP: 90415.91 requests per second
-SADD: 90909.09 requests per second
-HSET: 84104.29 requests per second
-SPOP: 82918.74 requests per second
-LPUSH (needed to benchmark LRANGE): 78247.26 requests per second
-LRANGE_100 (first 100 elements): 26406.13 requests per second
-LRANGE_300 (first 300 elements): 11307.10 requests per second
-LRANGE_500 (first 450 elements): 7968.13 requests per second
-LRANGE_600 (first 600 elements): 6092.73 requests per second
-MSET (10 keys): 65487.89 requests per second
+PING_INLINE: 179211.45 requests per second, p50=1.031 msec                    
+PING_MBULK: 173611.12 requests per second, p50=1.071 msec                    
+SET: 158478.61 requests per second, p50=1.535 msec                    
+GET: 156985.86 requests per second, p50=1.127 msec                    
+INCR: 164473.69 requests per second, p50=1.063 msec                    
+LPUSH: 151285.92 requests per second, p50=1.079 msec                    
+RPUSH: 176678.45 requests per second, p50=1.023 msec                    
+LPOP: 177619.89 requests per second, p50=1.039 msec                    
+RPOP: 172413.80 requests per second, p50=1.039 msec                    
+SADD: 159489.64 requests per second, p50=1.047 msec                    
+HSET: 175131.36 requests per second, p50=1.031 msec                    
+SPOP: 170648.45 requests per second, p50=1.031 msec                    
+ZADD: 165289.25 requests per second, p50=1.039 msec                    
+ZPOPMIN: 185528.77 requests per second, p50=0.999 msec                    
+LPUSH (needed to benchmark LRANGE): 172117.05 requests per second, p50=1.055 msec                    
+LRANGE_100 (first 100 elements): 46511.62 requests per second, p50=4.063 msec                   
+LRANGE_300 (first 300 elements): 21217.91 requests per second, p50=9.311 msec                     
+LRANGE_500 (first 500 elements): 13331.56 requests per second, p50=14.407 msec                    
+LRANGE_600 (first 600 elements): 11153.25 requests per second, p50=17.007 msec                    
+MSET (10 keys): 88417.33 requests per second, p50=3.687 msec  
 ```
-
-## 开发计划
-
-+ [x] `Multi` 命令
-+ [x] `Watch` 命令和 CAS 支持
-+ [ ] Stream 队列 
-+ [ ] 加载 RDB 文件
-+ [ ] 主从模式
-+ [ ] 哨兵
 
 ## 如何阅读源码
 

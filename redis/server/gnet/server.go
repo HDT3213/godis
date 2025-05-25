@@ -1,12 +1,14 @@
 package gnet
 
 import (
+	"context"
 	"sync/atomic"
 
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/redis/connection"
+	"github.com/hdt3213/godis/redis/parser"
 	"github.com/panjf2000/gnet/v2"
 )
 
@@ -21,6 +23,10 @@ func NewGnetServer(db database.DB) *GnetServer {
 	return &GnetServer{
 		db: db,
 	}
+}
+
+func (s *GnetServer) Run(listenAddr string) error {
+	return gnet.Run(s, "tcp://"+listenAddr, gnet.WithMulticore(true))
 }
 
 func (s *GnetServer) OnBoot(eng gnet.Engine) (action gnet.Action) {
@@ -47,7 +53,7 @@ func (s *GnetServer) OnClose(c gnet.Conn, err error) (action gnet.Action) {
 
 func (s *GnetServer) OnTraffic(c gnet.Conn) (action gnet.Action) {
 	conn := c.Context().(redis.Connection)
-	cmdLine, err := Parse(c)
+	cmdLine, err := parser.ParseV2(c)
 	if err != nil {
 		logger.Infof("parse command line failed: %v", err)
 		return gnet.Close
@@ -61,4 +67,8 @@ func (s *GnetServer) OnTraffic(c gnet.Conn) (action gnet.Action) {
 		c.Write(buffer)
 	}
 	return gnet.None
+}
+
+func (s *GnetServer) Close() {
+	s.eng.Stop(context.Background())
 }

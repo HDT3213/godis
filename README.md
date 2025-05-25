@@ -16,21 +16,19 @@ middleware using golang.
 Key Features:
 
 - Support string, list, hash, set, sorted set, bitmap
-- Multi Database and `SELECT` command
+- Concurrent Core for better performance
 - TTL
 - Publish/Subscribe
 - GEO
 - AOF and AOF Rewrite
 - RDB read and write
-- MULTI Commands Transaction is Atomic and Isolated. If any errors are encountered during execution, godis will rollback
-  the executed commands
-- Replication (experimental)
-- Server-side Cluster which is transparent to client. You can connect to any node in the cluster to
-  access all data in the cluster.
+- Multi Database and `SELECT` command
+- Transaction is **Atomic** and Isolated. If any errors are encountered during execution, godis will rollback the executed commands
+- Replication
+- Server-side Cluster which is transparent to client. You can connect to any node in the cluster to access all data in the cluster.
   - Use the raft algorithm to maintain cluster metadata. (experimental)
   - `MSET`, `MSETNX`, `DEL`, `Rename`, `RenameNX` command is supported and atomically executed in cluster mode, allow over multi node
   - `MULTI` Commands Transaction is supported within slot in cluster mode
-- Concurrent Core, so you don't have to worry about your commands blocking the server too much. 
 
 If you could read Chinese, you can find more details in [My Blog](https://www.cnblogs.com/Finley/category/1598973.html).
 
@@ -40,6 +38,9 @@ You can get runnable program in the releases of this repository, which supports 
 
 ```bash
 ./godis-darwin
+```
+
+```bash
 ./godis-linux
 ```
 
@@ -85,45 +86,33 @@ See: [commands.md](https://github.com/HDT3213/godis/blob/master/commands.md)
 
 Environment:
 
-Go version：1.17
-
-System: macOS Catalina 10.15.7
-
-CPU: 2.6GHz 6-Core Intel Core i7
-
-Memory: 16 GB 2667 MHz DDR4
+Go version：1.23
+System: MacOS Monterey 12.5 M2 Air
 
 Performance report by redis-benchmark: 
 
 ```
-PING_INLINE: 87260.03 requests per second
-PING_BULK: 89206.06 requests per second
-SET: 85034.02 requests per second
-GET: 87565.68 requests per second
-INCR: 91157.70 requests per second
-LPUSH: 90334.23 requests per second
-RPUSH: 90334.23 requests per second
-LPOP: 90334.23 requests per second
-RPOP: 90415.91 requests per second
-SADD: 90909.09 requests per second
-HSET: 84104.29 requests per second
-SPOP: 82918.74 requests per second
-LPUSH (needed to benchmark LRANGE): 78247.26 requests per second
-LRANGE_100 (first 100 elements): 26406.13 requests per second
-LRANGE_300 (first 300 elements): 11307.10 requests per second
-LRANGE_500 (first 450 elements): 7968.13 requests per second
-LRANGE_600 (first 600 elements): 6092.73 requests per second
-MSET (10 keys): 65487.89 requests per second
+PING_INLINE: 179211.45 requests per second, p50=1.031 msec                    
+PING_MBULK: 173611.12 requests per second, p50=1.071 msec                    
+SET: 158478.61 requests per second, p50=1.535 msec                    
+GET: 156985.86 requests per second, p50=1.127 msec                    
+INCR: 164473.69 requests per second, p50=1.063 msec                    
+LPUSH: 151285.92 requests per second, p50=1.079 msec                    
+RPUSH: 176678.45 requests per second, p50=1.023 msec                    
+LPOP: 177619.89 requests per second, p50=1.039 msec                    
+RPOP: 172413.80 requests per second, p50=1.039 msec                    
+SADD: 159489.64 requests per second, p50=1.047 msec                    
+HSET: 175131.36 requests per second, p50=1.031 msec                    
+SPOP: 170648.45 requests per second, p50=1.031 msec                    
+ZADD: 165289.25 requests per second, p50=1.039 msec                    
+ZPOPMIN: 185528.77 requests per second, p50=0.999 msec                    
+LPUSH (needed to benchmark LRANGE): 172117.05 requests per second, p50=1.055 msec                    
+LRANGE_100 (first 100 elements): 46511.62 requests per second, p50=4.063 msec                   
+LRANGE_300 (first 300 elements): 21217.91 requests per second, p50=9.311 msec                     
+LRANGE_500 (first 500 elements): 13331.56 requests per second, p50=14.407 msec                    
+LRANGE_600 (first 600 elements): 11153.25 requests per second, p50=17.007 msec                    
+MSET (10 keys): 88417.33 requests per second, p50=3.687 msec  
 ```
-
-## Todo List
-
-+ [x] `Multi` Command
-+ [x] `Watch` Command and CAS support
-+ [ ] Stream support
-+ [x] RDB file loader
-+ [ ] Master-Slave mode
-+ [ ] Sentinel
 
 ## Read My Code
 

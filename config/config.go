@@ -40,7 +40,7 @@ type ServerProperties struct {
 	SlaveAnnouncePort int    `cfg:"slave-announce-port"`
 	SlaveAnnounceIP   string `cfg:"slave-announce-ip"`
 	ReplTimeout       int    `cfg:"repl-timeout"`
-
+	UseGnet           bool   `cfg:"use-gnet"`
 	ClusterEnable     bool   `cfg:"cluster-enable"`
 	ClusterAsSeed     bool   `cfg:"cluster-as-seed"`
 	ClusterSeed       string `cfg:"cluster-seed"`
