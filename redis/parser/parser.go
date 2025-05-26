@@ -50,7 +50,7 @@ func ParseBytes(data []byte) ([]redis.Reply, error) {
 
 // ParseOne reads data from []byte and return the first payload
 func ParseOne(data []byte) (redis.Reply, error) {
-	ch := make(chan *Payload)
+	ch := make(chan *Payload, 1)
 	reader := bytes.NewReader(data)
 	go parse0(reader, ch)
 	payload := <-ch // parse0 will close the channel
