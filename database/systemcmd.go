@@ -117,7 +117,7 @@ func GenGodisInfoString(section string, db *Server) []byte {
 			startUpTimeFromNow/time.Duration(3600*24),
 			//TODO,
 			//TODO,
-			config.Properties.CfPath)
+			config.GetConfigFilePath())
 		return []byte(s)
 	case "client":
 		s := fmt.Sprintf("# Clients\r\n"+

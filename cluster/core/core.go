@@ -8,6 +8,7 @@ import (
 	"github.com/hdt3213/godis/datastruct/set"
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/lib/logger"
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
 	rdbcore "github.com/hdt3213/rdb/core"
@@ -128,10 +129,12 @@ func NewCluster(cfg *Config) (*Cluster, error) {
 			if err != nil {
 				return nil, err
 			}
+			defer connections.ReturnPeerClient(conn)
 			joinCmdLine := utils.ToCmdLine(joinClusterCommand, cfg.RedisAdvertiseAddr, cfg.RaftAdvertiseAddr)
 			if cfg.Master != "" {
 				joinCmdLine = append(joinCmdLine, []byte(cfg.Master))
 			}
+			logger.Infof("send join cluster request to %s", cfg.JoinAddress)
 			result := conn.Send(joinCmdLine)
 			if err := protocol.Try2ErrorReply(result); err != nil {
 				return nil, err

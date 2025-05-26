@@ -41,14 +41,21 @@ type ServerProperties struct {
 	SlaveAnnounceIP   string `cfg:"slave-announce-ip"`
 	ReplTimeout       int    `cfg:"repl-timeout"`
 	UseGnet           bool   `cfg:"use-gnet"`
+
 	ClusterEnable     bool   `cfg:"cluster-enable"`
 	ClusterAsSeed     bool   `cfg:"cluster-as-seed"`
 	ClusterSeed       string `cfg:"cluster-seed"`
 	RaftListenAddr    string `cfg:"raft-listen-address"`
 	RaftAdvertiseAddr string `cfg:"raft-advertise-address"`
+	// If the node join the cluster as a replica of another node,
+	// set MasterInCluster as the RedisAdvertiseAddr of it's master node
 	MasterInCluster   string `cfg:"master-in-cluster"`
-	// config file path
-	CfPath string `cfg:"cf,omitempty"`
+}
+
+var configFilePath string
+
+func GetConfigFilePath() string {
+	return configFilePath
 }
 
 type ServerInfo struct {
@@ -60,6 +67,13 @@ func (p *ServerProperties) AnnounceAddress() string {
 		return p.AnnounceHost + ":" + strconv.Itoa(p.Port)
 	}
 	return p.Bind + ":" + strconv.Itoa(p.Port)
+}
+
+func (p *ServerProperties) RaftAnnounceAddress() string {
+	if p.RaftAdvertiseAddr != "" {
+		return p.RaftAdvertiseAddr
+	}
+	return p.RaftListenAddr
 }
 
 // Properties holds global config properties
@@ -148,11 +162,10 @@ func SetupConfig(configFilename string) {
 	defer file.Close()
 	Properties = parse(file)
 	Properties.RunID = utils.RandString(40)
-	configFilePath, err := filepath.Abs(configFilename)
+	configFilePath, err = filepath.Abs(configFilename)
 	if err != nil {
 		return
 	}
-	Properties.CfPath = configFilePath
 	if Properties.Dir == "" {
 		Properties.Dir = "."
 	}

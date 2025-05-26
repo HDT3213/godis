@@ -25,7 +25,7 @@ func MakeCluster() *Cluster {
 		RaftConfig: raft.RaftConfig{
 			RedisAdvertiseAddr: config.Properties.AnnounceAddress(),
 			RaftListenAddr:     config.Properties.RaftListenAddr,
-			RaftAdvertiseAddr:  config.Properties.RaftAdvertiseAddr,
+			RaftAdvertiseAddr:  config.Properties.RaftAnnounceAddress(),
 			Dir:                raftPath,
 		},
 		StartAsSeed: config.Properties.ClusterAsSeed,

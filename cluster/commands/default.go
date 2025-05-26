@@ -2,7 +2,7 @@ package commands
 
 import "github.com/hdt3213/godis/cluster/core"
 
-func RegisterCommands() {
+func init() {
 	defaultCmds := []string{
 		"expire",
 		"expireAt",

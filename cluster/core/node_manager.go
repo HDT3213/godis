@@ -84,10 +84,11 @@ func (cluster *Cluster) doRebalance() {
 		logger.Errorf("makeRebalancePlan err: %v", err)
 		return
 	}
-	logger.Infof("rebalance plan generated, contains %d tasks", len(pendingTasks))
 	if len(pendingTasks) == 0 {
 		return
 	}
+	logger.Infof("rebalance plan generated, contains %d tasks", len(pendingTasks))
+
 	for _, task := range pendingTasks {
 		err := cluster.triggerMigrationTask(task)
 		if err != nil {

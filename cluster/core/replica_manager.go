@@ -53,6 +53,7 @@ func (cluster *Cluster) sendHearbeat() {
 	leaderConn, err := cluster.BorrowLeaderClient()
 	if err != nil {
 		logger.Error(err)
+		return
 	}
 	defer cluster.connections.ReturnPeerClient(leaderConn)
 	reply := leaderConn.Send(utils.ToCmdLine(heartbeatCommand, cluster.SelfID()))
