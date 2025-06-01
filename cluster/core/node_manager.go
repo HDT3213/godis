@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"strconv"
 	"sync"
 	"time"
 
@@ -14,6 +13,29 @@ import (
 	"github.com/hdt3213/godis/lib/utils"
 	"github.com/hdt3213/godis/redis/protocol"
 )
+
+/* 
+
+**Rebalance Procedure**
+1. Invoke `triggerMigrationTask` on cluster Leader to start a migration task
+2. Leader propose EventStartMigrate to raft group then send startMigrationCommand to TargetNode. (at `triggerMigrationTask`)
+
+3. Target Node runs `doImports` after receiving startMigrationCommand
+4. Target Node send exportCommand to Source Node.
+
+6. Source Node get migrating task from raft (at `execExport`)
+7. SourceNode set task into slotManager to start recording dirty keys during migration. (at `injectInsertCallback`)
+8. Source Node dump old data to Target Node
+
+9. Target node send migrationDoneCommand to Source Node. (at `doImports`)
+10. Source Node runs `execFinishExport`, lock slots to stop writing
+11. Source Node send dirty keys to Target Node
+
+12. Source Node send migrationChangeRouteCommand to Leader
+13. Leader porposes EventFinishMigrate to raft and waits Source Node and Target Node receives this entry(at `execMigrationChangeRoute`)
+14. Source Node finish exporting, unlock slots, clean data
+15. Target Node finish importing, unlock slots, start serve
+*/
 
 const joinClusterCommand = "cluster.join"
 const migrationChangeRouteCommand = "cluster.migration.changeroute"
@@ -113,11 +135,7 @@ func (cluster *Cluster) triggerMigrationTask(task *raft.MigratingTask) error {
 	}
 	logger.Infof("propose EventStartMigrate %s success", task.ID)
 
-	cmdLine := utils.ToCmdLine(startMigrationCommand, task.ID, task.SrcNode)
-	for _, slotId := range task.Slots {
-		slotIdStr := strconv.Itoa(int(slotId))
-		cmdLine = append(cmdLine, []byte(slotIdStr))
-	}
+	cmdLine := utils.ToCmdLine(startMigrationCommand, task.ID)
 	targetNodeConn, err := cluster.connections.BorrowPeerClient(task.TargetNode)
 	if err != nil {
 		return err

@@ -1,11 +1,9 @@
 package core
 
 import (
-	"sync"
 
 	"github.com/hdt3213/godis/cluster/raft"
 	dbimpl "github.com/hdt3213/godis/database"
-	"github.com/hdt3213/godis/datastruct/set"
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/interface/redis"
 	"github.com/hdt3213/godis/lib/logger"
@@ -49,57 +47,6 @@ func (c *Cluster) SelfID() string {
 	return c.raftNode.Cfg.ID()
 }
 
-// slotsManager 负责管理当前 node 上的 slot
-type slotsManager struct {
-	mu            *sync.RWMutex
-	slots         map[uint32]*slotStatus // 记录当前node上的 slot
-	importingTask *raft.MigratingTask
-}
-
-const (
-	slotStateHosting = iota
-	slotStateImporting
-	slotStateExporting
-)
-
-type slotStatus struct {
-	mu    *sync.RWMutex
-	state int
-	keys  *set.Set // 记录当前 slot 上的 key
-
-	exportSnapshot *set.Set // 开始传输时拷贝 slot 中的 key, 避免并发并发
-	dirtyKeys      *set.Set // 传输开始后被修改的key, 在传输结束阶段需要重传一遍
-}
-
-func newSlotsManager() *slotsManager {
-	return &slotsManager{
-		mu:    &sync.RWMutex{},
-		slots: map[uint32]*slotStatus{},
-	}
-}
-
-func (ssm *slotsManager) getSlot(index uint32) *slotStatus {
-	ssm.mu.RLock()
-	slot := ssm.slots[index]
-	ssm.mu.RUnlock()
-	if slot != nil {
-		return slot
-	}
-	ssm.mu.Lock()
-	defer ssm.mu.Unlock()
-	// check-lock-check
-	slot = ssm.slots[index]
-	if slot != nil {
-		return slot
-	}
-	slot = &slotStatus{
-		state: slotStateHosting,
-		keys:  set.Make(),
-		mu:    &sync.RWMutex{},
-	}
-	ssm.slots[index] = slot
-	return slot
-}
 
 func NewCluster(cfg *Config) (*Cluster, error) {
 	var connections ConnectionFactory
