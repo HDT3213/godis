@@ -26,8 +26,8 @@ Key Features:
 - Transaction is **Atomic** and Isolated. If any errors are encountered during execution, godis will rollback the executed commands
 - Replication
 - Server-side Cluster which is transparent to client. You can connect to any node in the cluster to access all data in the cluster.
-  - Use the raft algorithm to maintain cluster metadata. (experimental)
-  - `MSET`, `MSETNX`, `DEL`, `Rename`, `RenameNX` command is supported and atomically executed in cluster mode, allow over multi node
+  - Cluster metadata management based on Raft. Support dynamic expansion, rebalancing and failover.
+  - `MSET`, `MSETNX`, `DEL`, `Rename`, `RenameNX` command is supported and atomically executed in cluster mode, allow over multi node.
   - `MULTI` Commands Transaction is supported within slot in cluster mode
 
 If you could read Chinese, you can find more details in [My Blog](https://www.cnblogs.com/Finley/category/1598973.html).
@@ -54,16 +54,9 @@ The program will try to read config file path from environment variable `CONFIG`
 
 If environment variable is not set, then the program try to read `redis.conf` in the working directory.
 
-If there is no such file, then the program will run with default config.
+Please see [example.conf](./example.conf) for all configuration information.
 
 ### cluster mode
-
-Godis can work in cluster mode, please append following lines to redis.conf file
-
-```ini
-peers localhost:7379,localhost:7389 // other node in cluster
-self  localhost:6399 // self address
-```
 
 We provide node1.conf and node2.conf for demonstration. use following command line to start a two-node-cluster:
 
@@ -77,6 +70,8 @@ Connect to a node in the cluster to access all data in the cluster:
 ```cmd
 redis-cli -p 6399
 ```
+
+Please refer to [example.conf](./example.conf) for cluster configuration.
 
 ## Supported Commands
 

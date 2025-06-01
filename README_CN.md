@@ -19,7 +19,7 @@ Godis 是一个用 Go 语言实现的 Redis 服务器。本项目旨在为尝试
 - 主从复制
 - Multi 命令开启的事务具有**原子性**和隔离性. 若在执行过程中遇到错误, godis 会回滚已执行的命令
 - 内置集群模式. 集群对客户端是透明的, 您可以像使用单机版 redis 一样使用 godis 集群
-  - 使用 raft 算法维护集群元数据(测试中)
+  - 使用 Raft 算法维护集群元数据。支持动态扩缩容、自动平衡和主从切换。
   - `MSET`, `MSETNX`, `DEL`, `Rename`, `RenameNX`  命令在集群模式下原子性执行, 允许 key 在集群的不同节点上
 
 可以在[我的博客](https://www.cnblogs.com/Finley/category/1598973.html)了解更多关于
@@ -43,16 +43,11 @@ godis 默认监听 0.0.0.0:6399，可以使用 redis-cli 或者其它 redis 客�
 
 ![](https://i.loli.net/2021/05/15/7WquEgonzY62sZI.png)
 
-godis 首先会从CONFIG环境变量中读取配置文件路径。若环境变量中未设置配置文件路径，则会尝试读取工作目录中的 redis.conf 文件。 若 redis.conf 文件不存在则会使用自带的默认配置。
+godis 首先会从CONFIG环境变量中读取配置文件路径。若环境变量中未设置配置文件路径，则会尝试读取工作目录中的 redis.conf 文件。 
+
+所有配置项均在 [example.conf](./example.conf) 中作了说明。
 
 ## 集群模式
-
-godis 支持以集群模式运行，请在 redis.conf 文件中添加下列配置:
-
-```ini
-peers localhost:7379,localhost:7389 // 集群中其它节点的地址
-self  localhost:6399 // 自身地址
-```
 
 可以使用 node1.conf 和 node2.conf 配置文件，在本地启动一个双节点集群:
 
@@ -66,6 +61,8 @@ CONFIG=node2.conf ./godis-darwin &
 ```bash
 redis-cli -p 6399
 ```
+
+更多配置请查阅 [example.conf](./example.conf)
 
 ## 支持的命令
 
