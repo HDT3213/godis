@@ -113,6 +113,29 @@ func NewCluster(cfg *Config) (*Cluster, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	cluster := &Cluster{
+		raftNode:        raftNode,
+		db:              db,
+		connections:     connections,
+		config:          cfg,
+		rebalanceManger: newRebalanceManager(),
+		slotsManager:    newSlotsManager(),
+		transactions:    newTransactionManager(),
+		replicaManager:  newReplicaManager(),
+		closeChan:       make(chan struct{}),
+	}
+	cluster.pickNodeImpl = func(slotID uint32) string {
+		return defaultPickNodeImpl(cluster, slotID)
+	}
+	cluster.getSlotImpl = func(key string) uint32 {
+		return defaultGetSlotImpl(cluster, key)
+	}
+	cluster.injectInsertCallback()
+	cluster.injectDeleteCallback()
+	cluster.registerOnFailover()
+
+	// setup
 	hasState, err := raftNode.HasExistingState()
 	if err != nil {
 		return nil, err
@@ -140,34 +163,23 @@ func NewCluster(cfg *Config) (*Cluster, error) {
 				return nil, err
 			}
 		}
+	} else {
+		masterAddr := cluster.raftNode.FSM.GetMaster(cluster.SelfID())
+		if masterAddr != "" {
+			err := cluster.SlaveOf(masterAddr)
+			if err != nil {
+				panic(err)
+			}
+		}
 	}
-	cluster := &Cluster{
-		raftNode:        raftNode,
-		db:              db,
-		connections:     connections,
-		config:          cfg,
-		rebalanceManger: newRebalanceManager(),
-		slotsManager:    newSlotsManager(),
-		transactions:    newTransactionManager(),
-		replicaManager:  newReplicaManager(),
-		closeChan:       make(chan struct{}),
-	}
-	cluster.pickNodeImpl = func(slotID uint32) string {
-		return defaultPickNodeImpl(cluster, slotID)
-	}
-	cluster.getSlotImpl = func(key string) uint32 {
-		return defaultGetSlotImpl(cluster, key)
-	}
-	cluster.injectInsertCallback()
-	cluster.injectDeleteCallback()
-	cluster.registerOnFailover()
+	
 	go cluster.clusterCron()
 	return cluster, nil
 }
 
 // AfterClientClose does some clean after client close connection
 func (cluster *Cluster) AfterClientClose(c redis.Connection) {
-
+	cluster.db.AfterClientClose(c)
 }
 
 func (cluster *Cluster) Close() {

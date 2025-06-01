@@ -79,8 +79,9 @@ func (fsm *FSM) failover(oldMasterId, newMasterId string) {
 	}
 }
 
-// getMaster returns "" if id points to a master node
-func (fsm *FSM) getMaster(id string) string {
+// GetMaster returns the master's redis service addres 
+// Returns empty string ("") if id points to a master node
+func (fsm *FSM) GetMaster(id string) string {
 	master := ""
 	fsm.WithReadLock(func(fsm *FSM) {
 		master = fsm.SlaveMasters[id]

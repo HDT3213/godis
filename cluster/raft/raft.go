@@ -191,6 +191,7 @@ func (node *Node) Propose(event *LogEntry) (uint64, error) {
 	return future.Index(), nil
 }
 
+// setupWatch will be called after any changes of FSM within lock.
 func (node *Node) setupWatch() {
 	node.watcher.watch = func(f *FSM) {
 		newMaster := f.SlaveMasters[node.Self()]
@@ -206,6 +207,6 @@ func (node *Node) setupWatch() {
 // SetOnFailover sets onFailover callback
 // After a failover, onFailover will receive the new master
 func (node *Node) SetOnFailover(fn func(newMaster string)) {
-	node.watcher.currentMaster = node.FSM.getMaster(node.Self())
+	node.watcher.currentMaster = node.FSM.GetMaster(node.Self())
 	node.watcher.onFailover = fn
 }

@@ -67,7 +67,6 @@ const (
 	EventStartMigrate = iota + 1
 	EventFinishMigrate
 	EventSeedStart
-	EventStartFailover
 	EventFinishFailover
 	EventJoin
 )
@@ -109,9 +108,6 @@ func (fsm *FSM) Apply(log *raft.Log) interface{} {
 		}
 		fsm.Node2Slot[entry.InitTask.Leader] = slots
 		fsm.addNode(entry.InitTask.Leader, "")
-	} else if entry.Event == EventStartFailover {
-		task := entry.FailoverTask
-		fsm.Failovers[task.ID] = task
 	} else if entry.Event == EventFinishFailover {
 		task := entry.FailoverTask
 		// change route

@@ -1,10 +1,14 @@
 package core
 
 import (
+	"errors"
 	"hash/crc32"
+	"net"
 	"strings"
 
 	"github.com/hdt3213/godis/interface/redis"
+	"github.com/hdt3213/godis/lib/utils"
+	"github.com/hdt3213/godis/redis/connection"
 	"github.com/hdt3213/godis/redis/protocol"
 )
 
@@ -42,6 +46,19 @@ func (cluster *Cluster) LocalExec(c redis.Connection, cmdLine [][]byte) redis.Re
 // LocalExec executes command at local node
 func (cluster *Cluster) LocalExecWithinLock(c redis.Connection, cmdLine [][]byte) redis.Reply {
 	return cluster.db.ExecWithLock(c, cmdLine)
+}
+
+func (cluster *Cluster) SlaveOf(master string) error {
+	host, port, err := net.SplitHostPort(master)
+	if err != nil {
+		return errors.New("invalid master address")
+	}
+	c := connection.NewFakeConn()
+	reply := cluster.db.Exec(c, utils.ToCmdLine("slaveof", host, port))
+	if err := protocol.Try2ErrorReply(reply); err != nil {
+		return err
+	}
+	return nil
 }
 
 // GetPartitionKey extract hashtag

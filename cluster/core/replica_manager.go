@@ -13,6 +13,14 @@ import (
 	"github.com/hdt3213/godis/redis/protocol"
 )
 
+/*
+1. The master and slave are both added to the raft group, and failover does not involve changes of raft members. 
+2. Timer job `doFailoverCheck` finds timeout masters, then calls `triggerFailover`
+3. Raft leader sends `slaveof no one` to new master
+4. Raft proposes `EventFinishFailover` to change route. 
+Other slaves and old master will get this message from raft, and become slave of new master.(see cluster.registerOnFailover)
+*/
+
 const heartbeatCommand = "cluster.heartbeat"
 
 func init() {
@@ -93,19 +101,7 @@ func (cluster *Cluster) doFailoverCheck() {
 func (cluster *Cluster) triggerFailover(failed *raft.MasterSlave) error {
 	newMaster := failed.Slaves[0]
 	id := utils.RandString(20)
-	// propose change
-	_, err := cluster.raftNode.Propose(&raft.LogEntry{
-		Event: raft.EventStartFailover,
-		FailoverTask: &raft.FailoverTask{
-			ID:          id,
-			OldMasterId: failed.MasterId,
-			NewMasterId: newMaster,
-		},
-	})
-	if err != nil {
-		return err
-	}
-	logger.Infof("proposed start failover id=%s, oldMaster=%s, newMaster=%s", id, failed.MasterId, newMaster)
+	logger.Infof("start failover id=%s, oldMaster=%s, newMaster=%s", id, failed.MasterId, newMaster)
 	// send slave of to new master
 	conn, err := cluster.connections.BorrowPeerClient(newMaster)
 	if err != nil {
