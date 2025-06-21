@@ -10,6 +10,7 @@ import (
 	"net"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/hdt3213/godis/cluster"
 	"github.com/hdt3213/godis/config"
@@ -59,7 +60,6 @@ func (h *Handler) closeClient(client *connection.Connection) {
 	h.activeConn.Delete(client)
 }
 
-
 // Handle receives and executes redis commands
 func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 	if h.closing.Get() {
@@ -101,6 +101,9 @@ func (h *Handler) Handle(ctx context.Context, conn net.Conn) {
 			logger.Error("require multi bulk protocol")
 			continue
 		}
+		// Record the start time of command execution
+		database.GodisExecCommandStartUnixTime = time.Now()
+
 		result := h.db.Exec(client, r.Args)
 		if result != nil {
 			_, _ = client.Write(result.ToBytes())
