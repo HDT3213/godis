@@ -16,7 +16,7 @@ var GodisExecCommandStartUnixTime time.Time
 type SlowLogEntry struct {
 	ID        int64
 	Timestamp time.Time
-	Duration  time.Duration
+	Duration  int64
 	Command   [][]byte
 	PeerId    string
 }
@@ -56,7 +56,7 @@ func (sl *SlowLogger) Record(start time.Time, args [][]byte, client string) {
 	entry := &SlowLogEntry{
 		ID:        sl.nextID,
 		Timestamp: start,
-		Duration:  duration,
+		Duration:  micros,
 		Command:   args,
 		PeerId:    client,
 	}
