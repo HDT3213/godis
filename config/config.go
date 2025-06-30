@@ -42,6 +42,9 @@ type ServerProperties struct {
 	ReplTimeout       int    `cfg:"repl-timeout"`
 	UseGnet           bool   `cfg:"use-gnet"`
 
+	SlowLogSlowerThan int64 `cfg:"slowlog-log-slower-than"`
+	SlowLogMaxLen     int   `cfg:"slowlog-max-len"`
+
 	ClusterEnable     bool   `cfg:"cluster-enable"`
 	ClusterAsSeed     bool   `cfg:"cluster-as-seed"`
 	ClusterSeed       string `cfg:"cluster-seed"`
@@ -49,7 +52,7 @@ type ServerProperties struct {
 	RaftAdvertiseAddr string `cfg:"raft-advertise-address"`
 	// If the node join the cluster as a replica of another node,
 	// set MasterInCluster as the RedisAdvertiseAddr of it's master node
-	MasterInCluster   string `cfg:"master-in-cluster"`
+	MasterInCluster string `cfg:"master-in-cluster"`
 }
 
 var configFilePath string
@@ -135,6 +138,11 @@ func parse(src io.Reader) *ServerProperties {
 			case reflect.String:
 				fieldVal.SetString(value)
 			case reflect.Int:
+				intValue, err := strconv.ParseInt(value, 10, 64)
+				if err == nil {
+					fieldVal.SetInt(intValue)
+				}
+			case reflect.Int64:
 				intValue, err := strconv.ParseInt(value, 10, 64)
 				if err == nil {
 					fieldVal.SetInt(intValue)
