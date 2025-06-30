@@ -38,6 +38,9 @@ type Server struct {
 	// hooks
 	insertCallback database.KeyEventCallback
 	deleteCallback database.KeyEventCallback
+
+	// slow log record
+	slogLogger *SlowLogger
 }
 
 func fileExists(filename string) bool {
@@ -88,6 +91,10 @@ func NewStandaloneServer() *Server {
 	server.initMasterStatus()
 	server.startReplCron()
 	server.role = masterRole // The initialization process does not require atomicity
+
+	// record slow log
+	server.slogLogger = NewSlowLogger(config.Properties.SlowLogMaxLen, config.Properties.SlowLogSlowerThan)
+
 	return server
 }
 
@@ -100,6 +107,8 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 			result = &protocol.UnknownErrReply{}
 		}
 	}()
+	// Record the start time of command execution
+	GodisExecCommandStartUnixTime := time.Now()
 
 	cmdName := strings.ToLower(string(cmdLine[0]))
 	// ping
@@ -117,6 +126,12 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 	if cmdName == "info" {
 		return Info(server, cmdLine[1:])
 	}
+
+	// slowlog
+	if cmdName == "slowlog" {
+		return server.slogLogger.HandleSlowlogCommand(cmdLine)
+	}
+
 	if cmdName == "dbsize" {
 		return DbSize(c, server)
 	}
@@ -202,7 +217,11 @@ func (server *Server) Exec(c redis.Connection, cmdLine [][]byte) (result redis.R
 	if errReply != nil {
 		return errReply
 	}
-	return selectedDB.Exec(c, cmdLine)
+
+	exec := selectedDB.Exec(c, cmdLine)
+	// Record slow query logs
+	server.slogLogger.Record(GodisExecCommandStartUnixTime, cmdLine, c.Name())
+	return exec
 }
 
 // AfterClientClose does some clean after client close connection
