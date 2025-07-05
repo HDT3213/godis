@@ -42,6 +42,9 @@ func NewSlowLogger(maxEntries int, threshold int64) *SlowLogger {
 }
 
 func (sl *SlowLogger) Record(start time.Time, args [][]byte, client string) {
+	if sl == nil || len(sl.entries) == 0 {
+		return
+	}
 	duration := time.Since(start)
 	micros := duration.Microseconds()
 
