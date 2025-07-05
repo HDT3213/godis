@@ -12,18 +12,26 @@ import (
 func TestSlowLogger_Record(t *testing.T) {
 	logger := NewSlowLogger(5, 1000)
 
-	start := time.Now()
-	time.Sleep(2 * time.Millisecond)
-
-	logger.Record(start, utils.ToCmdLine("GET", "key1"), "127.0.0.1:12345")
-
-	if logger.Len() != 1 {
-		t.Errorf("Expected 1 entry, got %d", logger.Len())
+	start := time.Now().Add(-time.Minute)
+	for i := 0; i < 10; i++ {
+		logger.Record(start, utils.ToCmdLine("GET", strconv.Itoa(i)), "127.0.0.1:12345")
 	}
 
+	if logger.Len() != 5 {
+		t.Errorf("Expected 1 entry, got %d", logger.Len())
+	}
+	for i, e := range logger.entries {
+		actual :=  string(e.Command[1])
+		expect := strconv.Itoa(i+5)
+		if actual != expect {
+			t.Errorf("Expected %s, got %s", expect, actual)
+		}
+	}
+
+	logger2 := NewSlowLogger(5, 1000)
 	start = time.Now()
-	logger.Record(start, utils.ToCmdLine("SET", "key2"), "127.0.0.1:12346")
-	if logger.Len() != 1 {
+	logger2.Record(start, utils.ToCmdLine("SET", "key2"), "127.0.0.1:12346")
+	if logger2.Len() != 0 {
 		t.Errorf("Below threshold query should not be recorded, got %d entries", logger.Len())
 	}
 }
