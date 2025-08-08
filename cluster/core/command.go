@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"runtime/debug"
 	"strings"
+	"time"
 
 	"github.com/hdt3213/godis/config"
 	"github.com/hdt3213/godis/database"
@@ -34,10 +35,31 @@ func (cluster *Cluster) Exec(c redis.Connection, cmdLine [][]byte) (result redis
 			result = &protocol.UnknownErrReply{}
 		}
 	}()
+	// Record the start time of command execution
+	GodisExecCommandStartUnixTime := time.Now()
+
 	cmdName := strings.ToLower(string(cmdLine[0]))
 	if cmdName == "auth" {
 		return database.Auth(c, cmdLine[1:])
 	}
+	if cmdName == "ping" {
+		return database.Ping(c, cmdLine[1:])
+	}
+	if cmdName == "dbsize" {
+		dbsize, _ := cluster.db.GetDBSize(0)
+		return protocol.MakeIntReply(int64(dbsize))
+	}
+
+	if cmdName == "info" {
+		if server, ok := cluster.db.(*database.Server); ok {
+			return database.Info(server, cmdLine[1:])
+		}
+	}
+
+	if cmdName == "slowlog" {
+		return cluster.slogLogger.HandleSlowlogCommand(cmdLine)
+	}
+
 	if !isAuthenticated(c) {
 		return protocol.MakeErrReply("NOAUTH Authentication required")
 	}
@@ -45,7 +67,10 @@ func (cluster *Cluster) Exec(c redis.Connection, cmdLine [][]byte) (result redis
 	if !ok {
 		return protocol.MakeErrReply("ERR unknown command '" + cmdName + "', or not supported in cluster mode")
 	}
-	return cmdFunc(cluster, c, cmdLine)
+	exec := cmdFunc(cluster, c, cmdLine)
+	cluster.slogLogger.Record(GodisExecCommandStartUnixTime, cmdLine, c.Name())
+	return exec
+
 }
 
 func isAuthenticated(c redis.Connection) bool {

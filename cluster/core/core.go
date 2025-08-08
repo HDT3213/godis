@@ -1,8 +1,8 @@
 package core
 
 import (
-
 	"github.com/hdt3213/godis/cluster/raft"
+	"github.com/hdt3213/godis/config"
 	dbimpl "github.com/hdt3213/godis/database"
 	"github.com/hdt3213/godis/interface/database"
 	"github.com/hdt3213/godis/interface/redis"
@@ -29,6 +29,9 @@ type Cluster struct {
 	getSlotImpl  func(key string) uint32
 	pickNodeImpl func(slotID uint32) string
 	id_          string // for tests only
+
+	// slow log record
+	slogLogger *dbimpl.SlowLogger
 }
 
 type Config struct {
@@ -37,7 +40,7 @@ type Config struct {
 	JoinAddress    string
 	Master         string
 	connectionStub ConnectionFactory // for test
-	noCron         bool // for test
+	noCron         bool              // for test
 }
 
 func (c *Cluster) SelfID() string {
@@ -46,7 +49,6 @@ func (c *Cluster) SelfID() string {
 	}
 	return c.raftNode.Cfg.ID()
 }
-
 
 func NewCluster(cfg *Config) (*Cluster, error) {
 	var connections ConnectionFactory
@@ -119,7 +121,10 @@ func NewCluster(cfg *Config) (*Cluster, error) {
 			}
 		}
 	}
-	
+
+	// record slow log
+	cluster.slogLogger = dbimpl.NewSlowLogger(config.Properties.SlowLogMaxLen, config.Properties.SlowLogSlowerThan)
+
 	go cluster.clusterCron()
 	return cluster, nil
 }
