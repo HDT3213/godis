@@ -67,6 +67,10 @@ func StartNode(cfg *RaftConfig) (*Node, error) {
 		return nil, err
 	}
 	// todo: mkdir if possible
+	if err := os.MkdirAll(cfg.Dir, 0o755); err != nil {
+		return nil, fmt.Errorf("create raft dir: %w", err)
+	}
+
 	snapshotStore, err := raft.NewFileSnapshotStore(cfg.Dir, 2, os.Stderr)
 	if err != nil {
 		return nil, err
@@ -126,11 +130,15 @@ func (node *Node) BootstrapCluster(slotCount int) error {
 		return fmt.Errorf("BootstrapCluster failed: %v", err)
 	}
 	// wait self leader
-	for {
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
 		if node.State() == raft.Leader {
 			break
 		}
 		time.Sleep(100 * time.Millisecond)
+	}
+	if node.State() != raft.Leader {
+		return fmt.Errorf("wait for leader timeout")
 	}
 	// init fsm
 	_, err = node.Propose(&LogEntry{Event: EventSeedStart, InitTask: &InitTask{
@@ -142,6 +150,9 @@ func (node *Node) BootstrapCluster(slotCount int) error {
 
 func (node *Node) Close() error {
 	future := node.inner.Shutdown()
+	if future.Error() == nil {
+		return nil
+	}
 	return fmt.Errorf("raft shutdown %v", future.Error())
 }
 
