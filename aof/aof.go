@@ -275,8 +275,9 @@ func (persister *Persister) Close() {
 
 // fsyncEverySecond fsync aof file every second
 func (persister *Persister) fsyncEverySecond() {
-	ticker := time.NewTicker(time.Second)
 	go func() {
+		ticker := time.NewTicker(time.Second)
+		defer ticker.Stop()
 		for {
 			select {
 			case <-ticker.C:
