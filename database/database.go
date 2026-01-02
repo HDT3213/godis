@@ -252,13 +252,11 @@ func (db *DB) Expire(key string, expireTime time.Time) {
 		defer db.RWUnLocks(keys, nil)
 		// check-lock-check, ttl may be updated during waiting lock
 		logger.Info("expire " + key)
-		rawExpireTime, ok := db.ttlMap.Get(key)
+		_, ok := db.ttlMap.Get(key)
 		if !ok {
 			return
 		}
-		expireTime, _ := rawExpireTime.(time.Time)
-		expired := time.Now().After(expireTime)
-		if expired {
+		if expireTime.Sub(time.Now()) >= 0 {
 			db.Remove(key)
 		}
 	})
